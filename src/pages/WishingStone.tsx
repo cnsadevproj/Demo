@@ -129,8 +129,20 @@ export function WishingStone({ onBack }: WishingStoneProps) {
             </div>
 
             <div className="relative text-center py-8">
-              {/* 돌 이모지 (이미지 대신) */}
-              <div className="text-8xl mb-4 animate-pulse">🪨</div>
+              {/* 소원의 돌 이미지 */}
+              <div className="mb-4">
+                <img
+                  src="/images/wishing-stone.jpg"
+                  alt="소원의 돌"
+                  className="w-32 h-32 mx-auto object-contain drop-shadow-2xl animate-pulse"
+                  onError={(e) => {
+                    // 이미지 로드 실패 시 이모지로 대체
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                  }}
+                />
+                <div className="hidden text-8xl">🪨</div>
+              </div>
               <h2 className="text-2xl font-bold text-white mb-2">소원의 돌</h2>
               <p className="text-purple-200">소원을 빌면 이루어질지도...?</p>
 
