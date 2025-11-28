@@ -230,9 +230,131 @@ function DemoMode({ onExitDemo }: { onExitDemo: () => void }) {
   );
 }
 
+// 교사 모드 네비게이션 메뉴
+function TeacherNavigationMenu({ currentPage, onNavigate }: {
+  currentPage: string;
+  onNavigate: (page: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const teacherPages = [
+    { id: 'teacher-dashboard', label: '학생 관리', emoji: '👨‍🎓' },
+  ];
+
+  const demoPages = [
+    { id: 'demo-admin', label: '관리자 데모', emoji: '⚙️' },
+    { id: 'demo-report', label: '리포트 데모', emoji: '📊' },
+    { id: 'demo-student', label: '학생 데모', emoji: '👨‍🎓' },
+    { id: 'team-assign', label: '팀 배정', emoji: '👥' },
+    { id: 'snapshot', label: '스냅샷', emoji: '📸' },
+  ];
+
+  return (
+    <>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="fixed bottom-6 right-6 z-50 px-6 py-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all"
+      >
+        {isOpen ? '✕ 닫기' : '📱 메뉴'}
+      </button>
+
+      {isOpen && (
+        <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setIsOpen(false)}>
+          <div
+            className="fixed right-0 top-0 bottom-0 w-80 bg-white shadow-2xl overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6">
+              <h2 className="mb-2">교사 메뉴</h2>
+              <p className="text-sm text-gray-500 mb-6">페이지를 이동합니다</p>
+
+              {/* 교사 페이지 */}
+              <div className="mb-6">
+                <h3 className="mb-3 text-blue-600">📚 메인 페이지</h3>
+                <div className="space-y-2">
+                  {teacherPages.map((page) => (
+                    <button
+                      key={page.id}
+                      onClick={() => {
+                        onNavigate(page.id);
+                        setIsOpen(false);
+                      }}
+                      className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${
+                        currentPage === page.id
+                          ? 'bg-blue-100 text-blue-900'
+                          : 'hover:bg-gray-100'
+                      }`}
+                    >
+                      {page.emoji} {page.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 데모/추가 페이지 */}
+              <div className="mb-6">
+                <h3 className="mb-3 text-purple-600">🧪 추가 페이지 (데모)</h3>
+                <div className="space-y-2">
+                  {demoPages.map((page) => (
+                    <button
+                      key={page.id}
+                      onClick={() => {
+                        onNavigate(page.id);
+                        setIsOpen(false);
+                      }}
+                      className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${
+                        currentPage === page.id
+                          ? 'bg-purple-100 text-purple-900'
+                          : 'hover:bg-gray-100'
+                      }`}
+                    >
+                      {page.emoji} {page.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// 교사 모드 컴포넌트
+function TeacherMode({ onLogout }: { onLogout: () => void }) {
+  const [currentPage, setCurrentPage] = useState('teacher-dashboard');
+
+  const renderPage = () => {
+    switch (currentPage) {
+      case 'teacher-dashboard':
+        return <TeacherDashboard onLogout={onLogout} />;
+      case 'demo-admin':
+        return <DemoAdmin />;
+      case 'demo-report':
+        return <DemoAdminReport />;
+      case 'demo-student':
+        return <DemoStudent />;
+      case 'team-assign':
+        return <AdminTeamAssign onNavigate={setCurrentPage} />;
+      case 'snapshot':
+        return <AdminSnapshot onNavigate={setCurrentPage} />;
+      default:
+        return <TeacherDashboard onLogout={onLogout} />;
+    }
+  };
+
+  return (
+    <>
+      {renderPage()}
+      <TeacherNavigationMenu currentPage={currentPage} onNavigate={setCurrentPage} />
+    </>
+  );
+}
+
 // 메인 앱 콘텐츠
 function AppContent() {
-  const { role, isAuthenticated } = useAuth();
+  const { role, isAuthenticated, logout } = useAuth();
   const [isDemoMode, setIsDemoMode] = useState(false);
 
   // 로그인 성공 핸들러
@@ -242,7 +364,7 @@ function AppContent() {
 
   // 로그아웃 핸들러
   const handleLogout = () => {
-    // 로그아웃 후 로그인 페이지로
+    logout();
   };
 
   // 데모 모드
@@ -268,7 +390,7 @@ function AppContent() {
 
   // 역할에 따른 페이지 렌더링
   if (role === 'teacher') {
-    return <TeacherDashboard onLogout={handleLogout} />;
+    return <TeacherMode onLogout={handleLogout} />;
   }
 
   if (role === 'student') {
