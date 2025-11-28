@@ -40,8 +40,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       // Sheets URL 먼저 저장
       setSheetsUrl(teacherSheetsUrl.trim());
 
-      // Sheets 연결 테스트
-      const { testSheetsConnection } = await import('../services/sheets');
+      // Sheets 연결 테스트 & 클래스 목록 가져오기
+      const { testSheetsConnection, getClassListFromSheets } = await import('../services/sheets');
       const testResult = await testSheetsConnection();
 
       if (!testResult.success) {
@@ -49,11 +49,17 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         return;
       }
 
-      // 교사로 로그인 (API 키는 Sheets에 있음)
-      // 임시 API 키로 로그인 (실제 검증은 Sheets에서)
-      const result = await loginAsTeacher('SHEETS_BASED_AUTH');
-      if (result.success || result.message === 'API 키가 올바르지 않습니다.') {
-        // Sheets 연결이 되면 성공으로 간주
+      // Sheets에서 클래스 목록 가져오기
+      const classListResult = await getClassListFromSheets();
+
+      if (!classListResult.success) {
+        setTeacherError('클래스 목록을 불러올 수 없습니다.');
+        return;
+      }
+
+      // 교사로 로그인 (클래스 목록과 함께)
+      const result = await loginAsTeacher('SHEETS_BASED_AUTH', classListResult.data || []);
+      if (result.success) {
         onLoginSuccess();
       } else {
         setTeacherError(result.message);
