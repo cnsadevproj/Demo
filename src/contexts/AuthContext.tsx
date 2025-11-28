@@ -95,6 +95,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
       localStorage.setItem(STORAGE_KEYS.ROLE, 'teacher');
       localStorage.setItem(STORAGE_KEYS.API_KEY, key);
 
+      // 기존 저장된 학생 데이터 복원
+      const savedClassStudents = localStorage.getItem(STORAGE_KEYS.CLASS_STUDENTS);
+      if (savedClassStudents) {
+        try {
+          setClassStudentsMap(JSON.parse(savedClassStudents));
+        } catch {
+          // 파싱 실패 시 무시
+        }
+      }
+
+      // 기존 선택된 클래스 복원
+      const savedSelectedClass = localStorage.getItem(STORAGE_KEYS.SELECTED_CLASS);
+      if (savedSelectedClass) {
+        setSelectedClass(savedSelectedClass);
+      }
+
       return { success: true, message: '로그인 성공!' };
     } else {
       return { success: false, message: response.message || 'API 키가 올바르지 않습니다.' };
