@@ -71,6 +71,14 @@ function doGet(e) {
         result = setClassActivation(params.className, params.active);
         break;
 
+      case 'importClassrooms':
+        result = importClassroomsFromApi();
+        break;
+
+      case 'createActivatedSheets':
+        result = createSheetsForActivatedClasses();
+        break;
+
       case 'findStudent':
         result = findStudentInAllClasses(params.code);
         break;
@@ -315,6 +323,100 @@ function getClassListFromSheets() {
   }
 
   return { success: true, data: classList };
+}
+
+// API에서 학급 목록 가져오기 (웹용 - 활성화 기본값 0)
+function importClassroomsFromApi() {
+  try {
+    const classList = callApi('/get/class/list');
+    if (!classList || classList.length === 0) {
+      return { success: false, message: '클래스 목록이 비어있습니다.' };
+    }
+
+    const listSheet = getOrCreateSheet('학급목록', ['학급명', '학생수', '마지막 업데이트', '활성화']);
+
+    // 기존 활성화 상태 보존
+    const existingActivation = {};
+    const existingLastRow = listSheet.getLastRow();
+    if (existingLastRow > 1) {
+      const existingData = listSheet.getRange(2, 1, existingLastRow - 1, 4).getValues();
+      existingData.forEach(row => {
+        if (row[0]) {
+          existingActivation[sanitizeSheetName(row[0])] = row[3];
+        }
+      });
+      listSheet.deleteRows(2, existingLastRow - 1);
+    }
+
+    const now = new Date().toLocaleString('ko-KR');
+    const data = classList.map(cls => {
+      const sanitizedName = sanitizeSheetName(cls.name);
+      // 기존 활성화 상태가 있으면 유지, 없으면 기본값 0 (비활성)
+      const activation = existingActivation[sanitizedName] !== undefined
+        ? existingActivation[sanitizedName]
+        : 0;
+      return [cls.name, 0, now, activation];
+    });
+
+    listSheet.getRange(2, 1, data.length, 4).setValues(data);
+
+    // 시트 생성은 하지 않음 (별도로 createActivatedSheets 호출 필요)
+    const activeCount = data.filter(row => row[3] === 1).length;
+
+    return {
+      success: true,
+      data: {
+        totalClasses: classList.length,
+        activeClasses: activeCount,
+        message: `${classList.length}개 학급 가져옴. ${activeCount}개 활성화됨. 시트 생성은 별도로 실행하세요.`
+      }
+    };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+// 활성화된 학급의 시트 생성 (웹용)
+function createSheetsForActivatedClasses() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const listSheet = ss.getSheetByName('학급목록');
+
+    if (!listSheet) {
+      return { success: false, message: '학급목록 시트가 없습니다. 먼저 학급 목록을 가져오세요.' };
+    }
+
+    const lastRow = listSheet.getLastRow();
+    if (lastRow < 2) {
+      return { success: false, message: '학급목록이 비어있습니다.' };
+    }
+
+    const classData = listSheet.getRange(2, 1, lastRow - 1, 4).getValues();
+    let createdCount = 0;
+    const createdClasses = [];
+
+    for (const row of classData) {
+      const className = sanitizeSheetName(row[0]);
+      const activation = row[3];
+
+      if (activation === 1) {
+        createClassSheets(className);
+        createdCount++;
+        createdClasses.push(className);
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        createdCount,
+        createdClasses,
+        message: `${createdCount}개 학급의 시트가 생성되었습니다.`
+      }
+    };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
 }
 
 // 클래스 활성화 상태 설정
@@ -1199,7 +1301,8 @@ function updatePreviousCookies(className) {
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('🎓 다했니 v2')
-    .addItem('⚙️ 클래스 목록 불러오기', 'fetchClassList')
+    .addItem('1️⃣ 클래스 목록 불러오기', 'fetchClassList')
+    .addItem('2️⃣ 활성화 학급 시트 만들기', 'createActiveClassSheets')
     .addItem('📤 학생목록 업로드', 'uploadStudentCsv')
     .addItem('🔄 학생 정보 동기화', 'syncStudentInfo')
     .addSeparator()
@@ -1213,51 +1316,38 @@ function onOpen() {
 function fetchClassList() {
   const ui = SpreadsheetApp.getUi();
   try {
-    const classList = callApi('/get/class/list');
-    if (!classList || classList.length === 0) {
-      ui.alert('⚠️ 클래스 목록이 비어있습니다.');
+    const result = importClassroomsFromApi();
+
+    if (!result.success) {
+      ui.alert('⚠️ ' + result.message);
       return;
     }
 
-    const listSheet = getOrCreateSheet('학급목록', ['학급명', '학생수', '마지막 업데이트', '활성화']);
+    const data = result.data;
+    ui.alert(`✅ 학급 목록 가져오기 완료!\n\n전체 ${data.totalClasses}개 학급을 가져왔습니다.\n현재 ${data.activeClasses}개 학급이 활성화되어 있습니다.\n\n💡 다음 단계:\n1. [학급목록] 시트에서 D열(활성화)을 설정하세요.\n   (1=활성, 0=비활성)\n2. [활성화 학급 시트 만들기] 메뉴를 실행하세요.`);
+  } catch (error) {
+    ui.alert('❌ 오류 발생\n\n' + error.message);
+  }
+}
 
-    // 기존 활성화 상태 보존
-    const existingActivation = {};
-    const existingLastRow = listSheet.getLastRow();
-    if (existingLastRow > 1) {
-      const existingData = listSheet.getRange(2, 1, existingLastRow - 1, 4).getValues();
-      existingData.forEach(row => {
-        if (row[0]) {
-          existingActivation[sanitizeSheetName(row[0])] = row[3];
-        }
-      });
-      listSheet.deleteRows(2, existingLastRow - 1);
+// 활성화된 학급 시트 만들기 (메뉴용)
+function createActiveClassSheets() {
+  const ui = SpreadsheetApp.getUi();
+  try {
+    const result = createSheetsForActivatedClasses();
+
+    if (!result.success) {
+      ui.alert('⚠️ ' + result.message);
+      return;
     }
 
-    const now = new Date().toLocaleString('ko-KR');
-    const data = classList.map(cls => {
-      const sanitizedName = sanitizeSheetName(cls.name);
-      // 기존 활성화 상태가 있으면 유지, 없으면 기본값 1
-      const activation = existingActivation[sanitizedName] !== undefined
-        ? existingActivation[sanitizedName]
-        : 1;
-      return [cls.name, 0, now, activation];
-    });
+    const data = result.data;
+    if (data.createdCount === 0) {
+      ui.alert('⚠️ 활성화된 학급이 없습니다.\n\n학급목록 시트의 D열(활성화)에서 1로 설정해주세요.');
+      return;
+    }
 
-    listSheet.getRange(2, 1, data.length, 4).setValues(data);
-
-    // 활성화된 학급만 시트 생성
-    let createdCount = 0;
-    classList.forEach((cls, index) => {
-      const className = sanitizeSheetName(cls.name);
-      const activation = data[index][3];
-      if (activation === 1) {
-        createClassSheets(className);
-        createdCount++;
-      }
-    });
-
-    ui.alert(`✅ 완료!\n\n전체 ${classList.length}개 학급 중 ${createdCount}개 활성화 학급의 시트가 생성되었습니다.\n\n💡 학급목록 시트의 D열(활성화)에서 활성화 여부를 설정하세요.\n(1=활성, 0=비활성)`);
+    ui.alert(`✅ 시트 생성 완료!\n\n${data.createdCount}개 학급의 시트가 생성되었습니다.\n\n생성된 학급:\n${data.createdClasses.join('\n')}`);
   } catch (error) {
     ui.alert('❌ 오류 발생\n\n' + error.message);
   }
