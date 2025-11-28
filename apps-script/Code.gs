@@ -352,6 +352,7 @@ function onOpen() {
   ui.createMenu('🎓 다했니')
     .addItem('⚙️ 1. 클래스 목록 불러오기', 'fetchClassList')
     .addSeparator()
+    .addItem('📤 학생목록 업로드', 'uploadStudentCsv')   // 🔥 추가됨
     .addItem('🔄 2. 학생 정보 동기화', 'syncStudentInfo')
     .addSeparator()
     .addItem('📸 3. 스냅샷 실행', 'createSnapshot')
@@ -359,6 +360,7 @@ function onOpen() {
     .addItem('❓ 도움말', 'showHelp')
     .addToUi();
 }
+
 
 // ========================================
 // 2. 유틸리티 함수
@@ -518,6 +520,59 @@ function createClassSheets(className) {
 // ========================================
 // 4. 학생 정보 동기화
 // ========================================
+function uploadStudentCsv() {
+  const html = HtmlService.createHtmlOutputFromFile('upload_csv_ui')
+    .setWidth(400)
+    .setHeight(220);
+  SpreadsheetApp.getUi().showModalDialog(html, '학생 목록 CSV 업로드');
+}
+
+function processStudentCsv(filename, content) {
+  try {
+    if (!filename.startsWith("학생목록_템플릿_")) {
+      throw new Error("파일명이 '학생목록_템플릿_학급명.csv' 형식이 아닙니다.");
+    }
+
+    // 🔥 1) 학급명 추출
+    const className = filename.replace("학생목록_템플릿_", "").replace(".csv", "");
+    const sanitized = sanitizeSheetName(className);
+    const targetSheetName = `${sanitized}_학생`;
+
+    // 🔥 2) 시트 찾기
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(targetSheetName);
+    if (!sheet) {
+      throw new Error(`시트 '${targetSheetName}' 을(를) 찾을 수 없습니다.`);
+    }
+
+    // 🔥 3) CSV 파싱
+    let rows = Utilities.parseCsv(content);
+
+    if (!rows || rows.length === 0) {
+      throw new Error("CSV 데이터가 비어있습니다.");
+    }
+
+    // 🔥 4) CSV 첫 번째 행(헤더)을 제거
+    rows = rows.slice(1);  
+    if (rows.length === 0) {
+      throw new Error("헤더를 제외한 데이터가 없습니다.");
+    }
+
+    // 🔥 5) 기존 데이터 삭제 (헤더 제외)
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clearContent();
+    }
+
+    // 🔥 6) A2부터 붙여넣기
+    sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+
+    return true;
+  } catch (err) {
+    throw new Error(err.message);
+  }
+}
+
 function syncStudentInfo() {
   const ui = SpreadsheetApp.getUi();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
