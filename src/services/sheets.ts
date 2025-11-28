@@ -1,0 +1,158 @@
+// Google Sheets Web App 서비스
+
+// Sheets 응답 타입
+export interface SheetsResponse<T> {
+  success: boolean;
+  message?: string;
+  data?: T;
+}
+
+// Sheets 학생 정보 타입
+export interface SheetsStudentData {
+  number: number;
+  name: string;
+  code: string;
+  cookie: number;
+  usedCookie: number;
+  totalCookie: number;
+  chocoChips: number;
+  lastUpdate: string;
+}
+
+// Sheets 팀 정보 타입
+export interface SheetsTeamData {
+  week: number;
+  teamId: string;
+  teamName: string;
+  flag: string;
+  members: string[];
+  earnedRound: number;
+  attackTarget: string;
+  attackBet: number;
+  defense: number;
+}
+
+// 잔디 데이터 타입
+export interface SheetsGrassData {
+  date: string;
+  studentCode: string;
+  completed: boolean;
+  missionType: 'team' | 'personal';
+}
+
+// 스냅샷 데이터 타입
+export interface SheetsSnapshotData {
+  week: number;
+  studentCode: string;
+  teamId: string;
+  bMon: number;
+  bWed: number;
+  earnedRound: number;
+  date: string;
+}
+
+// Sheets URL 저장/조회
+const STORAGE_KEY = 'dahandin_sheets_url';
+
+export function getSheetsUrl(): string | null {
+  return localStorage.getItem(STORAGE_KEY);
+}
+
+export function setSheetsUrl(url: string): void {
+  localStorage.setItem(STORAGE_KEY, url);
+}
+
+export function removeSheetsUrl(): void {
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+// API 호출 헬퍼
+async function callSheetsApi<T>(action: string, params: Record<string, string> = {}): Promise<SheetsResponse<T>> {
+  const sheetsUrl = getSheetsUrl();
+
+  if (!sheetsUrl) {
+    return {
+      success: false,
+      message: 'Sheets URL이 설정되지 않았습니다. 선생님께 문의하세요.'
+    };
+  }
+
+  try {
+    const queryParams = new URLSearchParams({
+      action,
+      ...params
+    });
+
+    const url = `${sheetsUrl}?${queryParams.toString()}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    return data;
+  } catch (error) {
+    return {
+      success: false,
+      message: '네트워크 오류가 발생했습니다.'
+    };
+  }
+}
+
+// 연결 테스트
+export async function testSheetsConnection(): Promise<SheetsResponse<null>> {
+  return callSheetsApi('ping');
+}
+
+// 학생 정보 조회
+export async function getStudentFromSheets(
+  studentCode: string,
+  className: string
+): Promise<SheetsResponse<SheetsStudentData>> {
+  return callSheetsApi('getStudent', { code: studentCode, className });
+}
+
+// 학급 전체 학생 조회
+export async function getClassStudents(className: string): Promise<SheetsResponse<SheetsStudentData[]>> {
+  return callSheetsApi('getClassStudents', { className });
+}
+
+// 팀 정보 조회
+export async function getTeams(className: string): Promise<SheetsResponse<SheetsTeamData[]>> {
+  return callSheetsApi('getTeams', { className });
+}
+
+// 잔디 데이터 조회
+export async function getGrass(
+  studentCode: string,
+  className: string
+): Promise<SheetsResponse<SheetsGrassData[]>> {
+  return callSheetsApi('getGrass', { code: studentCode, className });
+}
+
+// 스냅샷 데이터 조회
+export async function getSnapshot(
+  className: string,
+  week?: number
+): Promise<SheetsResponse<SheetsSnapshotData[]>> {
+  const params: Record<string, string> = { className };
+  if (week !== undefined) {
+    params.week = week.toString();
+  }
+  return callSheetsApi('getSnapshot', params);
+}
+
+// 학생 코드로 학급 찾기 (모든 학급을 순회하며 검색)
+// 주의: 이 함수는 학급명을 모를 때 사용하며, 여러 학급을 검색하므로 느릴 수 있습니다.
+export async function findStudentClass(
+  studentCode: string,
+  classNames: string[]
+): Promise<{ className: string; student: SheetsStudentData } | null> {
+  for (const className of classNames) {
+    const response = await getStudentFromSheets(studentCode, className);
+    if (response.success && response.data) {
+      return {
+        className,
+        student: response.data
+      };
+    }
+  }
+  return null;
+}
