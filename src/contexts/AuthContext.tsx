@@ -11,6 +11,10 @@ interface AuthContextType {
   isAuthenticated: boolean;
   logout: () => void;
 
+  // Google Sheets
+  sheetsUrl: string | null;
+  setSheetsUrl: (url: string) => void;
+
   // 교사용
   apiKey: string | null;
   classes: ClassInfo[];
@@ -24,7 +28,9 @@ interface AuthContextType {
 
   // 학생용
   studentCode: string | null;
+  studentClassName: string | null;
   loginAsStudent: (code: string) => void;
+  setStudentClassName: (className: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -34,8 +40,10 @@ const STORAGE_KEYS = {
   ROLE: 'dahandin_role',
   API_KEY: 'dahandin_api_key',
   STUDENT_CODE: 'dahandin_student_code',
+  STUDENT_CLASS_NAME: 'dahandin_student_class_name',
   SELECTED_CLASS: 'dahandin_selected_class',
   CLASS_STUDENTS: 'dahandin_class_students',
+  SHEETS_URL: 'dahandin_sheets_url',
 };
 
 interface AuthProviderProps {
@@ -46,8 +54,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [role, setRole] = useState<UserRole>(null);
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [studentCode, setStudentCode] = useState<string | null>(null);
+  const [studentClassName, setStudentClassNameState] = useState<string | null>(null);
   const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
+  const [sheetsUrl, setSheetsUrlState] = useState<string | null>(null);
   const [classStudentsMap, setClassStudentsMap] = useState<Record<string, ClassStudents>>({});
 
   // 초기 로드: localStorage에서 데이터 복원
@@ -55,8 +65,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const savedRole = localStorage.getItem(STORAGE_KEYS.ROLE) as UserRole;
     const savedApiKey = localStorage.getItem(STORAGE_KEYS.API_KEY);
     const savedStudentCode = localStorage.getItem(STORAGE_KEYS.STUDENT_CODE);
+    const savedStudentClassName = localStorage.getItem(STORAGE_KEYS.STUDENT_CLASS_NAME);
     const savedSelectedClass = localStorage.getItem(STORAGE_KEYS.SELECTED_CLASS);
     const savedClassStudents = localStorage.getItem(STORAGE_KEYS.CLASS_STUDENTS);
+    const savedSheetsUrl = localStorage.getItem(STORAGE_KEYS.SHEETS_URL);
+
+    // Sheets URL 복원
+    if (savedSheetsUrl) {
+      setSheetsUrlState(savedSheetsUrl);
+    }
 
     if (savedRole === 'teacher' && savedApiKey) {
       setRole('teacher');
@@ -80,6 +97,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } else if (savedRole === 'student' && savedStudentCode) {
       setRole('student');
       setStudentCode(savedStudentCode);
+      setStudentClassNameState(savedStudentClassName);
     }
   }, []);
 
@@ -176,10 +194,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  // Sheets URL 설정
+  const setSheetsUrl = (url: string) => {
+    setSheetsUrlState(url);
+    localStorage.setItem(STORAGE_KEYS.SHEETS_URL, url);
+  };
+
+  // 학생 학급명 설정
+  const setStudentClassName = (className: string) => {
+    setStudentClassNameState(className);
+    localStorage.setItem(STORAGE_KEYS.STUDENT_CLASS_NAME, className);
+  };
+
   const value: AuthContextType = {
     role,
     isAuthenticated: role !== null,
     logout,
+    sheetsUrl,
+    setSheetsUrl,
     apiKey,
     classes,
     selectedClass,
@@ -190,7 +222,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     getClassStudents,
     refreshClasses,
     studentCode,
+    studentClassName,
     loginAsStudent,
+    setStudentClassName,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
