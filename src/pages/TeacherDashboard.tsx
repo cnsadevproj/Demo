@@ -8,7 +8,7 @@ import { Progress } from '../components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useAuth } from '../contexts/AuthContext';
 import { getMultipleStudentsInfo, StudentInfo, StoredStudent } from '../services/api';
-import { getClassStudents as getClassStudentsFromSheets, SheetsStudentData, setClassActivation, getClassListFromSheets, SheetsClassInfo } from '../services/sheets';
+import { getClassStudents as getClassStudentsFromSheets, SheetsStudentData, setClassActivation, getClassListFromSheets, SheetsClassInfo, importClassroomsFromApi, createSheetsForActivatedClasses } from '../services/sheets';
 import { getWishes, grantWish, deleteWish, SheetWish, refreshCookies } from '../services/sheetsApi';
 import { getShopItems, SheetShopItem } from '../services/sheetsApi';
 import { toast } from 'sonner@2.0.3';
@@ -77,6 +77,10 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
   // 쿠키 새로고침 상태
   const [isRefreshingCookies, setIsRefreshingCookies] = useState(false);
+
+  // 클래스룸 가져오기 상태
+  const [isImportingClassrooms, setIsImportingClassrooms] = useState(false);
+  const [isCreatingSheets, setIsCreatingSheets] = useState(false);
 
   // 학급 활성화 상태 로드 (모든 학급 포함)
   useEffect(() => {
@@ -194,6 +198,54 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       console.error('활성화 상태 변경 실패:', error);
     } finally {
       setActivationLoading(null);
+    }
+  };
+
+  // 클래스룸에서 학급 목록 가져오기
+  const handleImportClassrooms = async () => {
+    setIsImportingClassrooms(true);
+    try {
+      const response = await importClassroomsFromApi();
+      if (response.success && response.data) {
+        toast.success(response.data.message);
+        // 학급 목록 새로고침
+        const classListResponse = await getClassListFromSheets();
+        if (classListResponse.success && classListResponse.data) {
+          setAllSheetsClasses(classListResponse.data);
+          const activationMap: Record<string, boolean> = {};
+          classListResponse.data.forEach((cls: SheetsClassInfo) => {
+            activationMap[cls.name] = cls.active !== false;
+          });
+          setClassActivationMap(activationMap);
+        }
+      } else {
+        toast.error(response.message || '클래스룸 가져오기 실패');
+      }
+    } catch (error) {
+      console.error('클래스룸 가져오기 실패:', error);
+      toast.error('클래스룸 가져오기 중 오류가 발생했습니다');
+    } finally {
+      setIsImportingClassrooms(false);
+    }
+  };
+
+  // 활성화된 학급 시트 생성
+  const handleCreateSheets = async () => {
+    setIsCreatingSheets(true);
+    try {
+      const response = await createSheetsForActivatedClasses();
+      if (response.success && response.data) {
+        toast.success(response.data.message);
+        // 학급 목록 새로고침
+        await refreshClasses();
+      } else {
+        toast.error(response.message || '시트 생성 실패');
+      }
+    } catch (error) {
+      console.error('시트 생성 실패:', error);
+      toast.error('시트 생성 중 오류가 발생했습니다');
+    } finally {
+      setIsCreatingSheets(false);
     }
   };
 
@@ -759,6 +811,52 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
           {/* 학급 설정 탭 */}
           <TabsContent value="classes" className="space-y-4 mt-4">
+            {/* 클래스룸 가져오기 카드 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileSpreadsheet className="w-5 h-5" />
+                  클래스룸에서 학급 가져오기
+                </CardTitle>
+                <CardDescription>
+                  Google Classroom API에서 학급 목록을 가져오고, 활성화된 학급의 시트를 생성합니다.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    onClick={handleImportClassrooms}
+                    disabled={isImportingClassrooms || isCreatingSheets}
+                    variant="outline"
+                    className="flex items-center gap-2"
+                  >
+                    {isImportingClassrooms ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    1. 학급 목록 가져오기
+                  </Button>
+                  <Button
+                    onClick={handleCreateSheets}
+                    disabled={isImportingClassrooms || isCreatingSheets || allSheetsClasses.length === 0}
+                    className="flex items-center gap-2"
+                  >
+                    {isCreatingSheets ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <FileSpreadsheet className="w-4 h-4" />
+                    )}
+                    2. 활성화된 학급 시트 만들기
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 mt-3">
+                  순서: 목록 가져오기 → 활성화 설정 (아래) → 시트 만들기
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* 학급 활성화 관리 카드 */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">

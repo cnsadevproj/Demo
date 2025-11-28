@@ -218,3 +218,29 @@ export async function findStudentClass(
   }
   return null;
 }
+
+// ========================================
+// 학급 가져오기 및 시트 생성 (교사용)
+// ========================================
+
+// 클래스룸에서 학급 목록 가져오기 (API에서 import)
+export interface ImportClassroomsResult {
+  totalClasses: number;
+  activeClasses: number;
+  message: string;
+}
+
+export async function importClassroomsFromApi(): Promise<SheetsResponse<ImportClassroomsResult>> {
+  return callSheetsApi('importClassrooms');
+}
+
+// 활성화된 학급의 시트 생성
+export interface CreateSheetsResult {
+  createdCount: number;
+  createdClasses: string[];
+  message: string;
+}
+
+export async function createSheetsForActivatedClasses(): Promise<SheetsResponse<CreateSheetsResult>> {
+  return callSheetsApi('createActivatedSheets');
+}
