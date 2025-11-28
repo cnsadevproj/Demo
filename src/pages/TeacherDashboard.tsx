@@ -79,7 +79,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               cookie: student.cookie,
               usedCookie: student.usedCookie,
               totalCookie: student.totalCookie,
-              badges: {} // Sheets에는 뱃지 정보 없음
+              badges: student.badges || {}
             });
           });
           setStudentInfoMap(infoMap);
@@ -118,7 +118,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 cookie: student.cookie,
                 usedCookie: student.usedCookie,
                 totalCookie: student.totalCookie,
-                badges: {}
+                badges: student.badges || {}
               });
             });
             setStudentInfoMap(infoMap);
@@ -201,7 +201,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               cookie: student.cookie,
               usedCookie: student.usedCookie,
               totalCookie: student.totalCookie,
-              badges: {} // Sheets에는 뱃지 정보 없음
+              badges: student.badges || {}
             });
           });
           setStudentInfoMap(infoMap);
@@ -235,6 +235,14 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const totalCookies = Array.from(studentInfoMap.values())
     .filter((info): info is StudentInfo => info !== null)
     .reduce((sum, info) => sum + info.cookie, 0);
+
+  const totalUsedCookies = Array.from(studentInfoMap.values())
+    .filter((info): info is StudentInfo => info !== null)
+    .reduce((sum, info) => sum + info.usedCookie, 0);
+
+  const totalRemainingCookies = Array.from(studentInfoMap.values())
+    .filter((info): info is StudentInfo => info !== null)
+    .reduce((sum, info) => sum + info.totalCookie, 0);
 
   const avgCookies = studentInfoMap.size > 0
     ? Math.round(totalCookies / studentInfoMap.size)
@@ -300,103 +308,26 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               </Button>
             </div>
 
-            {selectedClassInfo && (
+            {selectedClass && loadedCount > 0 && (
               <div className="mt-4 p-4 bg-gray-50 rounded-lg">
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
                     <p className="text-sm text-gray-500">총 쿠키</p>
-                    <p className="text-xl font-bold">{selectedClassInfo.totalCookies || selectedClassInfo.cookies}</p>
+                    <p className="text-xl font-bold">{totalCookies}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">남은 쿠키</p>
-                    <p className="text-xl font-bold text-green-600">{selectedClassInfo.cookies}</p>
+                    <p className="text-xl font-bold text-green-600">{totalRemainingCookies}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">사용한 쿠키</p>
-                    <p className="text-xl font-bold text-orange-600">{selectedClassInfo.usedCookies || 0}</p>
+                    <p className="text-xl font-bold text-orange-600">{totalUsedCookies}</p>
                   </div>
                 </div>
               </div>
             )}
           </CardContent>
         </Card>
-
-        {/* CSV 업로드 (클래스 선택 시에만 표시) */}
-        {selectedClass && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5" />
-                학생 목록 관리
-              </CardTitle>
-              <CardDescription>
-                CSV 파일로 학생 목록을 업로드하거나 템플릿을 다운로드하세요
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => downloadCsvTemplate(selectedClass)}
-                  className="flex items-center gap-2"
-                >
-                  <Download className="w-4 h-4" />
-                  CSV 템플릿 다운로드
-                </Button>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-                <Button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-2"
-                >
-                  <Upload className="w-4 h-4" />
-                  CSV 업로드
-                </Button>
-
-                {students.length > 0 && (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={() => exportStudentsToCsv(students, selectedClass)}
-                      className="flex items-center gap-2"
-                    >
-                      <Download className="w-4 h-4" />
-                      현재 목록 내보내기
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      onClick={handleClearStudents}
-                      className="flex items-center gap-2"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      초기화
-                    </Button>
-                  </>
-                )}
-              </div>
-
-              {uploadError && (
-                <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg flex items-center gap-2">
-                  <XCircle className="w-5 h-5" />
-                  {uploadError}
-                </div>
-              )}
-
-              {uploadSuccess && (
-                <div className="mt-4 p-3 bg-green-50 text-green-700 rounded-lg flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5" />
-                  {uploadSuccess}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
         {/* 학생 목록/랭킹 */}
         {selectedClass && students.length > 0 && (
@@ -603,23 +534,15 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
         {selectedClass && students.length === 0 && (
           <Card className="p-12 text-center">
             <FileSpreadsheet className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-            <h3 className="text-lg font-medium mb-2">등록된 학생이 없습니다</h3>
+            <h3 className="text-lg font-medium mb-2">학생 정보를 불러오는 중...</h3>
             <p className="text-gray-500 mb-4">
-              CSV 파일을 업로드하여 학생 목록을 등록하세요
+              Google Sheets에서 학생 목록을 불러오고 있습니다.<br />
+              학생 정보가 표시되지 않으면 Sheets에 학생 데이터가 있는지 확인해주세요.
             </p>
-            <div className="flex justify-center gap-3">
-              <Button
-                variant="outline"
-                onClick={() => downloadCsvTemplate(selectedClass)}
-              >
-                <Download className="w-4 h-4 mr-2" />
-                템플릿 다운로드
-              </Button>
-              <Button onClick={() => fileInputRef.current?.click()}>
-                <Upload className="w-4 h-4 mr-2" />
-                CSV 업로드
-              </Button>
-            </div>
+            <Button onClick={() => window.location.reload()} variant="outline">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              새로고침
+            </Button>
           </Card>
         )}
       </div>

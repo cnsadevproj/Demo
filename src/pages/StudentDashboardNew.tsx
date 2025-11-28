@@ -117,31 +117,38 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     );
   }
 
+  // 뱃지 목록
+  const earnedBadges = studentInfo?.badges
+    ? Object.values(studentInfo.badges).filter(b => b.hasBadge)
+    : [];
+
   return (
-    <PageLayout title="학생 대시보드" role="student">
+    <PageLayout title="학습 대시보드" role="student">
       <div className="space-y-6">
         {/* 헤더 */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">안녕하세요, {studentInfo?.name || '학생'}님!</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              {studentClassName} | 번호: {studentInfo?.number}
-            </p>
+        <Card className="p-6 bg-gradient-to-r from-blue-500 to-purple-600 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-white mb-2">안녕하세요, {studentInfo?.name || '학생'}님!</h2>
+              <p className="text-blue-100">
+                {studentClassName} | 번호: {studentInfo?.number}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={loadStudentData} variant="secondary" size="sm" disabled={loading}>
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+              </Button>
+              <Button onClick={handleLogout} variant="secondary" size="sm">
+                <LogOut className="w-4 h-4 mr-2" />
+                로그아웃
+              </Button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={loadStudentData} variant="outline" size="sm" disabled={loading}>
-              {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-            </Button>
-            <Button onClick={handleLogout} variant="outline" size="sm">
-              <LogOut className="w-4 h-4 mr-2" />
-              로그아웃
-            </Button>
-          </div>
-        </div>
+        </Card>
 
         {/* 주요 통계 */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -217,6 +224,51 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 <span className="text-xl font-bold text-green-600">{studentInfo?.totalCookie || 0}</span>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* 뱃지 */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Award className="w-5 h-5" />
+                내 뱃지
+              </CardTitle>
+              <Badge variant="outline">
+                {earnedBadges.length}개 획득
+              </Badge>
+            </div>
+            <CardDescription>
+              미션을 완료하고 뱃지를 모아보세요!
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {earnedBadges.length > 0 ? (
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+                {earnedBadges.map((badge, idx) => (
+                  <div
+                    key={idx}
+                    className="flex flex-col items-center p-3 bg-gradient-to-br from-amber-50 to-yellow-50 rounded-lg border border-amber-200"
+                  >
+                    <img
+                      src={badge.imgUrl}
+                      alt={badge.title}
+                      className="w-12 h-12 rounded-full mb-2"
+                    />
+                    <span className="text-xs text-center font-medium text-gray-700">
+                      {badge.title}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Award className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                <p>아직 획득한 뱃지가 없습니다</p>
+                <p className="text-sm mt-1">미션을 완료하고 뱃지를 획득해보세요!</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
