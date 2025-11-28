@@ -9,8 +9,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { useAuth } from '../contexts/AuthContext';
 import { getMultipleStudentsInfo, StudentInfo, StoredStudent } from '../services/api';
 import { getClassStudents as getClassStudentsFromSheets, SheetsStudentData, setClassActivation, getClassListFromSheets, SheetsClassInfo } from '../services/sheets';
-import { getWishes, grantWish, deleteWish, SheetWish } from '../services/sheetsApi';
+import { getWishes, grantWish, deleteWish, SheetWish, refreshCookies } from '../services/sheetsApi';
 import { getShopItems, SheetShopItem } from '../services/sheetsApi';
+import { toast } from 'sonner@2.0.3';
 import { downloadCsvTemplate, parseCsvFile, exportStudentsToCsv } from '../utils/csv';
 import {
   Users,
@@ -73,6 +74,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [wishes, setWishes] = useState<SheetWish[]>([]);
   const [wishesLoading, setWishesLoading] = useState(false);
   const [grantingWish, setGrantingWish] = useState<string | null>(null);
+
+  // 쿠키 새로고침 상태
+  const [isRefreshingCookies, setIsRefreshingCookies] = useState(false);
 
   // 학급 활성화 상태 로드 (모든 학급 포함)
   useEffect(() => {
@@ -144,6 +148,31 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       }
     } catch (error) {
       console.error('소원 삭제 실패:', error);
+    }
+  };
+
+  // 쿠키 새로고침 핸들러 - 잔디 시트에 현재 쿠키 상태 기록
+  const handleRefreshCookies = async () => {
+    if (!selectedClass) {
+      toast.error('학급을 먼저 선택해주세요');
+      return;
+    }
+
+    setIsRefreshingCookies(true);
+    try {
+      const result = await refreshCookies(selectedClass);
+      if (result.success && result.data) {
+        toast.success(
+          `쿠키 새로고침 완료! (${result.data.date}, ${result.data.studentsUpdated}명 업데이트)`
+        );
+      } else {
+        toast.error(result.message || '쿠키 새로고침 실패');
+      }
+    } catch (error) {
+      console.error('쿠키 새로고침 실패:', error);
+      toast.error('쿠키 새로고침 중 오류가 발생했습니다');
+    } finally {
+      setIsRefreshingCookies(false);
     }
   };
 
@@ -405,7 +434,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <Select value={selectedClass || ''} onValueChange={handleClassSelect}>
                 <SelectTrigger className="w-64">
                   <SelectValue placeholder="클래스를 선택하세요" />
@@ -421,6 +450,21 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               <Button variant="outline" size="icon" onClick={refreshClasses}>
                 <RefreshCw className="w-4 h-4" />
               </Button>
+              {selectedClass && (
+                <Button
+                  variant="outline"
+                  onClick={handleRefreshCookies}
+                  disabled={isRefreshingCookies}
+                  className="flex items-center gap-2"
+                >
+                  {isRefreshingCookies ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Cookie className="w-4 h-4" />
+                  )}
+                  쿠키 새로고침
+                </Button>
+              )}
             </div>
 
             {selectedClass && loadedCount > 0 && (

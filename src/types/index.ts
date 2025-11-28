@@ -32,6 +32,10 @@ export interface GrassData {
   date: string;
   completed: boolean;
   missionType: 'team' | 'personal';
+  // 쿠키 변화량 (같은 날 여러 번 새로고침 시 합산)
+  cookieChange?: number;
+  // 새로고침 횟수 (같은 날 여러 번 = 진한 초록)
+  refreshCount?: number;
 }
 
 export interface Snapshot {
