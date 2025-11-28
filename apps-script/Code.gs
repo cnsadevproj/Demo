@@ -92,6 +92,19 @@ function getStudentData(studentCode, className) {
     const [number, name, code, cookie, usedCookie, totalCookie, chocoChips, lastUpdate] = data[i];
 
     if (code === studentCode) {
+      // 날짜 안전하게 변환
+      let formattedDate = null;
+      if (lastUpdate && lastUpdate !== '') {
+        try {
+          const date = new Date(lastUpdate);
+          if (!isNaN(date.getTime())) {
+            formattedDate = date.toISOString();
+          }
+        } catch (e) {
+          // 날짜 변환 실패 시 null
+        }
+      }
+
       return {
         success: true,
         data: {
@@ -102,7 +115,7 @@ function getStudentData(studentCode, className) {
           usedCookie,
           totalCookie,
           chocoChips,
-          lastUpdate: lastUpdate ? new Date(lastUpdate).toISOString() : null
+          lastUpdate: formattedDate
         }
       };
     }
@@ -133,16 +146,31 @@ function getClassStudentsData(className) {
   const data = studentSheet.getRange(2, 1, lastRow - 1, 8).getValues();
   const students = data
     .filter(row => row[2]) // 학생 코드가 있는 경우만
-    .map(row => ({
-      number: row[0],
-      name: row[1],
-      code: row[2],
-      cookie: row[3],
-      usedCookie: row[4],
-      totalCookie: row[5],
-      chocoChips: row[6],
-      lastUpdate: row[7] ? new Date(row[7]).toISOString() : null
-    }));
+    .map(row => {
+      // 날짜 안전하게 변환
+      let formattedDate = null;
+      if (row[7] && row[7] !== '') {
+        try {
+          const date = new Date(row[7]);
+          if (!isNaN(date.getTime())) {
+            formattedDate = date.toISOString();
+          }
+        } catch (e) {
+          // 날짜 변환 실패 시 null
+        }
+      }
+
+      return {
+        number: row[0],
+        name: row[1],
+        code: row[2],
+        cookie: row[3],
+        usedCookie: row[4],
+        totalCookie: row[5],
+        chocoChips: row[6],
+        lastUpdate: formattedDate
+      };
+    });
 
   return { success: true, data: students };
 }
@@ -206,12 +234,27 @@ function getGrassData(studentCode, className) {
   const data = grassSheet.getRange(2, 1, lastRow - 1, 4).getValues();
   const grassData = data
     .filter(row => row[1] === studentCode)
-    .map(row => ({
-      date: row[0] ? new Date(row[0]).toISOString().split('T')[0] : null,
-      studentCode: row[1],
-      completed: row[2],
-      missionType: row[3]
-    }));
+    .map(row => {
+      // 날짜 안전하게 변환
+      let formattedDate = null;
+      if (row[0] && row[0] !== '') {
+        try {
+          const date = new Date(row[0]);
+          if (!isNaN(date.getTime())) {
+            formattedDate = date.toISOString().split('T')[0];
+          }
+        } catch (e) {
+          // 날짜 변환 실패 시 null
+        }
+      }
+
+      return {
+        date: formattedDate,
+        studentCode: row[1],
+        completed: row[2],
+        missionType: row[3]
+      };
+    });
 
   return { success: true, data: grassData };
 }
@@ -238,15 +281,30 @@ function getSnapshotData(className, week) {
   const data = snapshotSheet.getRange(2, 1, lastRow - 1, 7).getValues();
   let snapshots = data
     .filter(row => row[0]) // 주차가 있는 경우만
-    .map(row => ({
-      week: row[0],
-      studentCode: row[1],
-      teamId: row[2],
-      bMon: row[3],
-      bWed: row[4],
-      earnedRound: row[5],
-      date: row[6] ? new Date(row[6]).toISOString() : null
-    }));
+    .map(row => {
+      // 날짜 안전하게 변환
+      let formattedDate = null;
+      if (row[6] && row[6] !== '') {
+        try {
+          const date = new Date(row[6]);
+          if (!isNaN(date.getTime())) {
+            formattedDate = date.toISOString();
+          }
+        } catch (e) {
+          // 날짜 변환 실패 시 null
+        }
+      }
+
+      return {
+        week: row[0],
+        studentCode: row[1],
+        teamId: row[2],
+        bMon: row[3],
+        bWed: row[4],
+        earnedRound: row[5],
+        date: formattedDate
+      };
+    });
 
   // 특정 주차 필터링
   if (week) {
