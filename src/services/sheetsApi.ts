@@ -465,6 +465,32 @@ export async function updatePreviousCookies(className: string): Promise<boolean>
 }
 
 // ========================================
+// 쿠키 새로고침 (다했니 API에서 가져와서 잔디에 기록)
+// ========================================
+
+/**
+ * 쿠키 새로고침 - 현재 쿠키 상태를 잔디에 기록
+ * 같은 날 여러번 호출하면 (2), (3) 형태로 열 추가
+ */
+export async function refreshCookies(className: string): Promise<{
+  success: boolean;
+  message?: string;
+  data?: { date: string; refreshCount: number; studentsUpdated: number };
+}> {
+  const result = await callSheetsApi<{
+    date: string;
+    refreshCount: number;
+    studentsUpdated: number;
+  }>('refreshCookies', { className }, 'POST');
+
+  return {
+    success: result.success,
+    message: result.message,
+    data: result.data,
+  };
+}
+
+// ========================================
 // 랭킹 관련 함수
 // ========================================
 
