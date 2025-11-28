@@ -1,7 +1,12 @@
 // Google Sheets API 연동 서비스 v2.0
-// Apps Script Web App URL
+// Apps Script Web App URL - sheets.ts와 동일한 localStorage 키 사용
 
-const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycby4H0f81_e4o9yBXVwFG0uF_DRdWZhW5_SnrYEeeAzrEXaZRV5B-217GNcEdj2By4TR/exec';
+const STORAGE_KEY = 'dahandin_sheets_url';
+
+// URL을 localStorage에서 가져옴 (sheets.ts와 동기화)
+function getSheetsApiUrl(): string | null {
+  return localStorage.getItem(STORAGE_KEY);
+}
 
 // API 응답 타입
 interface ApiResponse<T> {
@@ -99,7 +104,16 @@ async function callSheetsApi<T>(
   method: 'GET' | 'POST' = 'GET',
   body?: unknown
 ): Promise<ApiResponse<T>> {
-  const url = new URL(SHEETS_API_URL);
+  const sheetsUrl = getSheetsApiUrl();
+
+  if (!sheetsUrl) {
+    return {
+      success: false,
+      message: 'Sheets URL이 설정되지 않았습니다. 먼저 로그인해주세요.',
+    };
+  }
+
+  const url = new URL(sheetsUrl);
   url.searchParams.append('action', action);
 
   for (const [key, value] of Object.entries(params)) {
