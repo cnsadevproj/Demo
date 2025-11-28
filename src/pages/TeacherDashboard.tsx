@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Progress } from '../components/ui/progress';
 import { useAuth } from '../contexts/AuthContext';
 import { getMultipleStudentsInfo, StudentInfo, StoredStudent } from '../services/api';
+import { getClassStudents as getClassStudentsFromSheets, SheetsStudentData } from '../services/sheets';
 import { downloadCsvTemplate, parseCsvFile, exportStudentsToCsv } from '../utils/csv';
 import {
   Users,
@@ -54,17 +55,36 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
   // 학생 정보 자동 로드 함수
   const loadStudentInfoAuto = async (studentList: StoredStudent[]) => {
-    if (!apiKey || studentList.length === 0) return;
+    if (studentList.length === 0) return;
 
     setLoading(true);
     setLoadingProgress({ current: 0, total: studentList.length });
 
     try {
-      const codes = studentList.map(s => s.code);
-      const results = await getMultipleStudentsInfo(apiKey, codes, (current, total) => {
-        setLoadingProgress({ current, total });
-      });
-      setStudentInfoMap(results);
+      // API 키가 있으면 다했니 API 사용
+      if (apiKey) {
+        const codes = studentList.map(s => s.code);
+        const results = await getMultipleStudentsInfo(apiKey, codes, (current, total) => {
+          setLoadingProgress({ current, total });
+        });
+        setStudentInfoMap(results);
+      } else if (selectedClass) {
+        // API 키가 없으면 Sheets에서 가져오기
+        const response = await getClassStudentsFromSheets(selectedClass);
+        if (response.success && response.data) {
+          // SheetsStudentData를 StudentInfo 형식으로 변환
+          const infoMap = new Map<string, StudentInfo | null>();
+          response.data.forEach((student: SheetsStudentData) => {
+            infoMap.set(student.code, {
+              cookie: student.cookie,
+              usedCookie: student.usedCookie,
+              totalCookie: student.totalCookie,
+              badges: {} // Sheets에는 뱃지 정보 없음
+            });
+          });
+          setStudentInfoMap(infoMap);
+        }
+      }
     } catch (error) {
       console.error('학생 정보 로드 실패:', error);
     } finally {
@@ -75,14 +95,47 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   // 선택된 클래스 변경 시 학생 목록 로드 + 자동으로 정보 불러오기
   useEffect(() => {
     if (selectedClass) {
-      const savedStudents = getClassStudents(selectedClass);
-      setStudents(savedStudents);
-      setStudentInfoMap(new Map());
+      const loadClassData = async () => {
+        // 먼저 로컬 저장된 학생 목록 확인
+        const savedStudents = getClassStudents(selectedClass);
 
-      // 저장된 학생이 있으면 자동으로 정보 불러오기
-      if (savedStudents.length > 0 && apiKey) {
-        loadStudentInfoAuto(savedStudents);
-      }
+        // API 키가 없으면 Sheets에서 자동으로 학생 목록 로드
+        if (!apiKey) {
+          const response = await getClassStudentsFromSheets(selectedClass);
+          if (response.success && response.data) {
+            // Sheets에서 가져온 학생 목록으로 업데이트
+            const sheetsStudents: StoredStudent[] = response.data.map((s: SheetsStudentData) => ({
+              number: s.number,
+              name: s.name,
+              code: s.code
+            }));
+            setStudents(sheetsStudents);
+
+            // 동시에 상세 정보도 설정
+            const infoMap = new Map<string, StudentInfo | null>();
+            response.data.forEach((student: SheetsStudentData) => {
+              infoMap.set(student.code, {
+                cookie: student.cookie,
+                usedCookie: student.usedCookie,
+                totalCookie: student.totalCookie,
+                badges: {}
+              });
+            });
+            setStudentInfoMap(infoMap);
+            return;
+          }
+        }
+
+        // API 키가 있거나 Sheets 로드 실패 시 기존 방식
+        setStudents(savedStudents);
+        setStudentInfoMap(new Map());
+
+        if (savedStudents.length > 0) {
+          loadStudentInfoAuto(savedStudents);
+        }
+      };
+
+      loadClassData();
     }
   }, [selectedClass]);
 
@@ -109,7 +162,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       setStudentInfoMap(new Map());
 
       // 자동으로 학생 정보 불러오기
-      if (parsedStudents.length > 0 && apiKey) {
+      if (parsedStudents.length > 0) {
         loadStudentInfoAuto(parsedStudents);
       }
     } catch (error) {
@@ -124,17 +177,37 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
   // 학생 정보 불러오기
   const handleLoadStudentInfo = async () => {
-    if (!apiKey || students.length === 0) return;
+    if (students.length === 0 || !selectedClass) return;
 
     setLoading(true);
     setLoadingProgress({ current: 0, total: students.length });
 
     try {
-      const codes = students.map(s => s.code);
-      const results = await getMultipleStudentsInfo(apiKey, codes, (current, total) => {
-        setLoadingProgress({ current, total });
-      });
-      setStudentInfoMap(results);
+      // API 키가 있으면 다했니 API 사용
+      if (apiKey) {
+        const codes = students.map(s => s.code);
+        const results = await getMultipleStudentsInfo(apiKey, codes, (current, total) => {
+          setLoadingProgress({ current, total });
+        });
+        setStudentInfoMap(results);
+      } else {
+        // API 키가 없으면 Sheets에서 가져오기
+        const response = await getClassStudentsFromSheets(selectedClass);
+        if (response.success && response.data) {
+          // SheetsStudentData를 StudentInfo 형식으로 변환
+          const infoMap = new Map<string, StudentInfo | null>();
+          response.data.forEach((student: SheetsStudentData) => {
+            infoMap.set(student.code, {
+              cookie: student.cookie,
+              usedCookie: student.usedCookie,
+              totalCookie: student.totalCookie,
+              badges: {} // Sheets에는 뱃지 정보 없음
+            });
+          });
+          setStudentInfoMap(infoMap);
+          setLoadingProgress({ current: students.length, total: students.length });
+        }
+      }
     } catch (error) {
       console.error('학생 정보 로드 실패:', error);
     } finally {
