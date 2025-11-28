@@ -46,7 +46,10 @@ interface GameTeamManagerProps {
 
 export function GameTeamManager({ onNavigate }: GameTeamManagerProps) {
   const { teams, createTeam, updateTeam, deleteTeam, addBonusCookies, clearTeams } = useGame();
-  const { studentClassName } = useAuth();
+  const { selectedClass, role, studentClassName } = useAuth();
+
+  // 교사는 selectedClass, 학생은 studentClassName 사용
+  const currentClass = role === 'teacher' ? selectedClass : studentClassName;
 
   const [isCreating, setIsCreating] = useState(false);
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
@@ -63,13 +66,13 @@ export function GameTeamManager({ onNavigate }: GameTeamManagerProps) {
 
   useEffect(() => {
     const loadStudents = async () => {
-      if (!studentClassName) {
+      if (!currentClass) {
         setLoading(false);
         return;
       }
       setLoading(true);
       try {
-        const students = await getClassStudents(studentClassName);
+        const students = await getClassStudents(currentClass);
         setClassStudents(students);
       } catch (error) {
         console.error('학생 로드 실패:', error);
@@ -78,7 +81,7 @@ export function GameTeamManager({ onNavigate }: GameTeamManagerProps) {
       }
     };
     loadStudents();
-  }, [studentClassName]);
+  }, [currentClass]);
 
   // 이미 팀에 배정된 학생 코드
   const assignedStudentCodes = teams.flatMap(t => t.memberCodes);
@@ -214,7 +217,7 @@ export function GameTeamManager({ onNavigate }: GameTeamManagerProps) {
             <div>
               <h2 className="text-white mb-2">쿠키 배틀 팀 관리</h2>
               <p className="text-purple-100">
-                {studentClassName || '클래스를 먼저 선택하세요'} - {teams.length}팀
+                {currentClass || '클래스를 먼저 선택하세요'} - {teams.length}팀
               </p>
             </div>
             <div className="flex items-center gap-2">

@@ -242,6 +242,10 @@ function TeacherNavigationMenu({ currentPage, onNavigate }: {
   onNavigate: (page: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const { classes, selectedClass, selectClass } = useAuth();
+
+  // 활성화된 클래스 목록
+  const activeClasses = classes.filter(c => c.active !== false);
 
   const teacherPages = [
     { id: 'teacher-dashboard', label: '학생 관리', emoji: '👨‍🎓' },
@@ -260,6 +264,13 @@ function TeacherNavigationMenu({ currentPage, onNavigate }: {
     { id: 'team-assign', label: '팀 배정', emoji: '👥' },
     { id: 'snapshot', label: '스냅샷', emoji: '📸' },
   ];
+
+  // 클래스 선택 후 페이지 이동
+  const handleClassSelect = (className: string, targetPage: string) => {
+    selectClass(className);
+    onNavigate(targetPage);
+    setIsOpen(false);
+  };
 
   return (
     <>
@@ -303,9 +314,43 @@ function TeacherNavigationMenu({ currentPage, onNavigate }: {
                 </div>
               </div>
 
-              {/* 쿠키 배틀 게임 */}
+              {/* 활성화된 클래스별 관리 */}
+              {activeClasses.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="mb-3 text-amber-600">🏫 클래스별 관리</h3>
+                  <div className="space-y-3">
+                    {activeClasses.map((classInfo) => (
+                      <div key={classInfo.name} className="border rounded-lg p-3">
+                        <div className="font-medium text-sm mb-2 flex items-center justify-between">
+                          <span>📚 {classInfo.name}</span>
+                          {selectedClass === classInfo.name && (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">선택됨</span>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleClassSelect(classInfo.name, 'game-teams')}
+                            className="flex-1 text-xs px-2 py-1.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-700"
+                          >
+                            👥 팀 관리
+                          </button>
+                          <button
+                            onClick={() => handleClassSelect(classInfo.name, 'battle-game')}
+                            className="flex-1 text-xs px-2 py-1.5 rounded bg-red-50 hover:bg-red-100 text-red-700"
+                          >
+                            ⚔️ 배틀
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 쿠키 배틀 게임 (클래스 선택 없이) */}
               <div className="mb-6">
                 <h3 className="mb-3 text-amber-600">🍪 쿠키 배틀</h3>
+                <p className="text-xs text-gray-500 mb-2">현재 선택: {selectedClass || '없음'}</p>
                 <div className="space-y-2">
                   {gamePages.map((page) => (
                     <button
