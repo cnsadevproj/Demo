@@ -754,19 +754,85 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           </Card>
         )}
 
-        {/* 학생이 없을 때 안내 */}
+        {/* 학생이 없을 때 CSV 업로드 UI */}
         {selectedClass && students.length === 0 && (
-          <Card className="p-12 text-center">
-            <FileSpreadsheet className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-            <h3 className="text-lg font-medium mb-2">학생 정보를 불러오는 중...</h3>
-            <p className="text-gray-500 mb-4">
-              Google Sheets에서 학생 목록을 불러오고 있습니다.<br />
-              학생 정보가 표시되지 않으면 Sheets에 학생 데이터가 있는지 확인해주세요.
-            </p>
-            <Button onClick={() => window.location.reload()} variant="outline">
-              <RefreshCw className="w-4 h-4 mr-2" />
-              새로고침
-            </Button>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="w-5 h-5" />
+                학생 목록 업로드
+              </CardTitle>
+              <CardDescription>
+                CSV 파일로 학생 목록을 업로드하세요. 시트에 학생이 없으면 직접 추가할 수 있습니다.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* 현재 상태 안내 */}
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-amber-800">학생 데이터 없음</p>
+                    <p className="text-sm text-amber-700">
+                      Google Sheets의 "{selectedClass}_학생" 시트에 데이터가 없습니다.
+                      CSV 파일을 업로드하거나 Sheets에서 직접 학생을 추가해주세요.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* CSV 업로드 영역 */}
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                <FileSpreadsheet className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                <p className="mb-4 text-gray-600">CSV 파일을 선택하여 학생 목록을 업로드하세요</p>
+                <div className="flex justify-center gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={downloadCsvTemplate}
+                    className="flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    템플릿 다운로드
+                  </Button>
+                  <Button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2"
+                  >
+                    <Upload className="w-4 h-4" />
+                    CSV 업로드
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </div>
+              </div>
+
+              {/* 업로드 결과 메시지 */}
+              {uploadError && (
+                <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-lg">
+                  <XCircle className="w-5 h-5" />
+                  {uploadError}
+                </div>
+              )}
+              {uploadSuccess && (
+                <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-lg">
+                  <CheckCircle className="w-5 h-5" />
+                  {uploadSuccess}
+                </div>
+              )}
+
+              {/* 새로고침 버튼 */}
+              <div className="text-center pt-4">
+                <Button onClick={() => window.location.reload()} variant="outline">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  시트에서 다시 불러오기
+                </Button>
+              </div>
+            </CardContent>
           </Card>
         )}
 
