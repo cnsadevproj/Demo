@@ -5,6 +5,258 @@
 const API_BASE = 'https://api.dahandin.com/openapi/v1';
 
 // ========================================
+// 0. Web App 엔드포인트 (학생용 앱 연동)
+// ========================================
+
+/**
+ * GET 요청 처리
+ * URL 형식: ?action=getStudent&code=학생코드&className=학급명
+ */
+function doGet(e) {
+  try {
+    const params = e.parameter;
+    const action = params.action;
+
+    // CORS 헤더 설정
+    const output = ContentService.createTextOutput();
+    output.setMimeType(ContentService.MimeType.JSON);
+
+    let result;
+
+    switch (action) {
+      case 'getStudent':
+        result = getStudentData(params.code, params.className);
+        break;
+
+      case 'getClassStudents':
+        result = getClassStudentsData(params.className);
+        break;
+
+      case 'getTeams':
+        result = getTeamsData(params.className);
+        break;
+
+      case 'getGrass':
+        result = getGrassData(params.code, params.className);
+        break;
+
+      case 'getSnapshot':
+        result = getSnapshotData(params.className, params.week);
+        break;
+
+      case 'ping':
+        result = { success: true, message: '연결 성공!' };
+        break;
+
+      default:
+        result = { success: false, message: '올바르지 않은 action입니다.' };
+    }
+
+    output.setContent(JSON.stringify(result));
+    return output;
+
+  } catch (error) {
+    const output = ContentService.createTextOutput();
+    output.setMimeType(ContentService.MimeType.JSON);
+    output.setContent(JSON.stringify({
+      success: false,
+      message: error.message
+    }));
+    return output;
+  }
+}
+
+// 학생 정보 조회
+function getStudentData(studentCode, className) {
+  if (!studentCode || !className) {
+    return { success: false, message: '학생 코드와 학급명이 필요합니다.' };
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sanitizedName = sanitizeSheetName(className);
+  const studentSheet = ss.getSheetByName(`${sanitizedName}_학생`);
+
+  if (!studentSheet) {
+    return { success: false, message: '학급 시트를 찾을 수 없습니다.' };
+  }
+
+  const lastRow = studentSheet.getLastRow();
+  if (lastRow < 2) {
+    return { success: false, message: '학생 데이터가 없습니다.' };
+  }
+
+  // 학생 데이터 검색
+  const data = studentSheet.getRange(2, 1, lastRow - 1, 8).getValues();
+
+  for (let i = 0; i < data.length; i++) {
+    const [number, name, code, cookie, usedCookie, totalCookie, chocoChips, lastUpdate] = data[i];
+
+    if (code === studentCode) {
+      return {
+        success: true,
+        data: {
+          number,
+          name,
+          code,
+          cookie,
+          usedCookie,
+          totalCookie,
+          chocoChips,
+          lastUpdate: lastUpdate ? new Date(lastUpdate).toISOString() : null
+        }
+      };
+    }
+  }
+
+  return { success: false, message: '학생을 찾을 수 없습니다.' };
+}
+
+// 학급 전체 학생 목록 조회
+function getClassStudentsData(className) {
+  if (!className) {
+    return { success: false, message: '학급명이 필요합니다.' };
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sanitizedName = sanitizeSheetName(className);
+  const studentSheet = ss.getSheetByName(`${sanitizedName}_학생`);
+
+  if (!studentSheet) {
+    return { success: false, message: '학급 시트를 찾을 수 없습니다.' };
+  }
+
+  const lastRow = studentSheet.getLastRow();
+  if (lastRow < 2) {
+    return { success: true, data: [] };
+  }
+
+  const data = studentSheet.getRange(2, 1, lastRow - 1, 8).getValues();
+  const students = data
+    .filter(row => row[2]) // 학생 코드가 있는 경우만
+    .map(row => ({
+      number: row[0],
+      name: row[1],
+      code: row[2],
+      cookie: row[3],
+      usedCookie: row[4],
+      totalCookie: row[5],
+      chocoChips: row[6],
+      lastUpdate: row[7] ? new Date(row[7]).toISOString() : null
+    }));
+
+  return { success: true, data: students };
+}
+
+// 팀 정보 조회
+function getTeamsData(className) {
+  if (!className) {
+    return { success: false, message: '학급명이 필요합니다.' };
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sanitizedName = sanitizeSheetName(className);
+  const teamSheet = ss.getSheetByName(`${sanitizedName}_팀`);
+
+  if (!teamSheet) {
+    return { success: false, message: '팀 시트를 찾을 수 없습니다.' };
+  }
+
+  const lastRow = teamSheet.getLastRow();
+  if (lastRow < 2) {
+    return { success: true, data: [] };
+  }
+
+  const data = teamSheet.getRange(2, 1, lastRow - 1, 9).getValues();
+  const teams = data
+    .filter(row => row[0]) // 주차가 있는 경우만
+    .map(row => ({
+      week: row[0],
+      teamId: row[1],
+      teamName: row[2],
+      flag: row[3],
+      members: row[4] ? row[4].split(',') : [],
+      earnedRound: row[5],
+      attackTarget: row[6],
+      attackBet: row[7],
+      defense: row[8]
+    }));
+
+  return { success: true, data: teams };
+}
+
+// 잔디 데이터 조회
+function getGrassData(studentCode, className) {
+  if (!studentCode || !className) {
+    return { success: false, message: '학생 코드와 학급명이 필요합니다.' };
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sanitizedName = sanitizeSheetName(className);
+  const grassSheet = ss.getSheetByName(`${sanitizedName}_잔디`);
+
+  if (!grassSheet) {
+    return { success: false, message: '잔디 시트를 찾을 수 없습니다.' };
+  }
+
+  const lastRow = grassSheet.getLastRow();
+  if (lastRow < 2) {
+    return { success: true, data: [] };
+  }
+
+  const data = grassSheet.getRange(2, 1, lastRow - 1, 4).getValues();
+  const grassData = data
+    .filter(row => row[1] === studentCode)
+    .map(row => ({
+      date: row[0] ? new Date(row[0]).toISOString().split('T')[0] : null,
+      studentCode: row[1],
+      completed: row[2],
+      missionType: row[3]
+    }));
+
+  return { success: true, data: grassData };
+}
+
+// 스냅샷 데이터 조회
+function getSnapshotData(className, week) {
+  if (!className) {
+    return { success: false, message: '학급명이 필요합니다.' };
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sanitizedName = sanitizeSheetName(className);
+  const snapshotSheet = ss.getSheetByName(`${sanitizedName}_스냅샷`);
+
+  if (!snapshotSheet) {
+    return { success: false, message: '스냅샷 시트를 찾을 수 없습니다.' };
+  }
+
+  const lastRow = snapshotSheet.getLastRow();
+  if (lastRow < 2) {
+    return { success: true, data: [] };
+  }
+
+  const data = snapshotSheet.getRange(2, 1, lastRow - 1, 7).getValues();
+  let snapshots = data
+    .filter(row => row[0]) // 주차가 있는 경우만
+    .map(row => ({
+      week: row[0],
+      studentCode: row[1],
+      teamId: row[2],
+      bMon: row[3],
+      bWed: row[4],
+      earnedRound: row[5],
+      date: row[6] ? new Date(row[6]).toISOString() : null
+    }));
+
+  // 특정 주차 필터링
+  if (week) {
+    snapshots = snapshots.filter(s => s.week == week);
+  }
+
+  return { success: true, data: snapshots };
+}
+
+// ========================================
 // 1. 메뉴 생성
 // ========================================
 function onOpen() {
