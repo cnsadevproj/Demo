@@ -66,6 +66,10 @@ function doGet(e) {
         result = getClassListFromSheets();
         break;
 
+      case 'setClassActivation':
+        result = setClassActivation(params.className, params.active);
+        break;
+
       case 'findStudent':
         result = findStudentInAllClasses(params.code);
         break;
@@ -264,6 +268,23 @@ function sanitizeSheetName(name) {
 
 function getClassListFromSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // 먼저 학급목록 시트에서 활성화 정보 가져오기
+  const listSheet = ss.getSheetByName('학급목록');
+  const activationMap = {};
+
+  if (listSheet) {
+    const lastRow = listSheet.getLastRow();
+    if (lastRow > 1) {
+      const data = listSheet.getRange(2, 1, lastRow - 1, 4).getValues();
+      data.forEach(row => {
+        const className = sanitizeSheetName(row[0]);
+        // D열 (index 3): 활성화 상태, 기본값은 1
+        activationMap[className] = row[3] === 0 ? false : true;
+      });
+    }
+  }
+
   const sheets = ss.getSheets();
   const classList = [];
 
@@ -273,12 +294,50 @@ function getClassListFromSheets() {
       const className = sheetName.replace('_학생', '');
       classList.push({
         name: className,
-        studentCount: Math.max(0, sheets[i].getLastRow() - 1)
+        studentCount: Math.max(0, sheets[i].getLastRow() - 1),
+        active: activationMap[className] !== undefined ? activationMap[className] : true
       });
     }
   }
 
   return { success: true, data: classList };
+}
+
+// 클래스 활성화 상태 설정
+function setClassActivation(className, active) {
+  if (!className) {
+    return { success: false, message: '학급명이 필요합니다.' };
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const listSheet = ss.getSheetByName('학급목록');
+
+  if (!listSheet) {
+    return { success: false, message: '학급목록 시트를 찾을 수 없습니다.' };
+  }
+
+  const lastRow = listSheet.getLastRow();
+  if (lastRow < 2) {
+    return { success: false, message: '학급목록이 비어있습니다.' };
+  }
+
+  // 학급명 찾기
+  const classNames = listSheet.getRange(2, 1, lastRow - 1, 1).getValues().flat();
+  const sanitizedTarget = sanitizeSheetName(className);
+
+  for (let i = 0; i < classNames.length; i++) {
+    if (sanitizeSheetName(classNames[i]) === sanitizedTarget) {
+      // D열에 활성화 상태 설정 (1 또는 0)
+      const activeValue = (active === 'true' || active === true || active === '1' || active === 1) ? 1 : 0;
+      listSheet.getRange(i + 2, 4).setValue(activeValue);
+      return {
+        success: true,
+        message: `${className} 활성화 상태: ${activeValue === 1 ? '활성' : '비활성'}`
+      };
+    }
+  }
+
+  return { success: false, message: '학급을 찾을 수 없습니다.' };
 }
 
 function findStudentInAllClasses(studentCode) {
@@ -957,20 +1016,45 @@ function fetchClassList() {
       return;
     }
 
-    const listSheet = getOrCreateSheet('학급목록', ['학급명', '학생수', '마지막 업데이트']);
-    const lastRow = listSheet.getLastRow();
-    if (lastRow > 1) listSheet.deleteRows(2, lastRow - 1);
+    const listSheet = getOrCreateSheet('학급목록', ['학급명', '학생수', '마지막 업데이트', '활성화']);
+
+    // 기존 활성화 상태 보존
+    const existingActivation = {};
+    const existingLastRow = listSheet.getLastRow();
+    if (existingLastRow > 1) {
+      const existingData = listSheet.getRange(2, 1, existingLastRow - 1, 4).getValues();
+      existingData.forEach(row => {
+        if (row[0]) {
+          existingActivation[sanitizeSheetName(row[0])] = row[3];
+        }
+      });
+      listSheet.deleteRows(2, existingLastRow - 1);
+    }
 
     const now = new Date().toLocaleString('ko-KR');
-    const data = classList.map(cls => [cls.name, 0, now]);
-    listSheet.getRange(2, 1, data.length, 3).setValues(data);
-
-    classList.forEach(cls => {
-      const className = sanitizeSheetName(cls.name);
-      createClassSheets(className);
+    const data = classList.map(cls => {
+      const sanitizedName = sanitizeSheetName(cls.name);
+      // 기존 활성화 상태가 있으면 유지, 없으면 기본값 1
+      const activation = existingActivation[sanitizedName] !== undefined
+        ? existingActivation[sanitizedName]
+        : 1;
+      return [cls.name, 0, now, activation];
     });
 
-    ui.alert(`✅ 완료!\n\n${classList.length}개 학급의 시트가 생성되었습니다.`);
+    listSheet.getRange(2, 1, data.length, 4).setValues(data);
+
+    // 활성화된 학급만 시트 생성
+    let createdCount = 0;
+    classList.forEach((cls, index) => {
+      const className = sanitizeSheetName(cls.name);
+      const activation = data[index][3];
+      if (activation === 1) {
+        createClassSheets(className);
+        createdCount++;
+      }
+    });
+
+    ui.alert(`✅ 완료!\n\n전체 ${classList.length}개 학급 중 ${createdCount}개 활성화 학급의 시트가 생성되었습니다.\n\n💡 학급목록 시트의 D열(활성화)에서 활성화 여부를 설정하세요.\n(1=활성, 0=비활성)`);
   } catch (error) {
     ui.alert('❌ 오류 발생\n\n' + error.message);
   }
@@ -1053,7 +1137,16 @@ function syncStudentInfo() {
       return;
     }
 
-    const classNames = listSheet.getRange(2, 1, lastRow - 1, 1).getValues().flat();
+    // 활성화된 학급만 필터링
+    const classData = listSheet.getRange(2, 1, lastRow - 1, 4).getValues();
+    const activeClasses = classData.filter(row => row[3] !== 0).map(row => row[0]);
+
+    if (activeClasses.length === 0) {
+      ui.alert('⚠️ 활성화된 학급이 없습니다.\n학급목록 시트의 D열(활성화)을 확인해주세요.');
+      return;
+    }
+
+    const classNames = activeClasses;
     let totalUpdated = 0;
 
     for (let i = 0; i < classNames.length; i++) {

@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Progress } from '../components/ui/progress';
 import { useAuth } from '../contexts/AuthContext';
 import { getMultipleStudentsInfo, StudentInfo, StoredStudent } from '../services/api';
-import { getClassStudents as getClassStudentsFromSheets, SheetsStudentData } from '../services/sheets';
+import { getClassStudents as getClassStudentsFromSheets, SheetsStudentData, setClassActivation, getClassListFromSheets, SheetsClassInfo } from '../services/sheets';
 import { downloadCsvTemplate, parseCsvFile, exportStudentsToCsv } from '../utils/csv';
 import {
   Users,
@@ -24,6 +24,9 @@ import {
   Trash2,
   Trophy,
   List,
+  ToggleLeft,
+  ToggleRight,
+  Settings,
 } from 'lucide-react';
 import { StudentRankingTable, convertToRankedStudents } from '../components/StudentRankingTable';
 
@@ -52,6 +55,46 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [uploadSuccess, setUploadSuccess] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'ranking'>('list');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 학급 활성화 상태 관리
+  const [classActivationMap, setClassActivationMap] = useState<Record<string, boolean>>({});
+  const [activationLoading, setActivationLoading] = useState<string | null>(null);
+
+  // 학급 활성화 상태 로드
+  useEffect(() => {
+    const loadClassActivation = async () => {
+      const response = await getClassListFromSheets();
+      if (response.success && response.data) {
+        const activationMap: Record<string, boolean> = {};
+        response.data.forEach((cls: SheetsClassInfo) => {
+          activationMap[cls.name] = cls.active !== false;
+        });
+        setClassActivationMap(activationMap);
+      }
+    };
+    loadClassActivation();
+  }, []);
+
+  // 활성화 토글 핸들러
+  const handleToggleActivation = async (className: string) => {
+    const currentState = classActivationMap[className] !== false;
+    const newState = !currentState;
+
+    setActivationLoading(className);
+    try {
+      const response = await setClassActivation(className, newState);
+      if (response.success) {
+        setClassActivationMap(prev => ({
+          ...prev,
+          [className]: newState
+        }));
+      }
+    } catch (error) {
+      console.error('활성화 상태 변경 실패:', error);
+    } finally {
+      setActivationLoading(null);
+    }
+  };
 
   // 학생 정보 자동 로드 함수
   const loadStudentInfoAuto = async (studentList: StoredStudent[]) => {
@@ -325,6 +368,68 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   </div>
                 </div>
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 학급 활성화 관리 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              학급 활성화 관리
+            </CardTitle>
+            <CardDescription>
+              이번 학기에 사용할 학급만 활성화하세요. 비활성 학급은 시트가 생성되지 않습니다.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {classes.map((cls) => {
+                const isActive = classActivationMap[cls.name] !== false;
+                const isLoading = activationLoading === cls.name;
+                return (
+                  <div
+                    key={cls.name}
+                    className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                      isActive
+                        ? 'bg-green-50 border-green-200'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`font-medium ${isActive ? 'text-green-700' : 'text-gray-500'}`}>
+                        {cls.name}
+                      </span>
+                      <Badge variant={isActive ? 'default' : 'secondary'} className="text-xs">
+                        {isActive ? '활성' : '비활성'}
+                      </Badge>
+                    </div>
+                    <button
+                      onClick={() => handleToggleActivation(cls.name)}
+                      disabled={isLoading}
+                      className={`p-1 rounded-full transition-colors ${
+                        isActive
+                          ? 'text-green-600 hover:bg-green-100'
+                          : 'text-gray-400 hover:bg-gray-200'
+                      }`}
+                    >
+                      {isLoading ? (
+                        <Loader2 className="w-6 h-6 animate-spin" />
+                      ) : isActive ? (
+                        <ToggleRight className="w-6 h-6" />
+                      ) : (
+                        <ToggleLeft className="w-6 h-6" />
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            {classes.length === 0 && (
+              <p className="text-center text-gray-500 py-4">
+                등록된 학급이 없습니다.
+              </p>
             )}
           </CardContent>
         </Card>
