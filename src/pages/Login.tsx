@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { getClassList } from '../services/api';
+import { findStudentClass } from '../services/sheets';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -11,15 +13,17 @@ interface LoginProps {
 }
 
 export default function Login({ onLoginSuccess }: LoginProps) {
-  const { loginAsTeacher, loginAsStudent } = useAuth();
+  const { loginAsTeacher, loginAsStudent, sheetsUrl, setSheetsUrl, setStudentClassName, apiKey: savedApiKey } = useAuth();
 
   // 교사 로그인 상태
   const [apiKey, setApiKey] = useState('');
+  const [teacherSheetsUrl, setTeacherSheetsUrl] = useState(sheetsUrl || '');
   const [teacherLoading, setTeacherLoading] = useState(false);
   const [teacherError, setTeacherError] = useState('');
 
   // 학생 로그인 상태
   const [studentCode, setStudentCode] = useState('');
+  const [studentLoading, setStudentLoading] = useState(false);
   const [studentError, setStudentError] = useState('');
 
   // 교사 로그인 핸들러
@@ -32,11 +36,18 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       return;
     }
 
+    if (!teacherSheetsUrl.trim()) {
+      setTeacherError('Google Sheets URL을 입력해주세요.');
+      return;
+    }
+
     setTeacherLoading(true);
 
     try {
       const result = await loginAsTeacher(apiKey.trim());
       if (result.success) {
+        // Sheets URL 저장
+        setSheetsUrl(teacherSheetsUrl.trim());
         onLoginSuccess();
       } else {
         setTeacherError(result.message);
@@ -49,7 +60,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   };
 
   // 학생 로그인 핸들러
-  const handleStudentLogin = (e: React.FormEvent) => {
+  const handleStudentLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setStudentError('');
 
@@ -58,8 +69,49 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       return;
     }
 
-    loginAsStudent(studentCode.trim().toUpperCase());
-    onLoginSuccess();
+    // Sheets URL 확인
+    if (!sheetsUrl) {
+      setStudentError('선생님이 아직 시스템을 설정하지 않았습니다. 선생님께 문의하세요.');
+      return;
+    }
+
+    setStudentLoading(true);
+
+    try {
+      // 다했니 API로 클래스 목록 가져오기
+      // 참고: savedApiKey가 있으면 사용, 없으면 Sheets에서만 조회
+      let classNames: string[] = [];
+
+      if (savedApiKey) {
+        const response = await getClassList(savedApiKey);
+        if (response.result && response.data) {
+          classNames = response.data.map(c => c.name);
+        }
+      }
+
+      // 클래스 목록이 없으면 일단 로그인만 진행 (나중에 수동 선택)
+      if (classNames.length === 0) {
+        loginAsStudent(studentCode.trim().toUpperCase());
+        onLoginSuccess();
+        return;
+      }
+
+      // Sheets에서 학생 찾기
+      const result = await findStudentClass(studentCode.trim().toUpperCase(), classNames);
+
+      if (result) {
+        // 학급명 저장
+        setStudentClassName(result.className);
+        loginAsStudent(studentCode.trim().toUpperCase());
+        onLoginSuccess();
+      } else {
+        setStudentError('학생 코드를 찾을 수 없습니다. 선생님께 확인해주세요.');
+      }
+    } catch (error) {
+      setStudentError('로그인 중 오류가 발생했습니다.');
+    } finally {
+      setStudentLoading(false);
+    }
   };
 
   return (
@@ -107,8 +159,15 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                   <p className="text-sm text-red-500">{studentError}</p>
                 )}
 
-                <Button type="submit" className="w-full">
-                  로그인
+                <Button type="submit" className="w-full" disabled={studentLoading}>
+                  {studentLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      확인 중...
+                    </>
+                  ) : (
+                    '로그인'
+                  )}
                 </Button>
               </form>
             </TabsContent>
@@ -119,7 +178,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 <div className="space-y-2">
                   <label className="text-sm font-medium flex items-center gap-2">
                     <KeyRound className="w-4 h-4" />
-                    API 키
+                    다했니 API 키
                   </label>
                   <Input
                     type="password"
@@ -129,6 +188,21 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                   />
                   <p className="text-xs text-muted-foreground">
                     dahandin.com에서 발급받은 API 키를 입력하세요.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    📊 Google Sheets Web App URL
+                  </label>
+                  <Input
+                    type="url"
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                    value={teacherSheetsUrl}
+                    onChange={(e) => setTeacherSheetsUrl(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Apps Script를 배포한 Web App URL을 입력하세요.
                   </p>
                 </div>
 
