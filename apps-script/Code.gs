@@ -93,6 +93,10 @@ function doGet(e) {
         result = getGrassData(params.className, params.code);
         break;
 
+      case 'checkTodayGrass':
+        result = checkTodayGrass(params.className, params.code);
+        break;
+
       // === 소원 ===
       case 'getWishes':
         result = getWishesData(params.className);
@@ -199,6 +203,11 @@ function doPost(e) {
 
       case 'updatePreviousCookies':
         result = updatePreviousCookies(params.className);
+        break;
+
+      // === 잔디 ===
+      case 'addGrass':
+        result = addGrass(params.className, params.code, Number(params.cookieChange) || 1);
         break;
 
       default:
@@ -676,6 +685,60 @@ function getGrassData(className, studentCode) {
   }
 
   return { success: true, data: grassData };
+}
+
+// 잔디 추가 (미션 완료 시)
+function addGrass(className, studentCode, cookieChange) {
+  if (!className || !studentCode) {
+    return { success: false, message: '학급명과 학생코드가 필요합니다.' };
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = getOrCreateSheet(`${sanitizeSheetName(className)}_잔디`, GRASS_HEADERS);
+  const today = new Date().toISOString().split('T')[0];
+
+  // 오늘 이미 잔디가 있는지 확인
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+    for (let i = 0; i < data.length; i++) {
+      const rowDate = data[i][0] ? new Date(data[i][0]).toISOString().split('T')[0] : null;
+      if (rowDate === today && data[i][1] === studentCode) {
+        return { success: false, message: '오늘은 이미 잔디를 심었습니다.' };
+      }
+    }
+  }
+
+  // 잔디 추가
+  sheet.appendRow([today, studentCode, cookieChange || 1]);
+
+  return { success: true, data: { date: today, studentCode, cookieChange: cookieChange || 1 } };
+}
+
+// 오늘 잔디 여부 확인
+function checkTodayGrass(className, studentCode) {
+  if (!className || !studentCode) {
+    return { success: false, message: '학급명과 학생코드가 필요합니다.' };
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(`${sanitizeSheetName(className)}_잔디`);
+  if (!sheet) return { success: true, data: { hasGrass: false } };
+
+  const today = new Date().toISOString().split('T')[0];
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) return { success: true, data: { hasGrass: false } };
+
+  const data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  for (let i = 0; i < data.length; i++) {
+    const rowDate = data[i][0] ? new Date(data[i][0]).toISOString().split('T')[0] : null;
+    if (rowDate === today && data[i][1] === studentCode) {
+      return { success: true, data: { hasGrass: true } };
+    }
+  }
+
+  return { success: true, data: { hasGrass: false } };
 }
 
 // 매일 자동 실행될 함수 (트리거 설정 필요)

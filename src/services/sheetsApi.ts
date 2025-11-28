@@ -249,6 +249,30 @@ export async function getGrass(className: string, code?: string): Promise<SheetG
   return result.success ? result.data || [] : [];
 }
 
+/**
+ * 오늘 잔디 여부 확인
+ */
+export async function checkTodayGrass(className: string, code: string): Promise<boolean> {
+  const result = await callSheetsApi<{ hasGrass: boolean }>('checkTodayGrass', { className, code });
+  return result.success ? result.data?.hasGrass || false : false;
+}
+
+/**
+ * 잔디 추가 (미션 완료 시)
+ */
+export async function addGrass(
+  className: string,
+  code: string,
+  cookieChange: number = 1
+): Promise<{ success: boolean; message?: string }> {
+  const result = await callSheetsApi<{ date: string; studentCode: string; cookieChange: number }>(
+    'addGrass',
+    { className, code, cookieChange: String(cookieChange) },
+    'POST'
+  );
+  return { success: result.success, message: result.message };
+}
+
 // ========================================
 // 소원 API
 // ========================================
