@@ -5,9 +5,12 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Progress } from '../components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useAuth } from '../contexts/AuthContext';
 import { getMultipleStudentsInfo, StudentInfo, StoredStudent } from '../services/api';
 import { getClassStudents as getClassStudentsFromSheets, SheetsStudentData, setClassActivation, getClassListFromSheets, SheetsClassInfo } from '../services/sheets';
+import { getWishes, grantWish, deleteWish, SheetWish } from '../services/sheetsApi';
+import { getShopItems, SheetShopItem } from '../services/sheetsApi';
 import { downloadCsvTemplate, parseCsvFile, exportStudentsToCsv } from '../utils/csv';
 import {
   Users,
@@ -27,6 +30,10 @@ import {
   ToggleLeft,
   ToggleRight,
   Settings,
+  ShoppingBag,
+  Star,
+  Heart,
+  Gift,
 } from 'lucide-react';
 import { StudentRankingTable, convertToRankedStudents } from '../components/StudentRankingTable';
 
@@ -59,12 +66,20 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   // 학급 활성화 상태 관리
   const [classActivationMap, setClassActivationMap] = useState<Record<string, boolean>>({});
   const [activationLoading, setActivationLoading] = useState<string | null>(null);
+  const [allSheetsClasses, setAllSheetsClasses] = useState<SheetsClassInfo[]>([]);
 
-  // 학급 활성화 상태 로드
+  // 교사용 상점/소원 상태
+  const [shopItems, setShopItems] = useState<SheetShopItem[]>([]);
+  const [wishes, setWishes] = useState<SheetWish[]>([]);
+  const [wishesLoading, setWishesLoading] = useState(false);
+  const [grantingWish, setGrantingWish] = useState<string | null>(null);
+
+  // 학급 활성화 상태 로드 (모든 학급 포함)
   useEffect(() => {
     const loadClassActivation = async () => {
       const response = await getClassListFromSheets();
       if (response.success && response.data) {
+        setAllSheetsClasses(response.data);
         const activationMap: Record<string, boolean> = {};
         response.data.forEach((cls: SheetsClassInfo) => {
           activationMap[cls.name] = cls.active !== false;
@@ -74,6 +89,63 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     };
     loadClassActivation();
   }, []);
+
+  // 상점 아이템 로드
+  useEffect(() => {
+    const loadShopItems = async () => {
+      const items = await getShopItems();
+      setShopItems(items);
+    };
+    loadShopItems();
+  }, []);
+
+  // 소원 로드 (학급 선택 시)
+  useEffect(() => {
+    const loadWishes = async () => {
+      if (!selectedClass) return;
+      setWishesLoading(true);
+      try {
+        const wishList = await getWishes(selectedClass);
+        setWishes(wishList);
+      } catch (error) {
+        console.error('소원 로드 실패:', error);
+      } finally {
+        setWishesLoading(false);
+      }
+    };
+    loadWishes();
+  }, [selectedClass]);
+
+  // 소원 선정 핸들러
+  const handleGrantWish = async (wishId: string, reward: number = 50) => {
+    if (!selectedClass) return;
+    setGrantingWish(wishId);
+    try {
+      const success = await grantWish(selectedClass, wishId, reward);
+      if (success) {
+        // 소원 목록 새로고침
+        const wishList = await getWishes(selectedClass);
+        setWishes(wishList);
+      }
+    } catch (error) {
+      console.error('소원 선정 실패:', error);
+    } finally {
+      setGrantingWish(null);
+    }
+  };
+
+  // 소원 삭제 핸들러
+  const handleDeleteWish = async (wishId: string) => {
+    if (!selectedClass || !window.confirm('이 소원을 삭제하시겠습니까?')) return;
+    try {
+      const success = await deleteWish(selectedClass, wishId);
+      if (success) {
+        setWishes(prev => prev.filter(w => w.id !== wishId));
+      }
+    } catch (error) {
+      console.error('소원 삭제 실패:', error);
+    }
+  };
 
   // 활성화 토글 핸들러
   const handleToggleActivation = async (className: string) => {
@@ -385,7 +457,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {classes.map((cls) => {
+              {allSheetsClasses.map((cls) => {
                 const isActive = classActivationMap[cls.name] !== false;
                 const isLoading = activationLoading === cls.name;
                 return (
@@ -404,6 +476,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       <Badge variant={isActive ? 'default' : 'secondary'} className="text-xs">
                         {isActive ? '활성' : '비활성'}
                       </Badge>
+                      {cls.studentCount !== undefined && (
+                        <span className="text-xs text-gray-400">({cls.studentCount}명)</span>
+                      )}
                     </div>
                     <button
                       onClick={() => handleToggleActivation(cls.name)}
@@ -426,9 +501,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 );
               })}
             </div>
-            {classes.length === 0 && (
+            {allSheetsClasses.length === 0 && (
               <p className="text-center text-gray-500 py-4">
-                등록된 학급이 없습니다.
+                등록된 학급이 없습니다. Google Sheets에서 학급 목록을 불러오세요.
               </p>
             )}
           </CardContent>
@@ -650,6 +725,145 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             </Button>
           </Card>
         )}
+
+        {/* 소원의 돌 관리 (학급 선택 시) */}
+        {selectedClass && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Star className="w-5 h-5 text-yellow-500" />
+                소원의 돌 관리
+              </CardTitle>
+              <CardDescription>
+                학생들의 소원을 확인하고 선정할 수 있습니다. 선정 시 쿠키가 지급됩니다.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {wishesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                  소원 로딩 중...
+                </div>
+              ) : wishes.length === 0 ? (
+                <p className="text-center text-gray-500 py-8">
+                  아직 소원이 없습니다.
+                </p>
+              ) : (
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {wishes.map((wish) => (
+                    <div
+                      key={wish.id}
+                      className={`p-4 rounded-lg border ${
+                        wish.isGranted ? 'bg-yellow-50 border-yellow-200' : 'bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium">{wish.studentName}</span>
+                            <span className="text-xs text-gray-400">
+                              {wish.createdAt ? new Date(wish.createdAt).toLocaleDateString('ko-KR') : ''}
+                            </span>
+                            {wish.isGranted && (
+                              <Badge className="bg-yellow-500">
+                                <Gift className="w-3 h-3 mr-1" />
+                                선정됨 (+{wish.grantedReward})
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-gray-700">{wish.content}</p>
+                          <div className="flex items-center gap-2 mt-2 text-sm text-gray-500">
+                            <Heart className="w-4 h-4 text-pink-400" />
+                            <span>{wish.likes?.length || 0}명이 좋아함</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-4">
+                          {!wish.isGranted && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleGrantWish(wish.id, 50)}
+                              disabled={grantingWish === wish.id}
+                              className="bg-yellow-500 hover:bg-yellow-600"
+                            >
+                              {grantingWish === wish.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <Gift className="w-4 h-4 mr-1" />
+                                  선정 (50쿠키)
+                                </>
+                              )}
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleDeleteWish(wish.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 상점 아이템 관리 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingBag className="w-5 h-5 text-purple-500" />
+              상점 아이템 현황
+            </CardTitle>
+            <CardDescription>
+              학생들이 구매할 수 있는 아이템 목록입니다.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {shopItems.length === 0 ? (
+              <p className="text-center text-gray-500 py-8">
+                상점 아이템이 없습니다. Google Sheets에서 상점 시트를 확인하세요.
+              </p>
+            ) : (
+              <Tabs defaultValue="emoji" className="w-full">
+                <TabsList className="grid w-full grid-cols-5">
+                  <TabsTrigger value="emoji">이모지</TabsTrigger>
+                  <TabsTrigger value="border">테두리</TabsTrigger>
+                  <TabsTrigger value="nameEffect">이름효과</TabsTrigger>
+                  <TabsTrigger value="background">배경</TabsTrigger>
+                  <TabsTrigger value="titleColor">칭호색상</TabsTrigger>
+                </TabsList>
+                {['emoji', 'border', 'nameEffect', 'background', 'titleColor'].map((category) => (
+                  <TabsContent key={category} value={category}>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mt-4">
+                      {shopItems
+                        .filter((item) => item.category === category)
+                        .map((item) => (
+                          <div
+                            key={item.code}
+                            className="p-3 rounded-lg border bg-white text-center"
+                          >
+                            <div className="text-2xl mb-1">
+                              {category === 'emoji' ? item.value : '✨'}
+                            </div>
+                            <p className="text-sm font-medium truncate">{item.name}</p>
+                            <p className="text-xs text-amber-600">
+                              <Cookie className="w-3 h-3 inline mr-1" />
+                              {item.price}
+                            </p>
+                          </div>
+                        ))}
+                    </div>
+                  </TabsContent>
+                ))}
+              </Tabs>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </PageLayout>
   );

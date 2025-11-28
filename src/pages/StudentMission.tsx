@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { PageLayout } from '../components/PageLayout';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { mockPersonalMission, currentTeam, mockGrassData } from '../utils/mockData';
-import { Timer, Camera, CheckCircle2, Upload } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { checkTodayGrass, addGrass } from '../services/sheetsApi';
+import { Timer, Camera, CheckCircle2, Upload, Loader2 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
 interface StudentMissionProps {
@@ -11,14 +12,38 @@ interface StudentMissionProps {
 }
 
 export function StudentMission({ onNavigate }: StudentMissionProps) {
+  const { studentCode, studentClassName } = useAuth();
+
   const [timerMinutes, setTimerMinutes] = useState(20);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [todayHasGrass, setTodayHasGrass] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
-  const today = new Date().toISOString().split('T')[0];
-  const todayGrass = mockGrassData.find(g => g.date === today);
+  // 오늘 잔디 여부 확인
+  useEffect(() => {
+    const checkGrass = async () => {
+      if (!studentClassName || !studentCode) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const hasGrass = await checkTodayGrass(studentClassName, studentCode);
+        setTodayHasGrass(hasGrass);
+        if (hasGrass) {
+          setIsCompleted(true);
+        }
+      } catch (error) {
+        console.error('잔디 확인 실패:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    checkGrass();
+  }, [studentClassName, studentCode]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -66,29 +91,60 @@ export function StudentMission({ onNavigate }: StudentMissionProps) {
     }
   };
 
-  const handleComplete = () => {
-    if (timerMinutes === 0 && timerSeconds === 0 && !isTimerRunning) {
-      setIsCompleted(true);
-      toast.success('미션 완료! 오늘의 잔디가 심어졌습니다 🌱');
-      setTimeout(() => {
-        onNavigate?.('dashboard');
-      }, 2000);
-    } else if (selectedImage) {
-      setIsCompleted(true);
-      toast.success('사진 인증 완료! 오늘의 잔디가 심어졌습니다 🌱');
-      setTimeout(() => {
-        onNavigate?.('dashboard');
-      }, 2000);
-    } else {
+  const handleComplete = async () => {
+    if (!studentClassName || !studentCode) {
+      toast.error('로그인 정보가 없습니다. 다시 로그인해주세요.');
+      return;
+    }
+
+    const canComplete = (timerMinutes === 0 && timerSeconds === 0 && !isTimerRunning) || selectedImage;
+
+    if (!canComplete) {
       toast.error('타이머를 완료하거나 사진을 업로드해주세요');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const result = await addGrass(studentClassName, studentCode, 1);
+
+      if (result.success) {
+        setIsCompleted(true);
+        setTodayHasGrass(true);
+        toast.success('미션 완료! 오늘의 잔디가 심어졌습니다 🌱');
+        setTimeout(() => {
+          onNavigate?.('dashboard');
+        }, 2000);
+      } else {
+        toast.error(result.message || '미션 완료에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('미션 완료 실패:', error);
+      toast.error('미션 완료 중 오류가 발생했습니다.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const hasTeamMission = currentTeam.receivedMission;
+  if (loading) {
+    return (
+      <PageLayout
+        title="미션 수행"
+        role="student"
+        showBack
+        onBack={() => onNavigate?.('dashboard')}
+      >
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin mr-2" />
+          로딩 중...
+        </div>
+      </PageLayout>
+    );
+  }
 
   return (
-    <PageLayout 
-      title="미션 수행" 
+    <PageLayout
+      title="미션 수행"
       role="student"
       showBack
       onBack={() => onNavigate?.('dashboard')}
@@ -98,23 +154,29 @@ export function StudentMission({ onNavigate }: StudentMissionProps) {
         <Card className="p-6">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <Badge variant={hasTeamMission ? 'destructive' : 'default'} className="mb-2">
-                {hasTeamMission ? '팀 미션' : '개인 미션'}
+              <Badge variant="default" className="mb-2">
+                개인 미션
               </Badge>
-              <h2>{hasTeamMission ? currentTeam.receivedMission?.title : mockPersonalMission.title}</h2>
+              <h2>오늘의 학습 미션</h2>
               <p className="text-gray-600 mt-2">
-                {hasTeamMission ? currentTeam.receivedMission?.description : mockPersonalMission.description}
+                20분 집중 공부 또는 학습 인증 사진을 업로드하세요.
               </p>
             </div>
-            {todayGrass?.completed && (
+            {todayHasGrass && (
               <CheckCircle2 className="w-8 h-8 text-green-600" />
             )}
           </div>
 
-          {!hasTeamMission && (
+          {todayHasGrass ? (
+            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-sm text-green-900">
+                ✅ 오늘의 미션을 이미 완료했습니다! 내일 다시 도전하세요.
+              </p>
+            </div>
+          ) : (
             <div className="mt-4 p-4 bg-blue-50 rounded-lg">
               <p className="text-sm text-blue-900">
-                💡 팀 미션이 없으므로 개인 미션을 수행하면 잔디를 심을 수 있습니다.
+                💡 타이머를 완료하거나 사진을 업로드하면 잔디를 심을 수 있습니다.
               </p>
             </div>
           )}
@@ -206,10 +268,19 @@ export function StudentMission({ onNavigate }: StudentMissionProps) {
         <div className="flex gap-4">
           <button
             onClick={handleComplete}
-            disabled={isCompleted || (!selectedImage && (timerMinutes > 0 || timerSeconds > 0 || isTimerRunning))}
-            className="flex-1 px-6 py-4 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-lg"
+            disabled={isCompleted || submitting || todayHasGrass || (!selectedImage && (timerMinutes > 0 || timerSeconds > 0 || isTimerRunning))}
+            className="flex-1 px-6 py-4 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-lg flex items-center justify-center gap-2"
           >
-            {isCompleted ? '✓ 완료됨' : '미션 완료하기'}
+            {submitting ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                저장 중...
+              </>
+            ) : isCompleted || todayHasGrass ? (
+              '✓ 완료됨'
+            ) : (
+              '미션 완료하기'
+            )}
           </button>
         </div>
 
