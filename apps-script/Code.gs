@@ -28,6 +28,10 @@ function doGet(e) {
         result = findStudentInAllClasses(params.code);
         break;
 
+      case 'getClassList':
+        result = getClassListFromSheets();
+        break;
+
       case 'getStudent':
         result = getStudentData(params.code, params.className);
         break;
@@ -68,6 +72,30 @@ function doGet(e) {
     }));
     return output;
   }
+}
+
+// Sheets에서 클래스 목록 가져오기 (교사 로그인용)
+function getClassListFromSheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = ss.getSheets();
+  const classList = [];
+
+  // _학생으로 끝나는 시트들을 찾아서 클래스명 추출
+  for (let i = 0; i < sheets.length; i++) {
+    const sheetName = sheets[i].getName();
+    if (sheetName.endsWith('_학생')) {
+      const className = sheetName.replace('_학생', '');
+      classList.push({
+        name: className,
+        studentCount: Math.max(0, sheets[i].getLastRow() - 1) // 헤더 제외
+      });
+    }
+  }
+
+  return {
+    success: true,
+    data: classList
+  };
 }
 
 // 모든 클래스 시트에서 학생 찾기 (학생 로그인용)

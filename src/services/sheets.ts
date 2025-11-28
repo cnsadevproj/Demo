@@ -101,6 +101,16 @@ export async function testSheetsConnection(): Promise<SheetsResponse<null>> {
   return callSheetsApi('ping');
 }
 
+// 클래스 목록 조회 (Sheets에서)
+export interface SheetsClassInfo {
+  name: string;
+  studentCount: number;
+}
+
+export async function getClassListFromSheets(): Promise<SheetsResponse<SheetsClassInfo[]>> {
+  return callSheetsApi('getClassList');
+}
+
 // 학생 정보 조회
 export async function getStudentFromSheets(
   studentCode: string,

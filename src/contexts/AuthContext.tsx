@@ -20,7 +20,7 @@ interface AuthContextType {
   classes: ClassInfo[];
   selectedClass: string | null;
   classStudentsMap: Record<string, ClassStudents>;
-  loginAsTeacher: (apiKey: string) => Promise<{ success: boolean; message: string }>;
+  loginAsTeacher: (apiKey: string, classList?: ClassInfo[]) => Promise<{ success: boolean; message: string }>;
   selectClass: (className: string) => void;
   saveClassStudents: (className: string, students: StoredStudent[]) => void;
   getClassStudents: (className: string) => StoredStudent[];
@@ -102,12 +102,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   // 교사 로그인
-  const loginAsTeacher = async (key: string): Promise<{ success: boolean; message: string }> => {
+  const loginAsTeacher = async (key: string, classList?: ClassInfo[]): Promise<{ success: boolean; message: string }> => {
     // Sheets 기반 인증인 경우 (API 키는 Sheets에 있음)
     if (key === 'SHEETS_BASED_AUTH') {
       setRole('teacher');
       setApiKey(null);
-      setClasses([]);
+      setClasses(classList || []);
 
       localStorage.setItem(STORAGE_KEYS.ROLE, 'teacher');
       localStorage.removeItem(STORAGE_KEYS.API_KEY);
