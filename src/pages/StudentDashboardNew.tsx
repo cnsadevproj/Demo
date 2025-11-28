@@ -82,14 +82,27 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     onLogout?.();
   };
 
+  // 날짜별로 잔디 데이터 집계 (같은 날짜의 여러 새로고침을 합산)
+  const grassByDate = grassData.reduce((acc, g) => {
+    const existing = acc.get(g.date);
+    if (existing) {
+      existing.cookieChange += g.cookieChange;
+      existing.refreshCount = Math.max(existing.refreshCount || 1, g.refreshCount || 1);
+    } else {
+      acc.set(g.date, { ...g });
+    }
+    return acc;
+  }, new Map<string, SheetsGrassData>());
+
   // 최근 7일 잔디 데이터
-  const recentGrass = grassData
+  const recentGrass = Array.from(grassByDate.values())
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
     .slice(0, 7);
 
   // 오늘 날짜
   const today = new Date().toISOString().split('T')[0];
-  const todayGrass = grassData.find(g => g.date === today);
+  const todayGrass = grassByDate.get(today);
+  const hasTodayGrass = todayGrass && todayGrass.cookieChange !== undefined;
 
   // 로딩 중
   if (loading && !studentInfo) {
@@ -206,10 +219,12 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 <div>
                   <p className="text-sm text-gray-500">오늘 잔디</p>
                   <p className="text-xl font-bold">
-                    {todayGrass?.completed ? (
-                      <Badge variant="default" className="bg-green-600">완료 ✓</Badge>
+                    {hasTodayGrass ? (
+                      <Badge variant="default" className={todayGrass.refreshCount && todayGrass.refreshCount >= 2 ? "bg-green-700" : "bg-green-500"}>
+                        +{todayGrass.cookieChange} 쿠키
+                      </Badge>
                     ) : (
-                      <Badge variant="secondary">미완료</Badge>
+                      <Badge variant="secondary">기록 없음</Badge>
                     )}
                   </p>
                 </div>

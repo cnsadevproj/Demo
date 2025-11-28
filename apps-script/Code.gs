@@ -38,7 +38,8 @@ const STUDENT_HEADERS = [
 ];
 
 const TEAM_HEADERS = ['팀ID', '팀명', '플래그', '멤버(학생코드)', '팀쿠키'];
-const GRASS_HEADERS = ['날짜', '학생코드', '쿠키변화량'];
+// 잔디 시트: 열 기반 구조 (학생코드, 이름, 날짜1, 날짜2, ...)
+const GRASS_HEADERS = ['학생코드', '이름'];
 const WISH_HEADERS = ['ID', '학생코드', '학생이름', '내용', '작성일시', '좋아요', '선정여부', '보상쿠키'];
 const BATTLE_HEADERS = ['전투ID', '날짜', '팀ID', '공격대상', '공격배팅', '방어배팅', '승패', '쿠키변동', '라운드증가량'];
 const SHOP_HEADERS = ['코드', '카테고리', '이름', '가격', '값', '설명'];
@@ -674,18 +675,48 @@ function getGrassData(className, studentCode) {
   if (!sheet) return { success: true, data: [] };
 
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return { success: true, data: [] };
+  const lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 3) return { success: true, data: [] };
 
-  const data = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
-  let grassData = data.map(row => ({
-    date: row[0] ? new Date(row[0]).toISOString().split('T')[0] : null,
-    studentCode: String(row[1]),
-    cookieChange: Number(row[2]) || 0
-  }));
+  // 헤더 (날짜들) 가져오기
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  // headers[0] = '학생코드', headers[1] = '이름', headers[2+] = 날짜들
 
-  // 특정 학생 필터링
-  if (studentCode) {
-    grassData = grassData.filter(g => g.studentCode === studentCode);
+  // 데이터 가져오기
+  const data = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+
+  let grassData = [];
+
+  for (let rowIdx = 0; rowIdx < data.length; rowIdx++) {
+    const row = data[rowIdx];
+    const code = String(row[0]);
+    const name = String(row[1]);
+
+    // 특정 학생 필터링
+    if (studentCode && code !== studentCode) continue;
+
+    // 각 날짜별 데이터 추출
+    for (let colIdx = 2; colIdx < headers.length; colIdx++) {
+      const dateHeader = String(headers[colIdx]);
+      if (!dateHeader) continue;
+
+      const cookieChange = Number(row[colIdx]) || 0;
+
+      // 날짜에서 기본 날짜 추출 (2024-11-28(2) -> 2024-11-28)
+      const baseDate = dateHeader.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || dateHeader;
+      // 새로고침 횟수 추출 (2024-11-28(2) -> 2)
+      const refreshMatch = dateHeader.match(/\((\d+)\)$/);
+      const refreshCount = refreshMatch ? parseInt(refreshMatch[1]) : 1;
+
+      grassData.push({
+        date: baseDate,
+        dateColumn: dateHeader,
+        studentCode: code,
+        studentName: name,
+        cookieChange: cookieChange,
+        refreshCount: refreshCount
+      });
+    }
   }
 
   return { success: true, data: grassData };
@@ -745,7 +776,7 @@ function checkTodayGrass(className, studentCode) {
   return { success: true, data: { hasGrass: false } };
 }
 
-// 쿠키 새로고침 - 수동으로 현재 쿠키 상태를 잔디에 기록
+// 쿠키 새로고침 - 수동으로 현재 쿠키 상태를 잔디에 기록 (열 기반 구조)
 // 같은 날 여러번 호출하면 (2), (3) 형태로 열 추가
 function refreshCookies(className) {
   if (!className) {
@@ -763,25 +794,29 @@ function refreshCookies(className) {
   const grassSheet = getOrCreateSheet(`${sanitized}_잔디`, GRASS_HEADERS);
   const today = new Date().toISOString().split('T')[0];
 
-  // 오늘 새로고침 횟수 확인
+  // 학생 데이터 가져오기 (B열: 이름, C열: 학생코드, D열: 쿠키, H열: 이전쿠키)
+  const studentLastRow = studentSheet.getLastRow();
+  if (studentLastRow < 2) {
+    return { success: false, message: '학생 데이터가 없습니다.' };
+  }
+
+  const studentData = studentSheet.getRange(2, 2, studentLastRow - 1, 7).getValues();
+
+  // 잔디 시트의 현재 헤더 가져오기
+  const grassLastCol = Math.max(grassSheet.getLastColumn(), 2);
+  const headers = grassSheet.getRange(1, 1, 1, grassLastCol).getValues()[0];
+
+  // 오늘 새로고침 횟수 확인 (기존 헤더에서)
   let refreshCount = 1;
-  const lastRow = grassSheet.getLastRow();
-  if (lastRow >= 2) {
-    const dateData = grassSheet.getRange(2, 1, lastRow - 1, 1).getValues().flat();
-    for (const dateVal of dateData) {
-      if (dateVal) {
-        const dateStr = dateVal.toString();
-        // 날짜 형식: 2024-01-15 또는 2024-01-15(2)
-        const baseDateMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/);
-        if (baseDateMatch && baseDateMatch[1] === today) {
-          // 숫자 추출 (예: (2) -> 2)
-          const countMatch = dateStr.match(/\((\d+)\)$/);
-          if (countMatch) {
-            refreshCount = Math.max(refreshCount, parseInt(countMatch[1]) + 1);
-          } else {
-            refreshCount = Math.max(refreshCount, 2);
-          }
-        }
+  for (let i = 2; i < headers.length; i++) {
+    const headerStr = String(headers[i]);
+    const baseDateMatch = headerStr.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (baseDateMatch && baseDateMatch[1] === today) {
+      const countMatch = headerStr.match(/\((\d+)\)$/);
+      if (countMatch) {
+        refreshCount = Math.max(refreshCount, parseInt(countMatch[1]) + 1);
+      } else {
+        refreshCount = Math.max(refreshCount, 2);
       }
     }
   }
@@ -789,27 +824,44 @@ function refreshCookies(className) {
   // 날짜 문자열 생성 (첫번째면 그냥 날짜, 두번째부터 (2), (3)...)
   const dateString = refreshCount === 1 ? today : `${today}(${refreshCount})`;
 
-  // 학생 데이터 가져오기
-  const studentLastRow = studentSheet.getLastRow();
-  if (studentLastRow < 2) {
-    return { success: false, message: '학생 데이터가 없습니다.' };
+  // 새 열 추가 (헤더에 날짜 추가)
+  const newColIndex = grassLastCol + 1;
+  grassSheet.getRange(1, newColIndex).setValue(dateString);
+
+  // 잔디 시트의 기존 학생 목록 가져오기
+  const grassLastRow = grassSheet.getLastRow();
+  let existingStudents = {};
+  if (grassLastRow >= 2) {
+    const grassData = grassSheet.getRange(2, 1, grassLastRow - 1, 2).getValues();
+    grassData.forEach((row, idx) => {
+      existingStudents[String(row[0])] = idx + 2; // 행 번호 저장
+    });
   }
 
-  // C열: 학생코드, D열: 쿠키, H열: 이전쿠키
-  const studentData = studentSheet.getRange(2, 3, studentLastRow - 1, 6).getValues();
   let studentsUpdated = 0;
+  let newRowIndex = grassLastRow + 1;
 
   for (const row of studentData) {
-    const code = row[0];
-    const currentCookie = Number(row[1]) || 0;
-    const previousCookie = Number(row[5]) || 0; // H열 (이전쿠키)
+    const name = String(row[0]);
+    const code = String(row[1]);
+    const currentCookie = Number(row[2]) || 0;
+    const previousCookie = Number(row[6]) || 0; // H열 (이전쿠키)
 
     if (!code) continue;
 
     const cookieChange = currentCookie - previousCookie;
 
-    // 잔디 시트에 기록
-    grassSheet.appendRow([dateString, code, cookieChange]);
+    if (existingStudents[code]) {
+      // 기존 학생: 새 열에 값 추가
+      grassSheet.getRange(existingStudents[code], newColIndex).setValue(cookieChange);
+    } else {
+      // 새 학생: 행 추가
+      grassSheet.getRange(newRowIndex, 1).setValue(code);
+      grassSheet.getRange(newRowIndex, 2).setValue(name);
+      grassSheet.getRange(newRowIndex, newColIndex).setValue(cookieChange);
+      existingStudents[code] = newRowIndex;
+      newRowIndex++;
+    }
     studentsUpdated++;
   }
 
