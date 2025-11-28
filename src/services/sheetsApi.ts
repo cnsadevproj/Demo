@@ -249,6 +249,30 @@ export async function getGrass(className: string, code?: string): Promise<SheetG
   return result.success ? result.data || [] : [];
 }
 
+/**
+ * 오늘 잔디 여부 확인
+ */
+export async function checkTodayGrass(className: string, code: string): Promise<boolean> {
+  const result = await callSheetsApi<{ hasGrass: boolean }>('checkTodayGrass', { className, code });
+  return result.success ? result.data?.hasGrass || false : false;
+}
+
+/**
+ * 잔디 추가 (미션 완료 시)
+ */
+export async function addGrass(
+  className: string,
+  code: string,
+  cookieChange: number = 1
+): Promise<{ success: boolean; message?: string }> {
+  const result = await callSheetsApi<{ date: string; studentCode: string; cookieChange: number }>(
+    'addGrass',
+    { className, code, cookieChange: String(cookieChange) },
+    'POST'
+  );
+  return { success: result.success, message: result.message };
+}
+
 // ========================================
 // 소원 API
 // ========================================
@@ -438,6 +462,32 @@ export async function saveBattleResult(
 export async function updatePreviousCookies(className: string): Promise<boolean> {
   const result = await callSheetsApi<void>('updatePreviousCookies', { className }, 'POST');
   return result.success;
+}
+
+// ========================================
+// 쿠키 새로고침 (다했니 API에서 가져와서 잔디에 기록)
+// ========================================
+
+/**
+ * 쿠키 새로고침 - 현재 쿠키 상태를 잔디에 기록
+ * 같은 날 여러번 호출하면 (2), (3) 형태로 열 추가
+ */
+export async function refreshCookies(className: string): Promise<{
+  success: boolean;
+  message?: string;
+  data?: { date: string; refreshCount: number; studentsUpdated: number };
+}> {
+  const result = await callSheetsApi<{
+    date: string;
+    refreshCount: number;
+    studentsUpdated: number;
+  }>('refreshCookies', { className }, 'POST');
+
+  return {
+    success: result.success,
+    message: result.message,
+    data: result.data,
+  };
 }
 
 // ========================================

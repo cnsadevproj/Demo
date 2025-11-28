@@ -93,6 +93,10 @@ function doGet(e) {
         result = getGrassData(params.className, params.code);
         break;
 
+      case 'checkTodayGrass':
+        result = checkTodayGrass(params.className, params.code);
+        break;
+
       // === 소원 ===
       case 'getWishes':
         result = getWishesData(params.className);
@@ -199,6 +203,15 @@ function doPost(e) {
 
       case 'updatePreviousCookies':
         result = updatePreviousCookies(params.className);
+        break;
+
+      // === 잔디 ===
+      case 'addGrass':
+        result = addGrass(params.className, params.code, Number(params.cookieChange) || 1);
+        break;
+
+      case 'refreshCookies':
+        result = refreshCookies(params.className);
         break;
 
       default:
@@ -676,6 +689,144 @@ function getGrassData(className, studentCode) {
   }
 
   return { success: true, data: grassData };
+}
+
+// 잔디 추가 (미션 완료 시)
+function addGrass(className, studentCode, cookieChange) {
+  if (!className || !studentCode) {
+    return { success: false, message: '학급명과 학생코드가 필요합니다.' };
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = getOrCreateSheet(`${sanitizeSheetName(className)}_잔디`, GRASS_HEADERS);
+  const today = new Date().toISOString().split('T')[0];
+
+  // 오늘 이미 잔디가 있는지 확인
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+    for (let i = 0; i < data.length; i++) {
+      const rowDate = data[i][0] ? new Date(data[i][0]).toISOString().split('T')[0] : null;
+      if (rowDate === today && data[i][1] === studentCode) {
+        return { success: false, message: '오늘은 이미 잔디를 심었습니다.' };
+      }
+    }
+  }
+
+  // 잔디 추가
+  sheet.appendRow([today, studentCode, cookieChange || 1]);
+
+  return { success: true, data: { date: today, studentCode, cookieChange: cookieChange || 1 } };
+}
+
+// 오늘 잔디 여부 확인
+function checkTodayGrass(className, studentCode) {
+  if (!className || !studentCode) {
+    return { success: false, message: '학급명과 학생코드가 필요합니다.' };
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(`${sanitizeSheetName(className)}_잔디`);
+  if (!sheet) return { success: true, data: { hasGrass: false } };
+
+  const today = new Date().toISOString().split('T')[0];
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) return { success: true, data: { hasGrass: false } };
+
+  const data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  for (let i = 0; i < data.length; i++) {
+    const rowDate = data[i][0] ? new Date(data[i][0]).toISOString().split('T')[0] : null;
+    if (rowDate === today && data[i][1] === studentCode) {
+      return { success: true, data: { hasGrass: true } };
+    }
+  }
+
+  return { success: true, data: { hasGrass: false } };
+}
+
+// 쿠키 새로고침 - 수동으로 현재 쿠키 상태를 잔디에 기록
+// 같은 날 여러번 호출하면 (2), (3) 형태로 열 추가
+function refreshCookies(className) {
+  if (!className) {
+    return { success: false, message: '학급명이 필요합니다.' };
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sanitized = sanitizeSheetName(className);
+  const studentSheet = ss.getSheetByName(`${sanitized}_학생`);
+
+  if (!studentSheet) {
+    return { success: false, message: '학생 시트를 찾을 수 없습니다.' };
+  }
+
+  const grassSheet = getOrCreateSheet(`${sanitized}_잔디`, GRASS_HEADERS);
+  const today = new Date().toISOString().split('T')[0];
+
+  // 오늘 새로고침 횟수 확인
+  let refreshCount = 1;
+  const lastRow = grassSheet.getLastRow();
+  if (lastRow >= 2) {
+    const dateData = grassSheet.getRange(2, 1, lastRow - 1, 1).getValues().flat();
+    for (const dateVal of dateData) {
+      if (dateVal) {
+        const dateStr = dateVal.toString();
+        // 날짜 형식: 2024-01-15 또는 2024-01-15(2)
+        const baseDateMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (baseDateMatch && baseDateMatch[1] === today) {
+          // 숫자 추출 (예: (2) -> 2)
+          const countMatch = dateStr.match(/\((\d+)\)$/);
+          if (countMatch) {
+            refreshCount = Math.max(refreshCount, parseInt(countMatch[1]) + 1);
+          } else {
+            refreshCount = Math.max(refreshCount, 2);
+          }
+        }
+      }
+    }
+  }
+
+  // 날짜 문자열 생성 (첫번째면 그냥 날짜, 두번째부터 (2), (3)...)
+  const dateString = refreshCount === 1 ? today : `${today}(${refreshCount})`;
+
+  // 학생 데이터 가져오기
+  const studentLastRow = studentSheet.getLastRow();
+  if (studentLastRow < 2) {
+    return { success: false, message: '학생 데이터가 없습니다.' };
+  }
+
+  // C열: 학생코드, D열: 쿠키, H열: 이전쿠키
+  const studentData = studentSheet.getRange(2, 3, studentLastRow - 1, 6).getValues();
+  let studentsUpdated = 0;
+
+  for (const row of studentData) {
+    const code = row[0];
+    const currentCookie = Number(row[1]) || 0;
+    const previousCookie = Number(row[5]) || 0; // H열 (이전쿠키)
+
+    if (!code) continue;
+
+    const cookieChange = currentCookie - previousCookie;
+
+    // 잔디 시트에 기록
+    grassSheet.appendRow([dateString, code, cookieChange]);
+    studentsUpdated++;
+  }
+
+  // 이전쿠키 업데이트 (현재쿠키로)
+  for (let i = 2; i <= studentLastRow; i++) {
+    const currentCookie = studentSheet.getRange(i, 4).getValue();
+    studentSheet.getRange(i, 8).setValue(currentCookie);
+  }
+
+  return {
+    success: true,
+    data: {
+      date: dateString,
+      refreshCount: refreshCount,
+      studentsUpdated: studentsUpdated
+    }
+  };
 }
 
 // 매일 자동 실행될 함수 (트리거 설정 필요)

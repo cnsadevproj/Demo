@@ -42,8 +42,20 @@ export function GrassCalendar({ data, mini = false, onDateClick }: GrassCalendar
 
   const getIntensity = (item: GrassData) => {
     if (!item.completed) return 'bg-gray-200 dark:bg-gray-700';
-    
-    // 팀 미션은 더 진한 초록색
+
+    // refreshCount 기반 색상 (2회 이상 = 진한 초록)
+    if (item.refreshCount !== undefined) {
+      if (item.refreshCount >= 2) return 'bg-green-600';
+      if (item.refreshCount === 1) return 'bg-green-400';
+    }
+
+    // 쿠키 변화량 기반 색상 (2개 이상 = 진한 초록)
+    if (item.cookieChange !== undefined) {
+      if (item.cookieChange >= 2) return 'bg-green-600';
+      if (item.cookieChange === 1) return 'bg-green-400';
+    }
+
+    // 기존 로직: 팀 미션은 진한 초록색
     if (item.missionType === 'team') {
       return 'bg-green-600';
     }
