@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { findStudentByCode } from '../services/sheets';
+import { findStudentByCode, getSheetsUrl, setSheetsUrl as setLocalSheetsUrl } from '../services/sheets';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { GraduationCap, User, Loader2, KeyRound, Hash } from 'lucide-react';
+import { GraduationCap, User, Loader2, Hash, Link } from 'lucide-react';
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -23,6 +23,18 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [studentCode, setStudentCode] = useState('');
   const [studentLoading, setStudentLoading] = useState(false);
   const [studentError, setStudentError] = useState('');
+  const [studentSheetsUrl, setStudentSheetsUrl] = useState('');
+  const [needsSheetsUrl, setNeedsSheetsUrl] = useState(false);
+
+  // 학생 로그인 시 Sheets URL 확인
+  useEffect(() => {
+    const localUrl = getSheetsUrl();
+    if (!localUrl && !sheetsUrl) {
+      setNeedsSheetsUrl(true);
+    } else {
+      setNeedsSheetsUrl(false);
+    }
+  }, [sheetsUrl]);
 
   // 교사 로그인 핸들러
   const handleTeacherLogin = async (e: React.FormEvent) => {
@@ -81,17 +93,30 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       return;
     }
 
-    // Sheets URL 확인
-    if (!sheetsUrl) {
-      setStudentError('선생님이 아직 시스템을 설정하지 않았습니다. 선생님께 문의하세요.');
+    // Sheets URL 확인 - localStorage 또는 입력된 URL 사용
+    const localUrl = getSheetsUrl();
+    const effectiveUrl = localUrl || sheetsUrl || studentSheetsUrl.trim();
+
+    if (!effectiveUrl) {
+      setStudentError('시스템 URL이 필요합니다. 선생님께 받은 URL을 아래에 입력하세요.');
+      setNeedsSheetsUrl(true);
       return;
+    }
+
+    // 입력된 URL이 있으면 저장
+    if (studentSheetsUrl.trim() && !localUrl) {
+      setLocalSheetsUrl(studentSheetsUrl.trim());
+      setSheetsUrl(studentSheetsUrl.trim());
     }
 
     setStudentLoading(true);
 
     try {
+      console.log('[학생 로그인] 시도:', { code: studentCode, url: effectiveUrl });
+
       // Sheets에서 학생 찾기 (API 키 불필요)
       const result = await findStudentByCode(studentCode.trim().toUpperCase());
+      console.log('[학생 로그인] 결과:', result);
 
       if (result.success && result.data) {
         // 학급명 저장
@@ -102,6 +127,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         setStudentError(result.message || '학생 코드를 찾을 수 없습니다. 선생님께 확인해주세요.');
       }
     } catch (error) {
+      console.error('[학생 로그인] 오류:', error);
       setStudentError('로그인 중 오류가 발생했습니다.');
     } finally {
       setStudentLoading(false);
@@ -148,6 +174,25 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                     선생님께 받은 학생 코드를 입력하세요.
                   </p>
                 </div>
+
+                {/* Sheets URL 입력 (필요한 경우) */}
+                {needsSheetsUrl && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <Link className="w-4 h-4" />
+                      시스템 URL
+                    </label>
+                    <Input
+                      type="url"
+                      placeholder="https://script.google.com/macros/s/.../exec"
+                      value={studentSheetsUrl}
+                      onChange={(e) => setStudentSheetsUrl(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      선생님께 받은 시스템 URL을 입력하세요.
+                    </p>
+                  </div>
+                )}
 
                 {studentError && (
                   <p className="text-sm text-red-500">{studentError}</p>

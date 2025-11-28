@@ -79,6 +79,7 @@ async function callSheetsApi<T>(action: string, params: Record<string, string> =
   const sheetsUrl = getSheetsUrl();
 
   if (!sheetsUrl) {
+    console.error('[Sheets API] URL이 설정되지 않았습니다. localStorage key:', STORAGE_KEY);
     return {
       success: false,
       message: 'Sheets URL이 설정되지 않았습니다. 선생님께 문의하세요.'
@@ -92,11 +93,24 @@ async function callSheetsApi<T>(action: string, params: Record<string, string> =
     });
 
     const url = `${sheetsUrl}?${queryParams.toString()}`;
+    console.log(`[Sheets API] 호출: ${action}`, { url, params });
+
     const response = await fetch(url);
+
+    if (!response.ok) {
+      console.error(`[Sheets API] HTTP 오류: ${response.status} ${response.statusText}`);
+      return {
+        success: false,
+        message: `HTTP 오류: ${response.status}`
+      };
+    }
+
     const data = await response.json();
+    console.log(`[Sheets API] 응답: ${action}`, data);
 
     return data;
   } catch (error) {
+    console.error('[Sheets API] 네트워크 오류:', error);
     return {
       success: false,
       message: '네트워크 오류가 발생했습니다.'

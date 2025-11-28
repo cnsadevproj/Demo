@@ -341,7 +341,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 <SelectContent>
                   {classes.map((cls) => (
                     <SelectItem key={cls.name} value={cls.name}>
-                      {cls.name} ({cls.cookies} 쿠키)
+                      {cls.name} {cls.cookies !== undefined ? `(${cls.cookies} 쿠키)` : cls.studentCount !== undefined ? `(${cls.studentCount}명)` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
