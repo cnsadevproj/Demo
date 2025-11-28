@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { GameProvider } from './contexts/GameContext';
 
 // Auth Pages
 import Login from './pages/Login';
@@ -20,6 +21,11 @@ import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminTeamAssign } from './pages/AdminTeamAssign';
 import { AdminSnapshot } from './pages/AdminSnapshot';
 import { AdminReport } from './pages/AdminReport';
+
+// Game Pages (Battle System)
+import { GameTeamManager } from './pages/GameTeamManager';
+import { ReflectionManager } from './pages/ReflectionManager';
+import { BattleGame } from './pages/BattleGame';
 
 // Demo Pages
 import { DemoStudent } from './pages/DemoStudent';
@@ -241,6 +247,12 @@ function TeacherNavigationMenu({ currentPage, onNavigate }: {
     { id: 'teacher-dashboard', label: '학생 관리', emoji: '👨‍🎓' },
   ];
 
+  const gamePages = [
+    { id: 'game-teams', label: '팀 관리', emoji: '👥' },
+    { id: 'reflection-manager', label: '성찰왕 관리', emoji: '👑' },
+    { id: 'battle-game', label: '쿠키 배틀', emoji: '⚔️' },
+  ];
+
   const demoPages = [
     { id: 'demo-admin', label: '관리자 데모', emoji: '⚙️' },
     { id: 'demo-report', label: '리포트 데모', emoji: '📊' },
@@ -291,6 +303,29 @@ function TeacherNavigationMenu({ currentPage, onNavigate }: {
                 </div>
               </div>
 
+              {/* 쿠키 배틀 게임 */}
+              <div className="mb-6">
+                <h3 className="mb-3 text-amber-600">🍪 쿠키 배틀</h3>
+                <div className="space-y-2">
+                  {gamePages.map((page) => (
+                    <button
+                      key={page.id}
+                      onClick={() => {
+                        onNavigate(page.id);
+                        setIsOpen(false);
+                      }}
+                      className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${
+                        currentPage === page.id
+                          ? 'bg-amber-100 text-amber-900'
+                          : 'hover:bg-gray-100'
+                      }`}
+                    >
+                      {page.emoji} {page.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* 데모/추가 페이지 */}
               <div className="mb-6">
                 <h3 className="mb-3 text-purple-600">🧪 추가 페이지 (데모)</h3>
@@ -329,6 +364,14 @@ function TeacherMode({ onLogout }: { onLogout: () => void }) {
     switch (currentPage) {
       case 'teacher-dashboard':
         return <TeacherDashboard onLogout={onLogout} />;
+      // 쿠키 배틀 게임 페이지
+      case 'game-teams':
+        return <GameTeamManager onNavigate={setCurrentPage} />;
+      case 'reflection-manager':
+        return <ReflectionManager onNavigate={setCurrentPage} />;
+      case 'battle-game':
+        return <BattleGame onNavigate={setCurrentPage} />;
+      // 데모/추가 페이지
       case 'demo-admin':
         return <DemoAdmin />;
       case 'demo-report':
@@ -405,8 +448,10 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
-      <Toaster />
+      <GameProvider>
+        <AppContent />
+        <Toaster />
+      </GameProvider>
     </AuthProvider>
   );
 }
