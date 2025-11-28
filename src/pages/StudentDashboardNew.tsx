@@ -14,7 +14,15 @@ import {
   User,
   Calendar,
   AlertCircle,
+  ShoppingBag,
+  Star,
+  Palette,
 } from 'lucide-react';
+
+// 추가 페이지들
+import { Shop } from './Shop';
+import { StudentProfilePage } from './StudentProfile';
+import { WishingStone } from './WishingStone';
 
 interface StudentDashboardNewProps {
   onLogout?: () => void;
@@ -22,6 +30,9 @@ interface StudentDashboardNewProps {
 
 export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const { studentCode, studentClassName, logout } = useAuth();
+
+  // 현재 페이지 상태
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'shop' | 'profile' | 'wishing'>('dashboard');
 
   // 상태
   const [studentInfo, setStudentInfo] = useState<SheetsStudentData | null>(null);
@@ -121,6 +132,26 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const earnedBadges = studentInfo?.badges
     ? Object.values(studentInfo.badges).filter(b => b.hasBadge)
     : [];
+
+  // 다른 페이지 렌더링
+  if (currentPage === 'shop') {
+    return <Shop onBack={() => setCurrentPage('dashboard')} />;
+  }
+
+  if (currentPage === 'profile') {
+    return (
+      <StudentProfilePage
+        onBack={() => setCurrentPage('dashboard')}
+        onNavigate={(page) => {
+          if (page === 'shop') setCurrentPage('shop');
+        }}
+      />
+    );
+  }
+
+  if (currentPage === 'wishing') {
+    return <WishingStone onBack={() => setCurrentPage('dashboard')} />;
+  }
 
   return (
     <PageLayout title="학습 대시보드" role="student">
@@ -342,6 +373,33 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
             </div>
           </CardContent>
         </Card>
+
+        {/* 빠른 메뉴 */}
+        <div className="grid grid-cols-3 gap-3">
+          <button
+            onClick={() => setCurrentPage('shop')}
+            className="flex flex-col items-center p-4 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl hover:shadow-md transition-shadow"
+          >
+            <ShoppingBag className="w-8 h-8 text-amber-600 mb-2" />
+            <span className="text-sm font-medium text-amber-900">상점</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentPage('profile')}
+            className="flex flex-col items-center p-4 bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded-xl hover:shadow-md transition-shadow"
+          >
+            <Palette className="w-8 h-8 text-purple-600 mb-2" />
+            <span className="text-sm font-medium text-purple-900">프로필</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentPage('wishing')}
+            className="flex flex-col items-center p-4 bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl hover:shadow-md transition-shadow"
+          >
+            <Star className="w-8 h-8 text-indigo-600 mb-2" />
+            <span className="text-sm font-medium text-indigo-900">소원의 돌</span>
+          </button>
+        </div>
       </div>
     </PageLayout>
   );

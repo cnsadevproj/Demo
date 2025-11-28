@@ -1,4 +1,4 @@
-// Google Sheets API 연동 서비스
+// Google Sheets API 연동 서비스 v2.0
 // Apps Script Web App URL
 
 const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycby4H0f81_e4o9yBXVwFG0uF_DRdWZhW5_SnrYEeeAzrEXaZRV5B-217GNcEdj2By4TR/exec';
@@ -10,7 +10,9 @@ interface ApiResponse<T> {
   data?: T;
 }
 
-// 학생 정보 타입
+// ========================================
+// 학생 정보 타입 (프로필 통합)
+// ========================================
 export interface SheetStudent {
   number: number;
   name: string;
@@ -19,6 +21,15 @@ export interface SheetStudent {
   usedCookie: number;
   totalCookie: number;
   chocoChips: number;
+  previousCookie: number;
+  // 프로필 정보
+  emojiCode: string;
+  title: string;
+  titleColorCode: string;
+  borderCode: string;
+  nameEffectCode: string;
+  backgroundCode: string;
+  ownedItems: string[];
   lastUpdate: string | null;
 }
 
@@ -30,54 +41,90 @@ export interface SheetClass {
 
 // 팀 정보 타입
 export interface SheetTeam {
-  week: number;
   teamId: string;
   teamName: string;
   flag: string;
   members: string[];
-  earnedRound: number;
-  attackTarget: string;
-  attackBet: number;
-  defense: number;
+  teamCookie: number;
 }
 
 // 잔디 정보 타입
 export interface SheetGrass {
   date: string;
   studentCode: string;
-  completed: boolean;
-  missionType: string;
+  cookieChange: number;
 }
 
-// 스냅샷 정보 타입
-export interface SheetSnapshot {
-  week: number;
+// 소원 정보 타입
+export interface SheetWish {
+  id: string;
   studentCode: string;
-  teamId: string;
-  bMon: number;
-  bWed: number;
-  earnedRound: number;
-  date: string;
+  studentName: string;
+  content: string;
+  createdAt: string;
+  likes: string[];
+  isGranted: boolean;
+  grantedReward: number;
 }
 
+// 전투 기록 타입
+export interface SheetBattle {
+  battleId: string;
+  date: string;
+  teamId: string;
+  attackTarget: string;
+  attackBet: number;
+  defenseBet: number;
+  result: string;
+  cookieChange: number;
+  roundEarned: number;
+}
+
+// 상점 아이템 타입
+export interface SheetShopItem {
+  code: string;
+  category: string;
+  name: string;
+  price: number;
+  value: string;
+  description: string;
+}
+
+// ========================================
 // API 호출 함수
-async function callSheetsApi<T>(action: string, params: Record<string, string> = {}): Promise<ApiResponse<T>> {
+// ========================================
+async function callSheetsApi<T>(
+  action: string,
+  params: Record<string, string> = {},
+  method: 'GET' | 'POST' = 'GET',
+  body?: unknown
+): Promise<ApiResponse<T>> {
   const url = new URL(SHEETS_API_URL);
   url.searchParams.append('action', action);
 
   for (const [key, value] of Object.entries(params)) {
-    if (value) {
+    if (value !== undefined && value !== null) {
       url.searchParams.append(key, value);
     }
   }
 
   try {
-    const response = await fetch(url.toString(), {
-      method: 'GET',
+    const options: RequestInit = {
+      method,
       headers: {
         'Accept': 'application/json',
       },
-    });
+    };
+
+    if (method === 'POST' && body) {
+      options.headers = {
+        ...options.headers,
+        'Content-Type': 'application/json',
+      };
+      options.body = JSON.stringify(body);
+    }
+
+    const response = await fetch(url.toString(), options);
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -95,7 +142,7 @@ async function callSheetsApi<T>(action: string, params: Record<string, string> =
 }
 
 // ========================================
-// 공개 API 함수들
+// 기본 API 함수들
 // ========================================
 
 /**
@@ -107,7 +154,7 @@ export async function pingApi(): Promise<boolean> {
 }
 
 /**
- * 학급 목록 조회 (교사용)
+ * 학급 목록 조회
  */
 export async function getClassList(): Promise<SheetClass[]> {
   const result = await callSheetsApi<SheetClass[]>('getClassList');
@@ -115,7 +162,7 @@ export async function getClassList(): Promise<SheetClass[]> {
 }
 
 /**
- * 학생 찾기 (로그인용) - 모든 학급에서 학생 코드로 검색
+ * 학생 찾기 (로그인용)
  */
 export async function findStudent(code: string): Promise<{
   className: string;
@@ -134,7 +181,7 @@ export async function findStudent(code: string): Promise<{
 }
 
 /**
- * 학생 정보 조회
+ * 학생 정보 조회 (프로필 포함)
  */
 export async function getStudent(code: string, className: string): Promise<SheetStudent | null> {
   const result = await callSheetsApi<SheetStudent>('getStudent', { code, className });
@@ -149,6 +196,10 @@ export async function getClassStudents(className: string): Promise<SheetStudent[
   return result.success ? result.data || [] : [];
 }
 
+// ========================================
+// 팀 API
+// ========================================
+
 /**
  * 팀 정보 조회
  */
@@ -158,55 +209,241 @@ export async function getTeams(className: string): Promise<SheetTeam[]> {
 }
 
 /**
+ * 팀 정보 저장
+ */
+export async function saveTeams(className: string, teams: SheetTeam[]): Promise<boolean> {
+  const result = await callSheetsApi<void>('saveTeams', { className }, 'POST', { teams });
+  return result.success;
+}
+
+// ========================================
+// 잔디 API
+// ========================================
+
+/**
  * 잔디 데이터 조회
  */
-export async function getGrass(code: string, className: string): Promise<SheetGrass[]> {
-  const result = await callSheetsApi<SheetGrass[]>('getGrass', { code, className });
-  return result.success ? result.data || [] : [];
-}
-
-/**
- * 스냅샷 데이터 조회
- */
-export async function getSnapshot(className: string, week?: number): Promise<SheetSnapshot[]> {
+export async function getGrass(className: string, code?: string): Promise<SheetGrass[]> {
   const params: Record<string, string> = { className };
-  if (week !== undefined) {
-    params.week = String(week);
-  }
-  const result = await callSheetsApi<SheetSnapshot[]>('getSnapshot', params);
+  if (code) params.code = code;
+  const result = await callSheetsApi<SheetGrass[]>('getGrass', params);
   return result.success ? result.data || [] : [];
 }
 
 // ========================================
-// 쿠키 랭킹 관련 함수
+// 소원 API
 // ========================================
 
 /**
- * 학급 학생들의 쿠키 랭킹 조회
- * @param className 학급명
- * @param useEarnedRound true면 주간 증가량(earnedRound) 기준, false면 총 쿠키 기준
+ * 소원 목록 조회
+ */
+export async function getWishes(className: string): Promise<SheetWish[]> {
+  const result = await callSheetsApi<SheetWish[]>('getWishes', { className });
+  return result.success ? result.data || [] : [];
+}
+
+/**
+ * 오늘 작성한 소원 조회
+ */
+export async function getStudentWishToday(className: string, code: string): Promise<SheetWish | null> {
+  const result = await callSheetsApi<SheetWish>('getStudentWishToday', { className, code });
+  return result.success ? result.data || null : null;
+}
+
+/**
+ * 소원 연속 작성 기록 조회
+ */
+export async function getWishStreak(className: string, code: string): Promise<{ total: number; streak: number }> {
+  const result = await callSheetsApi<{ total: number; streak: number }>('getWishStreak', { className, code });
+  return result.success ? result.data || { total: 0, streak: 0 } : { total: 0, streak: 0 };
+}
+
+/**
+ * 소원 추가
+ */
+export async function addWish(
+  className: string,
+  code: string,
+  name: string,
+  content: string
+): Promise<{ id: string; createdAt: string } | null> {
+  const result = await callSheetsApi<{ id: string; createdAt: string }>(
+    'addWish',
+    { className, code, name, content },
+    'POST'
+  );
+  return result.success ? result.data || null : null;
+}
+
+/**
+ * 소원 좋아요
+ */
+export async function likeWish(className: string, wishId: string, code: string): Promise<boolean> {
+  const result = await callSheetsApi<void>('likeWish', { className, wishId, code }, 'POST');
+  return result.success;
+}
+
+/**
+ * 소원 좋아요 취소
+ */
+export async function unlikeWish(className: string, wishId: string, code: string): Promise<boolean> {
+  const result = await callSheetsApi<void>('unlikeWish', { className, wishId, code }, 'POST');
+  return result.success;
+}
+
+/**
+ * 소원 선정 (교사)
+ */
+export async function grantWish(className: string, wishId: string, reward: number): Promise<boolean> {
+  const result = await callSheetsApi<void>('grantWish', { className, wishId, reward: String(reward) }, 'POST');
+  return result.success;
+}
+
+/**
+ * 소원 삭제 (교사)
+ */
+export async function deleteWish(className: string, wishId: string): Promise<boolean> {
+  const result = await callSheetsApi<void>('deleteWish', { className, wishId }, 'POST');
+  return result.success;
+}
+
+// ========================================
+// 상점 API
+// ========================================
+
+/**
+ * 상점 아이템 목록 조회
+ */
+export async function getShopItems(): Promise<SheetShopItem[]> {
+  const result = await callSheetsApi<SheetShopItem[]>('getShopItems');
+  return result.success ? result.data || [] : [];
+}
+
+/**
+ * 아이템 구매
+ */
+export async function purchaseItem(
+  className: string,
+  code: string,
+  itemCode: string
+): Promise<{ success: boolean; message?: string; itemCode?: string; price?: number }> {
+  const result = await callSheetsApi<{ itemCode: string; price: number }>(
+    'purchaseItem',
+    { className, code, itemCode },
+    'POST'
+  );
+
+  if (result.success && result.data) {
+    return { success: true, itemCode: result.data.itemCode, price: result.data.price };
+  }
+  return { success: false, message: result.message };
+}
+
+// ========================================
+// 프로필 API
+// ========================================
+
+/**
+ * 프로필 저장
+ */
+export interface ProfileData {
+  emojiCode?: string;
+  title?: string;
+  titleColorCode?: string;
+  borderCode?: string;
+  nameEffectCode?: string;
+  backgroundCode?: string;
+}
+
+export async function saveProfile(
+  className: string,
+  code: string,
+  profileData: ProfileData
+): Promise<boolean> {
+  const result = await callSheetsApi<void>('saveProfile', { className, code }, 'POST', profileData);
+  return result.success;
+}
+
+// ========================================
+// 전투 API
+// ========================================
+
+/**
+ * 전투 기록 조회
+ */
+export async function getBattles(className: string): Promise<SheetBattle[]> {
+  const result = await callSheetsApi<SheetBattle[]>('getBattles', { className });
+  return result.success ? result.data || [] : [];
+}
+
+/**
+ * 마지막 전투 날짜 조회
+ */
+export async function getLastBattleDate(className: string): Promise<string | null> {
+  const result = await callSheetsApi<string>('getLastBattle', { className });
+  return result.success ? result.data || null : null;
+}
+
+/**
+ * 전투 결과 저장
+ */
+export interface BattleResultData {
+  battleId?: string;
+  results: Array<{
+    teamId: string;
+    attackTarget?: string;
+    attackBet?: number;
+    defenseBet?: number;
+    result: string;
+    cookieChange: number;
+    roundEarned: number;
+  }>;
+}
+
+export async function saveBattleResult(
+  className: string,
+  battleData: BattleResultData
+): Promise<{ battleId: string; date: string } | null> {
+  const result = await callSheetsApi<{ battleId: string; date: string }>(
+    'saveBattleResult',
+    { className },
+    'POST',
+    battleData
+  );
+  return result.success ? result.data || null : null;
+}
+
+/**
+ * 이전 쿠키 업데이트 (전투 시작 시)
+ */
+export async function updatePreviousCookies(className: string): Promise<boolean> {
+  const result = await callSheetsApi<void>('updatePreviousCookies', { className }, 'POST');
+  return result.success;
+}
+
+// ========================================
+// 랭킹 관련 함수
+// ========================================
+
+/**
+ * 쿠키 랭킹 조회 (프론트엔드에서 정렬)
  */
 export async function getCookieRanking(
   className: string,
-  useEarnedRound: boolean = false,
-  week?: number
-): Promise<Array<SheetStudent & { rank: number; earnedRound?: number }>> {
+  useEarnedRound: boolean = false
+): Promise<Array<SheetStudent & { rank: number; cookieChange?: number }>> {
   const students = await getClassStudents(className);
 
-  if (useEarnedRound && week !== undefined) {
-    // 주간 증가량 기준 랭킹
-    const snapshots = await getSnapshot(className, week);
-    const snapshotMap = new Map(snapshots.map(s => [s.studentCode, s]));
-
-    const studentsWithEarned = students.map(student => ({
+  if (useEarnedRound) {
+    // 쿠키 변화량 기준 랭킹 (cookie - previousCookie)
+    const studentsWithChange = students.map(student => ({
       ...student,
-      earnedRound: snapshotMap.get(student.code)?.earnedRound || 0,
+      cookieChange: student.cookie - student.previousCookie,
     }));
 
-    // earnedRound 기준 정렬
-    studentsWithEarned.sort((a, b) => b.earnedRound - a.earnedRound);
+    studentsWithChange.sort((a, b) => b.cookieChange - a.cookieChange);
 
-    return studentsWithEarned.map((student, index) => ({
+    return studentsWithChange.map((student, index) => ({
       ...student,
       rank: index + 1,
     }));
@@ -222,7 +459,7 @@ export async function getCookieRanking(
 }
 
 // ========================================
-// 로컬 스토리지 캐싱 (선택적)
+// 로컬 스토리지 캐싱
 // ========================================
 
 const CACHE_PREFIX = 'sheets_cache_';
