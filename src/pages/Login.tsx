@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getClassList } from '../services/api';
-import { findStudentClass } from '../services/sheets';
+import { findStudentByCode } from '../services/sheets';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -13,7 +12,7 @@ interface LoginProps {
 }
 
 export default function Login({ onLoginSuccess }: LoginProps) {
-  const { loginAsTeacher, loginAsStudent, sheetsUrl, setSheetsUrl, setStudentClassName, apiKey: savedApiKey } = useAuth();
+  const { loginAsTeacher, loginAsStudent, sheetsUrl, setSheetsUrl, setStudentClassName } = useAuth();
 
   // 교사 로그인 상태
   const [apiKey, setApiKey] = useState('');
@@ -78,34 +77,16 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setStudentLoading(true);
 
     try {
-      // 다했니 API로 클래스 목록 가져오기
-      // 참고: savedApiKey가 있으면 사용, 없으면 Sheets에서만 조회
-      let classNames: string[] = [];
+      // Sheets에서 학생 찾기 (API 키 불필요)
+      const result = await findStudentByCode(studentCode.trim().toUpperCase());
 
-      if (savedApiKey) {
-        const response = await getClassList(savedApiKey);
-        if (response.result && response.data) {
-          classNames = response.data.map(c => c.name);
-        }
-      }
-
-      // 클래스 목록이 없으면 일단 로그인만 진행 (나중에 수동 선택)
-      if (classNames.length === 0) {
-        loginAsStudent(studentCode.trim().toUpperCase());
-        onLoginSuccess();
-        return;
-      }
-
-      // Sheets에서 학생 찾기
-      const result = await findStudentClass(studentCode.trim().toUpperCase(), classNames);
-
-      if (result) {
+      if (result.success && result.data) {
         // 학급명 저장
-        setStudentClassName(result.className);
+        setStudentClassName(result.data.className);
         loginAsStudent(studentCode.trim().toUpperCase());
         onLoginSuccess();
       } else {
-        setStudentError('학생 코드를 찾을 수 없습니다. 선생님께 확인해주세요.');
+        setStudentError(result.message || '학생 코드를 찾을 수 없습니다. 선생님께 확인해주세요.');
       }
     } catch (error) {
       setStudentError('로그인 중 오류가 발생했습니다.');

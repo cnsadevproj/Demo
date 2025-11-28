@@ -139,8 +139,24 @@ export async function getSnapshot(
   return callSheetsApi('getSnapshot', params);
 }
 
+// 학생 코드로 학급 찾기 (Apps Script에서 자동으로 모든 시트 검색)
+// API 키 불필요 - 학생 로그인 시 사용
+export interface FindStudentResult {
+  className: string;
+  number: number;
+  name: string;
+  code: string;
+}
+
+export async function findStudentByCode(
+  studentCode: string
+): Promise<SheetsResponse<FindStudentResult>> {
+  return callSheetsApi('findStudent', { code: studentCode });
+}
+
 // 학생 코드로 학급 찾기 (모든 학급을 순회하며 검색)
 // 주의: 이 함수는 학급명을 모를 때 사용하며, 여러 학급을 검색하므로 느릴 수 있습니다.
+// 더 이상 사용하지 않음 - findStudentByCode 사용 권장
 export async function findStudentClass(
   studentCode: string,
   classNames: string[]
