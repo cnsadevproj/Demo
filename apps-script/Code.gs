@@ -24,6 +24,10 @@ function doGet(e) {
     let result;
 
     switch (action) {
+      case 'findStudent':
+        result = findStudentInAllClasses(params.code);
+        break;
+
       case 'getStudent':
         result = getStudentData(params.code, params.className);
         break;
@@ -64,6 +68,45 @@ function doGet(e) {
     }));
     return output;
   }
+}
+
+// 모든 클래스 시트에서 학생 찾기 (학생 로그인용)
+function findStudentInAllClasses(studentCode) {
+  if (!studentCode) {
+    return { success: false, message: '학생 코드가 필요합니다.' };
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = ss.getSheets();
+
+  // _학생으로 끝나는 시트들을 검색
+  for (let i = 0; i < sheets.length; i++) {
+    const sheetName = sheets[i].getName();
+    if (sheetName.endsWith('_학생')) {
+      const className = sheetName.replace('_학생', '');
+
+      const lastRow = sheets[i].getLastRow();
+      if (lastRow < 2) continue;
+
+      const data = sheets[i].getRange(2, 1, lastRow - 1, 3).getValues();
+
+      for (let j = 0; j < data.length; j++) {
+        if (data[j][2] === studentCode) {  // 코드는 3번째 열
+          return {
+            success: true,
+            data: {
+              className: className,
+              number: Number(data[j][0]) || 0,
+              name: String(data[j][1] || ''),
+              code: String(data[j][2] || '')
+            }
+          };
+        }
+      }
+    }
+  }
+
+  return { success: false, message: '학생을 찾을 수 없습니다.' };
 }
 
 // 학생 정보 조회
