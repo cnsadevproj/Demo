@@ -92,30 +92,17 @@ function getStudentData(studentCode, className) {
     const [number, name, code, cookie, usedCookie, totalCookie, chocoChips, lastUpdate] = data[i];
 
     if (code === studentCode) {
-      // 날짜 안전하게 변환
-      let formattedDate = null;
-      if (lastUpdate && lastUpdate !== '') {
-        try {
-          const date = new Date(lastUpdate);
-          if (!isNaN(date.getTime())) {
-            formattedDate = date.toISOString();
-          }
-        } catch (e) {
-          // 날짜 변환 실패 시 null
-        }
-      }
-
       return {
         success: true,
         data: {
-          number,
-          name,
-          code,
-          cookie,
-          usedCookie,
-          totalCookie,
-          chocoChips,
-          lastUpdate: formattedDate
+          number: Number(number) || 0,
+          name: String(name || ''),
+          code: String(code || ''),
+          cookie: Number(cookie) || 0,
+          usedCookie: Number(usedCookie) || 0,
+          totalCookie: Number(totalCookie) || 0,
+          chocoChips: Number(chocoChips) || 0,
+          lastUpdate: String(lastUpdate || '')  // 문자열로 변환
         }
       };
     }
