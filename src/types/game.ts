@@ -132,8 +132,8 @@ export const LOSS_MECHANISM_INFO: Record<LossMechanism, { name: string; descript
 
 // 게임 설정
 export interface GameSettings {
-  minWinProbability: number;     // 최소 승률 (기본 20%)
-  maxWinProbability: number;     // 최대 승률 (기본 80%)
+  minWinProbability: number;     // 최소 승률 (기본 10%)
+  maxWinProbability: number;     // 최대 승률 (기본 90%)
   winnerTakePercent: number;     // 승자 획득 비율 (기본 30%)
   loserLosePercent: number;      // 패자 손실 비율 (기본 100%)
   unusedDefensePenalty: number;  // 미사용 방어 페널티 (기본 50%)
@@ -143,8 +143,8 @@ export interface GameSettings {
 
 // 기본 게임 설정
 export const DEFAULT_GAME_SETTINGS: GameSettings = {
-  minWinProbability: 20,
-  maxWinProbability: 80,
+  minWinProbability: 10,
+  maxWinProbability: 90,
   winnerTakePercent: 30,
   loserLosePercent: 100,
   unusedDefensePenalty: 50,
