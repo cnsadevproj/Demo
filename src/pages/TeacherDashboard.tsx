@@ -48,14 +48,39 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [uploadSuccess, setUploadSuccess] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 선택된 클래스 변경 시 학생 목록 로드
+  // 학생 정보 자동 로드 함수
+  const loadStudentInfoAuto = async (studentList: StoredStudent[]) => {
+    if (!apiKey || studentList.length === 0) return;
+
+    setLoading(true);
+    setLoadingProgress({ current: 0, total: studentList.length });
+
+    try {
+      const codes = studentList.map(s => s.code);
+      const results = await getMultipleStudentsInfo(apiKey, codes, (current, total) => {
+        setLoadingProgress({ current, total });
+      });
+      setStudentInfoMap(results);
+    } catch (error) {
+      console.error('학생 정보 로드 실패:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 선택된 클래스 변경 시 학생 목록 로드 + 자동으로 정보 불러오기
   useEffect(() => {
     if (selectedClass) {
       const savedStudents = getClassStudents(selectedClass);
       setStudents(savedStudents);
       setStudentInfoMap(new Map());
+
+      // 저장된 학생이 있으면 자동으로 정보 불러오기
+      if (savedStudents.length > 0 && apiKey) {
+        loadStudentInfoAuto(savedStudents);
+      }
     }
-  }, [selectedClass, getClassStudents]);
+  }, [selectedClass]);
 
   // 클래스 선택 핸들러
   const handleClassSelect = (className: string) => {
@@ -78,6 +103,11 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       saveClassStudents(selectedClass, parsedStudents);
       setUploadSuccess(`${parsedStudents.length}명의 학생이 등록되었습니다.`);
       setStudentInfoMap(new Map());
+
+      // 자동으로 학생 정보 불러오기
+      if (parsedStudents.length > 0 && apiKey) {
+        loadStudentInfoAuto(parsedStudents);
+      }
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : '파일 처리 중 오류가 발생했습니다.');
     }
