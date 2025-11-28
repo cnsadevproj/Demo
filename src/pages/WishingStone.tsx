@@ -36,11 +36,15 @@ export function WishingStone({ onBack }: WishingStoneProps) {
     getAttendanceStats,
   } = useStudent();
 
-  const { user, selectedClass, isTeacher } = useAuth();
+  const { studentCode: authStudentCode, studentClassName, role, selectedClass } = useAuth();
 
-  const studentCode = user?.code || '';
-  const studentName = user?.name || '학생';
-  const classId = selectedClass || '';
+  // 교사인지 확인
+  const isTeacher = role === 'teacher';
+
+  // 학생 코드와 학급 ID 설정
+  const studentCode = authStudentCode || '';
+  const studentName = '학생'; // TODO: 학생 이름을 가져올 필요 있음
+  const classId = isTeacher ? (selectedClass || '') : (studentClassName || '');
 
   // 상태
   const [wishContent, setWishContent] = useState('');

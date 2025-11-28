@@ -400,161 +400,81 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   // 랭킹 데이터 계산
   const rankedStudents = convertToRankedStudents(studentInfoMap, students);
 
+  // 메인 탭 상태
+  const [activeTab, setActiveTab] = useState('students');
+
   return (
     <PageLayout title="교사 대시보드" role="admin">
-      <div className="space-y-6">
-        {/* 헤더 */}
-        <Card className="p-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-white mb-2">다했니? 학습 관리</h2>
-              <p className="text-blue-100">클래스별 학생 현황을 관리합니다</p>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleLogout}
-              className="flex items-center gap-2"
-            >
-              <LogOut className="w-4 h-4" />
-              로그아웃
-            </Button>
-          </div>
-        </Card>
-
-        {/* 클래스 선택 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              클래스 선택
-            </CardTitle>
-            <CardDescription>
-              관리할 클래스를 선택하세요
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      <div className="space-y-4">
+        {/* 헤더 + 클래스 선택 */}
+        <Card className="p-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-4 flex-wrap">
               <Select value={selectedClass || ''} onValueChange={handleClassSelect}>
-                <SelectTrigger className="w-64">
-                  <SelectValue placeholder="클래스를 선택하세요" />
+                <SelectTrigger className="w-48 bg-white/20 border-white/30 text-white">
+                  <SelectValue placeholder="클래스 선택" />
                 </SelectTrigger>
                 <SelectContent>
                   {classes.map((cls) => (
                     <SelectItem key={cls.name} value={cls.name}>
-                      {cls.name} {cls.cookies !== undefined ? `(${cls.cookies} 쿠키)` : cls.studentCount !== undefined ? `(${cls.studentCount}명)` : ''}
+                      {cls.name} {cls.studentCount !== undefined ? `(${cls.studentCount}명)` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="icon" onClick={refreshClasses}>
+              <Button variant="secondary" size="icon" onClick={refreshClasses}>
                 <RefreshCw className="w-4 h-4" />
               </Button>
               {selectedClass && (
                 <Button
-                  variant="outline"
+                  variant="secondary"
+                  size="sm"
                   onClick={handleRefreshCookies}
                   disabled={isRefreshingCookies}
-                  className="flex items-center gap-2"
                 >
-                  {isRefreshingCookies ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Cookie className="w-4 h-4" />
-                  )}
-                  쿠키 새로고침
+                  {isRefreshingCookies ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cookie className="w-4 h-4" />}
+                  <span className="ml-1 hidden sm:inline">잔디 새로고침</span>
                 </Button>
               )}
             </div>
-
-            {selectedClass && loadedCount > 0 && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="text-sm text-gray-500">총 쿠키</p>
-                    <p className="text-xl font-bold">{totalCookies}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">남은 쿠키</p>
-                    <p className="text-xl font-bold text-green-600">{totalRemainingCookies}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">사용한 쿠키</p>
-                    <p className="text-xl font-bold text-orange-600">{totalUsedCookies}</p>
-                  </div>
+            <div className="flex items-center gap-2">
+              {selectedClass && loadedCount > 0 && (
+                <div className="flex gap-3 text-sm mr-4">
+                  <span>총 {totalCookies}</span>
+                  <span className="text-green-200">남은 {totalRemainingCookies}</span>
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* 학급 활성화 관리 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="w-5 h-5" />
-              학급 활성화 관리
-            </CardTitle>
-            <CardDescription>
-              이번 학기에 사용할 학급만 활성화하세요. 비활성 학급은 시트가 생성되지 않습니다.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {allSheetsClasses.map((cls) => {
-                const isActive = classActivationMap[cls.name] !== false;
-                const isLoading = activationLoading === cls.name;
-                return (
-                  <div
-                    key={cls.name}
-                    className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
-                      isActive
-                        ? 'bg-green-50 border-green-200'
-                        : 'bg-gray-50 border-gray-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className={`font-medium ${isActive ? 'text-green-700' : 'text-gray-500'}`}>
-                        {cls.name}
-                      </span>
-                      <Badge variant={isActive ? 'default' : 'secondary'} className="text-xs">
-                        {isActive ? '활성' : '비활성'}
-                      </Badge>
-                      {cls.studentCount !== undefined && (
-                        <span className="text-xs text-gray-400">({cls.studentCount}명)</span>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => handleToggleActivation(cls.name)}
-                      disabled={isLoading}
-                      className={`p-1 rounded-full transition-colors ${
-                        isActive
-                          ? 'text-green-600 hover:bg-green-100'
-                          : 'text-gray-400 hover:bg-gray-200'
-                      }`}
-                    >
-                      {isLoading ? (
-                        <Loader2 className="w-6 h-6 animate-spin" />
-                      ) : isActive ? (
-                        <ToggleRight className="w-6 h-6" />
-                      ) : (
-                        <ToggleLeft className="w-6 h-6" />
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
+              )}
+              <Button variant="secondary" size="sm" onClick={handleLogout}>
+                <LogOut className="w-4 h-4" />
+              </Button>
             </div>
-            {allSheetsClasses.length === 0 && (
-              <p className="text-center text-gray-500 py-4">
-                등록된 학급이 없습니다. Google Sheets에서 학급 목록을 불러오세요.
-              </p>
-            )}
-          </CardContent>
+          </div>
         </Card>
 
-        {/* 학생 목록/랭킹 */}
-        {selectedClass && students.length > 0 && (
+        {/* 메인 탭 메뉴 */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="students" className="flex items-center gap-1">
+              <Users className="w-4 h-4" />
+              <span className="hidden sm:inline">학생</span>
+            </TabsTrigger>
+            <TabsTrigger value="classes" className="flex items-center gap-1">
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">학급설정</span>
+            </TabsTrigger>
+            <TabsTrigger value="wishes" className="flex items-center gap-1">
+              <Star className="w-4 h-4" />
+              <span className="hidden sm:inline">소원</span>
+            </TabsTrigger>
+            <TabsTrigger value="shop" className="flex items-center gap-1">
+              <ShoppingBag className="w-4 h-4" />
+              <span className="hidden sm:inline">상점</span>
+            </TabsTrigger>
+          </TabsList>
+
+          {/* 학생 관리 탭 */}
+          <TabsContent value="students" className="space-y-4 mt-4">
+            {selectedClass && students.length > 0 && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -834,10 +754,79 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               </div>
             </CardContent>
           </Card>
-        )}
+            )}
+          </TabsContent>
 
-        {/* 소원의 돌 관리 (학급 선택 시) */}
-        {selectedClass && (
+          {/* 학급 설정 탭 */}
+          <TabsContent value="classes" className="space-y-4 mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="w-5 h-5" />
+                  학급 활성화 관리
+                </CardTitle>
+                <CardDescription>
+                  이번 학기에 사용할 학급만 활성화하세요. 비활성 학급은 시트가 생성되지 않습니다.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {allSheetsClasses.map((cls) => {
+                    const isActive = classActivationMap[cls.name] !== false;
+                    const isLoading = activationLoading === cls.name;
+                    return (
+                      <div
+                        key={cls.name}
+                        className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                          isActive
+                            ? 'bg-green-50 border-green-200'
+                            : 'bg-gray-50 border-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium ${isActive ? 'text-green-700' : 'text-gray-500'}`}>
+                            {cls.name}
+                          </span>
+                          <Badge variant={isActive ? 'default' : 'secondary'} className="text-xs">
+                            {isActive ? '활성' : '비활성'}
+                          </Badge>
+                          {cls.studentCount !== undefined && (
+                            <span className="text-xs text-gray-400">({cls.studentCount}명)</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleToggleActivation(cls.name)}
+                          disabled={isLoading}
+                          className={`p-1 rounded-full transition-colors ${
+                            isActive
+                              ? 'text-green-600 hover:bg-green-100'
+                              : 'text-gray-400 hover:bg-gray-200'
+                          }`}
+                        >
+                          {isLoading ? (
+                            <Loader2 className="w-6 h-6 animate-spin" />
+                          ) : isActive ? (
+                            <ToggleRight className="w-6 h-6" />
+                          ) : (
+                            <ToggleLeft className="w-6 h-6" />
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                {allSheetsClasses.length === 0 && (
+                  <p className="text-center text-gray-500 py-4">
+                    등록된 학급이 없습니다. Google Sheets에서 학급 목록을 불러오세요.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* 소원의 돌 탭 */}
+          <TabsContent value="wishes" className="space-y-4 mt-4">
+            {selectedClass ? (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -920,10 +909,17 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               )}
             </CardContent>
           </Card>
-        )}
+            ) : (
+              <Card className="p-8 text-center">
+                <Star className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                <p className="text-gray-500">클래스를 먼저 선택해주세요</p>
+              </Card>
+            )}
+          </TabsContent>
 
-        {/* 상점 아이템 관리 */}
-        <Card>
+          {/* 상점 탭 */}
+          <TabsContent value="shop" className="space-y-4 mt-4">
+            <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ShoppingBag className="w-5 h-5 text-purple-500" />
@@ -972,8 +968,10 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 ))}
               </Tabs>
             )}
-          </CardContent>
-        </Card>
+            </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </PageLayout>
   );
