@@ -95,8 +95,14 @@ function getOrCreateSheet(sheetName, headers = []) {
 
 // 안전한 시트명 만들기 (특수문자 제거)
 function sanitizeSheetName(name) {
+  // null 또는 undefined 체크
+  if (!name) return 'Unnamed';
+
+  // 문자열로 변환
+  const nameStr = String(name);
+
   // Google Sheets 시트명 제한: 100자, 특수문자 일부 제한
-  return name
+  return nameStr
     .replace(/[\[\]\*\?\\\/]/g, '') // 금지된 문자 제거
     .substring(0, 100); // 100자 제한
 }
