@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import { Toaster } from './components/ui/sonner';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 
-// Student Pages
+// Auth Pages
+import Login from './pages/Login';
+import { TeacherDashboard } from './pages/TeacherDashboard';
+import { StudentDashboardNew } from './pages/StudentDashboardNew';
+
+// Student Pages (Demo)
 import { StudentDashboard } from './pages/StudentDashboard';
 import { StudentTeam } from './pages/StudentTeam';
 import { StudentBattle } from './pages/StudentBattle';
@@ -9,7 +15,7 @@ import { StudentMission } from './pages/StudentMission';
 import { StudentGrass } from './pages/StudentGrass';
 import { StudentRanking } from './pages/StudentRanking';
 
-// Admin Pages
+// Admin Pages (Demo)
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminTeamAssign } from './pages/AdminTeamAssign';
 import { AdminSnapshot } from './pages/AdminSnapshot';
@@ -25,8 +31,12 @@ import { DemoAdminReport } from './pages/DemoAdminReport';
 import { ErrorUnauthorized } from './pages/ErrorUnauthorized';
 import { Loading } from './pages/Loading';
 
-// 네비게이션 메뉴 컴포넌트
-function NavigationMenu({ currentPage, onNavigate }: { currentPage: string; onNavigate: (page: string) => void }) {
+// 데모 모드 네비게이션 메뉴 컴포넌트
+function DemoNavigationMenu({ currentPage, onNavigate, onExitDemo }: {
+  currentPage: string;
+  onNavigate: (page: string) => void;
+  onExitDemo: () => void;
+}) {
   const [isOpen, setIsOpen] = useState(false);
 
   const studentPages = [
@@ -52,19 +62,14 @@ function NavigationMenu({ currentPage, onNavigate }: { currentPage: string; onNa
     { id: 'demo-report', label: '데모: 리포트', emoji: '📊' },
   ];
 
-  const utilPages = [
-    { id: 'error', label: '에러 페이지', emoji: '❌' },
-    { id: 'loading', label: '로딩', emoji: '⏳' },
-  ];
-
   return (
     <>
       {/* 토글 버튼 */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 z-50 px-6 py-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all"
+        className="fixed bottom-6 right-6 z-50 px-6 py-3 bg-purple-600 text-white rounded-full shadow-lg hover:bg-purple-700 transition-all"
       >
-        {isOpen ? '✕ 닫기' : '📱 페이지 메뉴'}
+        {isOpen ? '✕ 닫기' : '🧪 데모 메뉴'}
       </button>
 
       {/* 메뉴 패널 */}
@@ -75,7 +80,16 @@ function NavigationMenu({ currentPage, onNavigate }: { currentPage: string; onNa
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-6">
-              <h2 className="mb-6">페이지 네비게이션</h2>
+              <h2 className="mb-2">데모 페이지 네비게이션</h2>
+              <p className="text-sm text-gray-500 mb-6">목업 데이터로 UI를 미리 확인합니다</p>
+
+              {/* 실제 로그인으로 이동 */}
+              <button
+                onClick={onExitDemo}
+                className="w-full mb-6 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                🚀 실제 로그인 화면으로
+              </button>
 
               {/* 학생 페이지 */}
               <div className="mb-6">
@@ -145,29 +159,6 @@ function NavigationMenu({ currentPage, onNavigate }: { currentPage: string; onNa
                   ))}
                 </div>
               </div>
-
-              {/* 유틸리티 페이지 */}
-              <div className="mb-6">
-                <h3 className="mb-3 text-gray-600">🟧 유틸리티</h3>
-                <div className="space-y-2">
-                  {utilPages.map((page) => (
-                    <button
-                      key={page.id}
-                      onClick={() => {
-                        onNavigate(page.id);
-                        setIsOpen(false);
-                      }}
-                      className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${
-                        currentPage === page.id
-                          ? 'bg-gray-100 text-gray-900'
-                          : 'hover:bg-gray-100'
-                      }`}
-                    >
-                      {page.emoji} {page.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -176,7 +167,8 @@ function NavigationMenu({ currentPage, onNavigate }: { currentPage: string; onNa
   );
 }
 
-export default function App() {
+// 데모 모드 컴포넌트
+function DemoMode({ onExitDemo }: { onExitDemo: () => void }) {
   const [currentPage, setCurrentPage] = useState('demo');
 
   const renderPage = () => {
@@ -229,8 +221,70 @@ export default function App() {
   return (
     <>
       {renderPage()}
-      <NavigationMenu currentPage={currentPage} onNavigate={setCurrentPage} />
-      <Toaster />
+      <DemoNavigationMenu
+        currentPage={currentPage}
+        onNavigate={setCurrentPage}
+        onExitDemo={onExitDemo}
+      />
     </>
+  );
+}
+
+// 메인 앱 콘텐츠
+function AppContent() {
+  const { role, isAuthenticated } = useAuth();
+  const [isDemoMode, setIsDemoMode] = useState(false);
+
+  // 로그인 성공 핸들러
+  const handleLoginSuccess = () => {
+    setIsDemoMode(false);
+  };
+
+  // 로그아웃 핸들러
+  const handleLogout = () => {
+    // 로그아웃 후 로그인 페이지로
+  };
+
+  // 데모 모드
+  if (isDemoMode) {
+    return <DemoMode onExitDemo={() => setIsDemoMode(false)} />;
+  }
+
+  // 로그인 안 된 경우
+  if (!isAuthenticated) {
+    return (
+      <div>
+        <Login onLoginSuccess={handleLoginSuccess} />
+        {/* 데모 모드 버튼 */}
+        <button
+          onClick={() => setIsDemoMode(true)}
+          className="fixed bottom-6 right-6 z-50 px-6 py-3 bg-purple-600 text-white rounded-full shadow-lg hover:bg-purple-700 transition-all"
+        >
+          🧪 데모 모드
+        </button>
+      </div>
+    );
+  }
+
+  // 역할에 따른 페이지 렌더링
+  if (role === 'teacher') {
+    return <TeacherDashboard onLogout={handleLogout} />;
+  }
+
+  if (role === 'student') {
+    return <StudentDashboardNew onLogout={handleLogout} />;
+  }
+
+  // 기본: 로그인 페이지
+  return <Login onLoginSuccess={handleLoginSuccess} />;
+}
+
+// 루트 앱 컴포넌트
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+      <Toaster />
+    </AuthProvider>
   );
 }
