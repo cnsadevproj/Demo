@@ -103,6 +103,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // 교사 로그인
   const loginAsTeacher = async (key: string): Promise<{ success: boolean; message: string }> => {
+    // Sheets 기반 인증인 경우 (API 키는 Sheets에 있음)
+    if (key === 'SHEETS_BASED_AUTH') {
+      setRole('teacher');
+      setApiKey(null);
+      setClasses([]);
+
+      localStorage.setItem(STORAGE_KEYS.ROLE, 'teacher');
+      localStorage.removeItem(STORAGE_KEYS.API_KEY);
+
+      // 기존 저장된 학생 데이터 복원
+      const savedClassStudents = localStorage.getItem(STORAGE_KEYS.CLASS_STUDENTS);
+      if (savedClassStudents) {
+        try {
+          setClassStudentsMap(JSON.parse(savedClassStudents));
+        } catch {
+          // 파싱 실패 시 무시
+        }
+      }
+
+      // 기존 선택된 클래스 복원
+      const savedSelectedClass = localStorage.getItem(STORAGE_KEYS.SELECTED_CLASS);
+      if (savedSelectedClass) {
+        setSelectedClass(savedSelectedClass);
+      }
+
+      return { success: true, message: '로그인 성공!' };
+    }
+
+    // 기존 API 키 기반 인증
     const response = await validateApiKey(key);
 
     if (response.result && response.data) {

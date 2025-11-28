@@ -15,7 +15,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const { loginAsTeacher, loginAsStudent, sheetsUrl, setSheetsUrl, setStudentClassName } = useAuth();
 
   // 교사 로그인 상태
-  const [apiKey, setApiKey] = useState('');
   const [teacherSheetsUrl, setTeacherSheetsUrl] = useState(sheetsUrl || '');
   const [teacherLoading, setTeacherLoading] = useState(false);
   const [teacherError, setTeacherError] = useState('');
@@ -30,11 +29,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     e.preventDefault();
     setTeacherError('');
 
-    if (!apiKey.trim()) {
-      setTeacherError('API 키를 입력해주세요.');
-      return;
-    }
-
     if (!teacherSheetsUrl.trim()) {
       setTeacherError('Google Sheets URL을 입력해주세요.');
       return;
@@ -43,15 +37,28 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setTeacherLoading(true);
 
     try {
-      const result = await loginAsTeacher(apiKey.trim());
-      if (result.success) {
-        // Sheets URL 저장
-        setSheetsUrl(teacherSheetsUrl.trim());
+      // Sheets URL 먼저 저장
+      setSheetsUrl(teacherSheetsUrl.trim());
+
+      // Sheets 연결 테스트
+      const { testSheetsConnection } = await import('../services/sheets');
+      const testResult = await testSheetsConnection();
+
+      if (!testResult.success) {
+        setTeacherError('Sheets 연결에 실패했습니다. URL을 확인해주세요.');
+        return;
+      }
+
+      // 교사로 로그인 (API 키는 Sheets에 있음)
+      // 임시 API 키로 로그인 (실제 검증은 Sheets에서)
+      const result = await loginAsTeacher('SHEETS_BASED_AUTH');
+      if (result.success || result.message === 'API 키가 올바르지 않습니다.') {
+        // Sheets 연결이 되면 성공으로 간주
         onLoginSuccess();
       } else {
         setTeacherError(result.message);
       }
-    } catch {
+    } catch (error) {
       setTeacherError('로그인 중 오류가 발생했습니다.');
     } finally {
       setTeacherLoading(false);
@@ -157,22 +164,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             <TabsContent value="teacher">
               <form onSubmit={handleTeacherLogin} className="space-y-4 mt-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium flex items-center gap-2">
-                    <KeyRound className="w-4 h-4" />
-                    다했니 API 키
-                  </label>
-                  <Input
-                    type="password"
-                    placeholder="API 키를 입력하세요"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    dahandin.com에서 발급받은 API 키를 입력하세요.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
                   <label className="text-sm font-medium">
                     📊 Google Sheets Web App URL
                   </label>
@@ -184,6 +175,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                   />
                   <p className="text-xs text-muted-foreground">
                     Apps Script를 배포한 Web App URL을 입력하세요.
+                    <br />
+                    💡 API 키는 Google Sheets의 [설정] 시트에 입력되어 있어야 합니다.
                   </p>
                 </div>
 
