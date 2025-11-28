@@ -1,8 +1,19 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { ClassInfo, StoredStudent, ClassStudents, validateApiKey, getClassList } from '../services/api';
+import { SheetsClassInfo } from '../services/sheets';
 
 // 사용자 역할 타입
 export type UserRole = 'teacher' | 'student' | null;
+
+// 통합 클래스 정보 타입 (API와 Sheets 모두 지원)
+export interface UnifiedClassInfo {
+  name: string;
+  cookies?: number;
+  totalCookies?: number | null;
+  usedCookies?: number;
+  studentCount?: number;
+  active?: boolean;
+}
 
 // 인증 컨텍스트 타입
 interface AuthContextType {
@@ -17,10 +28,10 @@ interface AuthContextType {
 
   // 교사용
   apiKey: string | null;
-  classes: ClassInfo[];
+  classes: UnifiedClassInfo[];
   selectedClass: string | null;
   classStudentsMap: Record<string, ClassStudents>;
-  loginAsTeacher: (apiKey: string, classList?: ClassInfo[]) => Promise<{ success: boolean; message: string }>;
+  loginAsTeacher: (apiKey: string, classList?: UnifiedClassInfo[]) => Promise<{ success: boolean; message: string }>;
   selectClass: (className: string) => void;
   saveClassStudents: (className: string, students: StoredStudent[]) => void;
   getClassStudents: (className: string) => StoredStudent[];
@@ -55,7 +66,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [studentCode, setStudentCode] = useState<string | null>(null);
   const [studentClassName, setStudentClassNameState] = useState<string | null>(null);
-  const [classes, setClasses] = useState<ClassInfo[]>([]);
+  const [classes, setClasses] = useState<UnifiedClassInfo[]>([]);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [sheetsUrl, setSheetsUrlState] = useState<string | null>(null);
   const [classStudentsMap, setClassStudentsMap] = useState<Record<string, ClassStudents>>({});
@@ -102,7 +113,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   // 교사 로그인
-  const loginAsTeacher = async (key: string, classList?: ClassInfo[]): Promise<{ success: boolean; message: string }> => {
+  const loginAsTeacher = async (key: string, classList?: UnifiedClassInfo[]): Promise<{ success: boolean; message: string }> => {
     // Sheets 기반 인증인 경우 (API 키는 Sheets에 있음)
     if (key === 'SHEETS_BASED_AUTH') {
       setRole('teacher');
