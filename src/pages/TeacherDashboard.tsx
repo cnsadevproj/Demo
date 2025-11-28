@@ -21,7 +21,10 @@ import {
   Award,
   FileSpreadsheet,
   Trash2,
+  Trophy,
+  List,
 } from 'lucide-react';
+import { StudentRankingTable, convertToRankedStudents } from '../components/StudentRankingTable';
 
 interface TeacherDashboardProps {
   onLogout?: () => void;
@@ -46,6 +49,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0 });
   const [uploadError, setUploadError] = useState('');
   const [uploadSuccess, setUploadSuccess] = useState('');
+  const [viewMode, setViewMode] = useState<'list' | 'ranking'>('list');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 학생 정보 자동 로드 함수
@@ -167,6 +171,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
   // 선택된 클래스 정보
   const selectedClassInfo = classes.find(c => c.name === selectedClass);
+
+  // 랭킹 데이터 계산
+  const rankedStudents = convertToRankedStudents(studentInfoMap, students);
 
   return (
     <PageLayout title="교사 대시보드" role="admin">
@@ -318,15 +325,19 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           </Card>
         )}
 
-        {/* 학생 목록 */}
+        {/* 학생 목록/랭킹 */}
         {selectedClass && students.length > 0 && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2">
-                    <Users className="w-5 h-5" />
-                    학생 목록 ({students.length}명)
+                    {viewMode === 'list' ? (
+                      <Users className="w-5 h-5" />
+                    ) : (
+                      <Trophy className="w-5 h-5 text-yellow-500" />
+                    )}
+                    {viewMode === 'list' ? '학생 목록' : '쿠키 랭킹'} ({students.length}명)
                   </CardTitle>
                   <CardDescription>
                     {loadedCount > 0
@@ -350,6 +361,29 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       정보 불러오기
                     </>
                   )}
+                </Button>
+              </div>
+
+              {/* 보기 모드 탭 */}
+              <div className="flex gap-2 mt-4">
+                <Button
+                  variant={viewMode === 'list' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('list')}
+                  className="flex items-center gap-2"
+                >
+                  <List className="w-4 h-4" />
+                  목록 보기
+                </Button>
+                <Button
+                  variant={viewMode === 'ranking' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('ranking')}
+                  className="flex items-center gap-2"
+                  disabled={loadedCount === 0}
+                >
+                  <Trophy className="w-4 h-4" />
+                  랭킹 보기
                 </Button>
               </div>
 
@@ -390,85 +424,104 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 </div>
               )}
 
-              {/* 학생 테이블 */}
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-3">번호</th>
-                      <th className="text-left p-3">이름</th>
-                      <th className="text-left p-3">코드</th>
-                      <th className="text-center p-3">쿠키</th>
-                      <th className="text-center p-3">사용</th>
-                      <th className="text-center p-3">남은 쿠키</th>
-                      <th className="text-center p-3">뱃지</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {students.map((student) => {
-                      const info = studentInfoMap.get(student.code);
-                      return (
-                        <tr key={student.code} className="border-b hover:bg-gray-50">
-                          <td className="p-3">{student.number}</td>
-                          <td className="p-3 font-medium">{student.name}</td>
-                          <td className="p-3">
-                            <code className="text-sm bg-gray-100 px-2 py-1 rounded">
-                              {student.code}
-                            </code>
-                          </td>
-                          <td className="p-3 text-center">
-                            {info ? (
-                              <span className="flex items-center justify-center gap-1">
-                                <Cookie className="w-4 h-4 text-amber-500" />
-                                {info.cookie}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
-                          <td className="p-3 text-center">
-                            {info ? (
-                              <span className="text-orange-600">{info.usedCookie}</span>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
-                          <td className="p-3 text-center">
-                            {info ? (
-                              <span className="font-bold text-green-600">{info.totalCookie}</span>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
-                          <td className="p-3 text-center">
-                            {info ? (
-                              <div className="flex items-center justify-center gap-1">
-                                {Object.values(info.badges)
-                                  .filter(b => b.hasBadge)
-                                  .slice(0, 3)
-                                  .map((badge, idx) => (
-                                    <img
-                                      key={idx}
-                                      src={badge.imgUrl}
-                                      alt={badge.title}
-                                      title={badge.title}
-                                      className="w-6 h-6 rounded-full"
-                                    />
-                                  ))}
-                                {Object.values(info.badges).filter(b => b.hasBadge).length === 0 && (
-                                  <span className="text-gray-400">-</span>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              {/* 학생 테이블 (목록 보기) */}
+              {viewMode === 'list' && (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-3">번호</th>
+                        <th className="text-left p-3">이름</th>
+                        <th className="text-left p-3">코드</th>
+                        <th className="text-center p-3">쿠키</th>
+                        <th className="text-center p-3">사용</th>
+                        <th className="text-center p-3">남은 쿠키</th>
+                        <th className="text-center p-3">뱃지</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {students.map((student) => {
+                        const info = studentInfoMap.get(student.code);
+                        return (
+                          <tr key={student.code} className="border-b hover:bg-gray-50">
+                            <td className="p-3">{student.number}</td>
+                            <td className="p-3 font-medium">{student.name}</td>
+                            <td className="p-3">
+                              <code className="text-sm bg-gray-100 px-2 py-1 rounded">
+                                {student.code}
+                              </code>
+                            </td>
+                            <td className="p-3 text-center">
+                              {info ? (
+                                <span className="flex items-center justify-center gap-1">
+                                  <Cookie className="w-4 h-4 text-amber-500" />
+                                  {info.cookie}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="p-3 text-center">
+                              {info ? (
+                                <span className="text-orange-600">{info.usedCookie}</span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="p-3 text-center">
+                              {info ? (
+                                <span className="font-bold text-green-600">{info.totalCookie}</span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="p-3 text-center">
+                              {info ? (
+                                <div className="flex items-center justify-center gap-1">
+                                  {Object.values(info.badges)
+                                    .filter(b => b.hasBadge)
+                                    .slice(0, 3)
+                                    .map((badge, idx) => (
+                                      <img
+                                        key={idx}
+                                        src={badge.imgUrl}
+                                        alt={badge.title}
+                                        title={badge.title}
+                                        className="w-6 h-6 rounded-full"
+                                      />
+                                    ))}
+                                  {Object.values(info.badges).filter(b => b.hasBadge).length === 0 && (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* 랭킹 보기 */}
+              {viewMode === 'ranking' && (
+                <div>
+                  {rankedStudents.length > 0 ? (
+                    <StudentRankingTable
+                      students={rankedStudents}
+                      showTop={rankedStudents.length}
+                    />
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Trophy className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                      <p>학생 정보를 불러오면 랭킹을 확인할 수 있습니다</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
