@@ -7,6 +7,13 @@ export interface SheetsResponse<T> {
   data?: T;
 }
 
+// 뱃지 정보 타입
+export interface BadgeInfo {
+  title: string;
+  imgUrl: string;
+  hasBadge: boolean;
+}
+
 // Sheets 학생 정보 타입
 export interface SheetsStudentData {
   number: number;
@@ -17,6 +24,7 @@ export interface SheetsStudentData {
   totalCookie: number;
   chocoChips: number;
   lastUpdate: string;
+  badges: Record<string, BadgeInfo>;
 }
 
 // Sheets 팀 정보 타입
