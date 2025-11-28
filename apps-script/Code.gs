@@ -56,6 +56,29 @@ function doGet(e) {
         result = { success: true, message: '연결 성공!' };
         break;
 
+      // ======== 소원의 돌 ========
+      case 'getWishes':
+        result = getWishesData(params.className);
+        break;
+
+      case 'getStudentWishToday':
+        result = getStudentWishToday(params.className, params.code);
+        break;
+
+      // ======== 출석 ========
+      case 'getAttendance':
+        result = getAttendanceData(params.className, params.code);
+        break;
+
+      case 'getAttendanceStats':
+        result = getAttendanceStats(params.className, params.code);
+        break;
+
+      // ======== 프로필 ========
+      case 'getProfile':
+        result = getProfileData(params.code);
+        break;
+
       default:
         result = { success: false, message: '올바르지 않은 action입니다.' };
     }
@@ -887,4 +910,488 @@ function showHelp() {
   `;
 
   ui.alert('도움말', helpText, ui.ButtonSet.OK);
+}
+
+// ========================================
+// 7. POST 요청 처리 (쓰기 작업)
+// ========================================
+function doPost(e) {
+  try {
+    const params = e.parameter;
+    const action = params.action;
+
+    // POST 데이터 파싱
+    let postData = {};
+    if (e.postData && e.postData.contents) {
+      try {
+        postData = JSON.parse(e.postData.contents);
+      } catch (err) {
+        // URL encoded 형식일 수 있음
+      }
+    }
+
+    const output = ContentService.createTextOutput();
+    output.setMimeType(ContentService.MimeType.JSON);
+
+    let result;
+
+    switch (action) {
+      // ======== 소원의 돌 ========
+      case 'addWish':
+        result = addWish(params.className, params.code, params.name, params.content);
+        break;
+
+      case 'likeWish':
+        result = likeWish(params.wishId, params.code);
+        break;
+
+      case 'unlikeWish':
+        result = unlikeWish(params.wishId, params.code);
+        break;
+
+      case 'grantWish':
+        result = grantWish(params.wishId, Number(params.reward) || 50);
+        break;
+
+      case 'deleteWish':
+        result = deleteWish(params.wishId);
+        break;
+
+      // ======== 출석 ========
+      case 'checkAttendance':
+        result = checkAttendance(params.className, params.code);
+        break;
+
+      // ======== 프로필 ========
+      case 'saveProfile':
+        result = saveProfile(params.code, postData);
+        break;
+
+      default:
+        result = { success: false, message: '올바르지 않은 action입니다.' };
+    }
+
+    output.setContent(JSON.stringify(result));
+    return output;
+
+  } catch (error) {
+    const output = ContentService.createTextOutput();
+    output.setMimeType(ContentService.MimeType.JSON);
+    output.setContent(JSON.stringify({
+      success: false,
+      message: error.message
+    }));
+    return output;
+  }
+}
+
+// ========================================
+// 8. 소원의 돌 (Wishing Stone)
+// ========================================
+
+// 소원 시트 생성/가져오기
+function getWishSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const headers = ['ID', '학급', '학생코드', '학생이름', '내용', '작성일시', '좋아요', '선정여부', '보상쿠키'];
+  return getOrCreateSheet('소원의돌', headers);
+}
+
+// 소원 목록 조회
+function getWishesData(className) {
+  if (!className) {
+    return { success: false, message: '학급명이 필요합니다.' };
+  }
+
+  const sheet = getWishSheet();
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return { success: true, data: [] };
+  }
+
+  const data = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+  const wishes = data
+    .filter(row => row[1] === className)
+    .map(row => ({
+      id: row[0],
+      className: row[1],
+      studentCode: row[2],
+      studentName: row[3],
+      content: row[4],
+      createdAt: row[5] ? new Date(row[5]).toISOString() : null,
+      likes: row[6] ? String(row[6]).split(',').filter(x => x) : [],
+      isGranted: row[7] === true || row[7] === 'TRUE',
+      grantedReward: Number(row[8]) || 0
+    }))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  return { success: true, data: wishes };
+}
+
+// 오늘 내 소원 조회
+function getStudentWishToday(className, studentCode) {
+  if (!className || !studentCode) {
+    return { success: false, message: '학급명과 학생코드가 필요합니다.' };
+  }
+
+  const sheet = getWishSheet();
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return { success: true, data: null };
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  const data = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+
+  const todayWish = data.find(row => {
+    if (row[1] !== className || row[2] !== studentCode) return false;
+    const wishDate = row[5] ? new Date(row[5]).toISOString().split('T')[0] : null;
+    return wishDate === today;
+  });
+
+  if (!todayWish) {
+    return { success: true, data: null };
+  }
+
+  return {
+    success: true,
+    data: {
+      id: todayWish[0],
+      content: todayWish[4],
+      createdAt: new Date(todayWish[5]).toISOString(),
+      likes: todayWish[6] ? String(todayWish[6]).split(',').filter(x => x) : [],
+      isGranted: todayWish[7] === true || todayWish[7] === 'TRUE',
+      grantedReward: Number(todayWish[8]) || 0
+    }
+  };
+}
+
+// 소원 추가
+function addWish(className, studentCode, studentName, content) {
+  if (!className || !studentCode || !content) {
+    return { success: false, message: '필수 값이 누락되었습니다.' };
+  }
+
+  // 오늘 이미 소원을 적었는지 확인
+  const existingWish = getStudentWishToday(className, studentCode);
+  if (existingWish.success && existingWish.data) {
+    return { success: false, message: '오늘은 이미 소원을 적었습니다.' };
+  }
+
+  const sheet = getWishSheet();
+  const wishId = 'wish_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  const now = new Date();
+
+  sheet.appendRow([
+    wishId,
+    className,
+    studentCode,
+    studentName || '',
+    content.substring(0, 50), // 최대 50자
+    now,
+    '', // 좋아요 (빈 문자열)
+    false, // 선정여부
+    0 // 보상쿠키
+  ]);
+
+  return {
+    success: true,
+    data: {
+      id: wishId,
+      content: content.substring(0, 50),
+      createdAt: now.toISOString()
+    }
+  };
+}
+
+// 소원 좋아요
+function likeWish(wishId, studentCode) {
+  if (!wishId || !studentCode) {
+    return { success: false, message: '필수 값이 누락되었습니다.' };
+  }
+
+  const sheet = getWishSheet();
+  const lastRow = sheet.getLastRow();
+
+  for (let i = 2; i <= lastRow; i++) {
+    if (sheet.getRange(i, 1).getValue() === wishId) {
+      const currentLikes = String(sheet.getRange(i, 7).getValue() || '');
+      const likesArray = currentLikes.split(',').filter(x => x);
+
+      if (!likesArray.includes(studentCode)) {
+        likesArray.push(studentCode);
+        sheet.getRange(i, 7).setValue(likesArray.join(','));
+      }
+
+      return { success: true, likes: likesArray };
+    }
+  }
+
+  return { success: false, message: '소원을 찾을 수 없습니다.' };
+}
+
+// 소원 좋아요 취소
+function unlikeWish(wishId, studentCode) {
+  if (!wishId || !studentCode) {
+    return { success: false, message: '필수 값이 누락되었습니다.' };
+  }
+
+  const sheet = getWishSheet();
+  const lastRow = sheet.getLastRow();
+
+  for (let i = 2; i <= lastRow; i++) {
+    if (sheet.getRange(i, 1).getValue() === wishId) {
+      const currentLikes = String(sheet.getRange(i, 7).getValue() || '');
+      const likesArray = currentLikes.split(',').filter(x => x && x !== studentCode);
+      sheet.getRange(i, 7).setValue(likesArray.join(','));
+
+      return { success: true, likes: likesArray };
+    }
+  }
+
+  return { success: false, message: '소원을 찾을 수 없습니다.' };
+}
+
+// 소원 선정 (교사용)
+function grantWish(wishId, reward) {
+  if (!wishId) {
+    return { success: false, message: '소원 ID가 필요합니다.' };
+  }
+
+  const sheet = getWishSheet();
+  const lastRow = sheet.getLastRow();
+
+  for (let i = 2; i <= lastRow; i++) {
+    if (sheet.getRange(i, 1).getValue() === wishId) {
+      sheet.getRange(i, 8).setValue(true); // 선정여부
+      sheet.getRange(i, 9).setValue(reward || 50); // 보상쿠키
+
+      return { success: true };
+    }
+  }
+
+  return { success: false, message: '소원을 찾을 수 없습니다.' };
+}
+
+// 소원 삭제
+function deleteWish(wishId) {
+  if (!wishId) {
+    return { success: false, message: '소원 ID가 필요합니다.' };
+  }
+
+  const sheet = getWishSheet();
+  const lastRow = sheet.getLastRow();
+
+  for (let i = 2; i <= lastRow; i++) {
+    if (sheet.getRange(i, 1).getValue() === wishId) {
+      sheet.deleteRow(i);
+      return { success: true };
+    }
+  }
+
+  return { success: false, message: '소원을 찾을 수 없습니다.' };
+}
+
+// ========================================
+// 9. 출석 체크
+// ========================================
+
+// 출석 시트 생성/가져오기
+function getAttendanceSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const headers = ['ID', '학급', '학생코드', '날짜', '작성일시'];
+  return getOrCreateSheet('출석', headers);
+}
+
+// 출석 체크
+function checkAttendance(className, studentCode) {
+  if (!className || !studentCode) {
+    return { success: false, message: '필수 값이 누락되었습니다.' };
+  }
+
+  const sheet = getAttendanceSheet();
+  const today = new Date().toISOString().split('T')[0];
+  const lastRow = sheet.getLastRow();
+
+  // 오늘 이미 출석했는지 확인
+  if (lastRow >= 2) {
+    const data = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+    const alreadyChecked = data.some(row =>
+      row[1] === className && row[2] === studentCode && row[3] === today
+    );
+
+    if (alreadyChecked) {
+      return { success: false, message: '오늘 이미 출석했습니다.' };
+    }
+  }
+
+  const attendanceId = 'att_' + Date.now();
+  const now = new Date();
+
+  sheet.appendRow([
+    attendanceId,
+    className,
+    studentCode,
+    today,
+    now
+  ]);
+
+  return { success: true, date: today };
+}
+
+// 출석 기록 조회
+function getAttendanceData(className, studentCode) {
+  if (!className || !studentCode) {
+    return { success: false, message: '필수 값이 누락되었습니다.' };
+  }
+
+  const sheet = getAttendanceSheet();
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return { success: true, data: [] };
+  }
+
+  const data = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  const attendance = data
+    .filter(row => row[1] === className && row[2] === studentCode)
+    .map(row => ({
+      id: row[0],
+      date: row[3],
+      createdAt: row[4] ? new Date(row[4]).toISOString() : null
+    }));
+
+  return { success: true, data: attendance };
+}
+
+// 출석 통계
+function getAttendanceStats(className, studentCode) {
+  if (!className || !studentCode) {
+    return { success: false, message: '필수 값이 누락되었습니다.' };
+  }
+
+  const result = getAttendanceData(className, studentCode);
+  if (!result.success) return result;
+
+  const dates = result.data.map(a => a.date).sort().reverse();
+  const total = dates.length;
+
+  // 연속 출석 계산
+  let streak = 0;
+  const today = new Date();
+
+  for (let i = 0; i < 30; i++) {
+    const checkDate = new Date(today);
+    checkDate.setDate(checkDate.getDate() - i);
+    const dateStr = checkDate.toISOString().split('T')[0];
+
+    if (dates.includes(dateStr)) {
+      streak++;
+    } else if (i > 0) {
+      break;
+    }
+  }
+
+  return {
+    success: true,
+    data: { total, streak }
+  };
+}
+
+// ========================================
+// 10. 학생 프로필
+// ========================================
+
+// 프로필 시트 생성/가져오기
+function getProfileSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const headers = ['학생코드', '칭호', '칭호색상', '이모지', '테두리스타일', '테두리색상', '이름효과', '배경패턴', '수정일시'];
+  return getOrCreateSheet('프로필', headers);
+}
+
+// 프로필 조회
+function getProfileData(studentCode) {
+  if (!studentCode) {
+    return { success: false, message: '학생코드가 필요합니다.' };
+  }
+
+  const sheet = getProfileSheet();
+  const lastRow = sheet.getLastRow();
+
+  // 기본 프로필
+  const defaultProfile = {
+    studentCode: studentCode,
+    title: '',
+    titleColorIndex: 0,
+    emoji: '😀',
+    borderStyle: 'none',
+    borderColor: '#6366f1',
+    nameEffect: 'none',
+    backgroundPattern: 'none'
+  };
+
+  if (lastRow < 2) {
+    return { success: true, data: defaultProfile };
+  }
+
+  const data = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+  const profile = data.find(row => row[0] === studentCode);
+
+  if (!profile) {
+    return { success: true, data: defaultProfile };
+  }
+
+  return {
+    success: true,
+    data: {
+      studentCode: profile[0],
+      title: profile[1] || '',
+      titleColorIndex: Number(profile[2]) || 0,
+      emoji: profile[3] || '😀',
+      borderStyle: profile[4] || 'none',
+      borderColor: profile[5] || '#6366f1',
+      nameEffect: profile[6] || 'none',
+      backgroundPattern: profile[7] || 'none'
+    }
+  };
+}
+
+// 프로필 저장
+function saveProfile(studentCode, profileData) {
+  if (!studentCode) {
+    return { success: false, message: '학생코드가 필요합니다.' };
+  }
+
+  const sheet = getProfileSheet();
+  const lastRow = sheet.getLastRow();
+  const now = new Date();
+
+  // 기존 프로필 찾기
+  let existingRow = -1;
+  if (lastRow >= 2) {
+    const codes = sheet.getRange(2, 1, lastRow - 1, 1).getValues().flat();
+    existingRow = codes.indexOf(studentCode);
+    if (existingRow >= 0) existingRow += 2; // 헤더 제외, 1-indexed
+  }
+
+  const rowData = [
+    studentCode,
+    (profileData.title || '').substring(0, 5),
+    profileData.titleColorIndex || 0,
+    profileData.emoji || '😀',
+    profileData.borderStyle || 'none',
+    profileData.borderColor || '#6366f1',
+    profileData.nameEffect || 'none',
+    profileData.backgroundPattern || 'none',
+    now
+  ];
+
+  if (existingRow > 0) {
+    sheet.getRange(existingRow, 1, 1, 9).setValues([rowData]);
+  } else {
+    sheet.appendRow(rowData);
+  }
+
+  return { success: true };
 }
