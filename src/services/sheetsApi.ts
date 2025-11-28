@@ -107,6 +107,7 @@ async function callSheetsApi<T>(
   const sheetsUrl = getSheetsApiUrl();
 
   if (!sheetsUrl) {
+    console.error('[SheetsApi] URL이 설정되지 않았습니다. localStorage key:', STORAGE_KEY);
     return {
       success: false,
       message: 'Sheets URL이 설정되지 않았습니다. 먼저 로그인해주세요.',
@@ -121,6 +122,8 @@ async function callSheetsApi<T>(
       url.searchParams.append(key, value);
     }
   }
+
+  console.log(`[SheetsApi] 호출: ${action}`, { url: url.toString(), params, method });
 
   try {
     const options: RequestInit = {
@@ -141,13 +144,15 @@ async function callSheetsApi<T>(
     const response = await fetch(url.toString(), options);
 
     if (!response.ok) {
+      console.error(`[SheetsApi] HTTP 오류: ${response.status} ${response.statusText}`);
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const data = await response.json();
+    console.log(`[SheetsApi] 응답: ${action}`, data);
     return data as ApiResponse<T>;
   } catch (error) {
-    console.error('Sheets API 호출 오류:', error);
+    console.error('[SheetsApi] 호출 오류:', error);
     return {
       success: false,
       message: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
