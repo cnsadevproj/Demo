@@ -137,7 +137,7 @@ function findStudentInAllClasses(studentCode) {
   return { success: false, message: '학생을 찾을 수 없습니다.' };
 }
 
-// 학생 정보 조회
+// 학생 정보 조회 (뱃지 포함)
 function getStudentData(studentCode, className) {
   if (!studentCode || !className) {
     return { success: false, message: '학생 코드와 학급명이 필요합니다.' };
@@ -163,18 +163,45 @@ function getStudentData(studentCode, className) {
     const [number, name, code, cookie, usedCookie, totalCookie, chocoChips, lastUpdate] = data[i];
 
     if (code === studentCode) {
+      // 기본 데이터
+      const studentData = {
+        number: Number(number) || 0,
+        name: String(name || ''),
+        code: String(code || ''),
+        cookie: Number(cookie) || 0,
+        usedCookie: Number(usedCookie) || 0,
+        totalCookie: Number(totalCookie) || 0,
+        chocoChips: Number(chocoChips) || 0,
+        lastUpdate: String(lastUpdate || ''),
+        badges: {}
+      };
+
+      // 다했니 API에서 뱃지 정보 가져오기
+      try {
+        const apiKey = getApiKey();
+        const url = `${API_BASE}/get/student/total?code=${studentCode}`;
+        const options = {
+          method: 'get',
+          headers: {
+            'X-API-Key': apiKey
+          },
+          muteHttpExceptions: true
+        };
+
+        const response = UrlFetchApp.fetch(url, options);
+        const json = JSON.parse(response.getContentText());
+
+        if (json.result && json.data && json.data.badges) {
+          studentData.badges = json.data.badges;
+        }
+      } catch (e) {
+        // 뱃지 정보 로드 실패 시 빈 객체로 유지
+        Logger.log('뱃지 정보 로드 실패: ' + e.message);
+      }
+
       return {
         success: true,
-        data: {
-          number: Number(number) || 0,
-          name: String(name || ''),
-          code: String(code || ''),
-          cookie: Number(cookie) || 0,
-          usedCookie: Number(usedCookie) || 0,
-          totalCookie: Number(totalCookie) || 0,
-          chocoChips: Number(chocoChips) || 0,
-          lastUpdate: String(lastUpdate || '')  // 문자열로 변환
-        }
+        data: studentData
       };
     }
   }
@@ -182,7 +209,7 @@ function getStudentData(studentCode, className) {
   return { success: false, message: '학생을 찾을 수 없습니다.' };
 }
 
-// 학급 전체 학생 목록 조회
+// 학급 전체 학생 목록 조회 (뱃지 포함)
 function getClassStudentsData(className) {
   if (!className) {
     return { success: false, message: '학급명이 필요합니다.' };
@@ -226,9 +253,44 @@ function getClassStudentsData(className) {
         usedCookie: row[4],
         totalCookie: row[5],
         chocoChips: row[6],
-        lastUpdate: formattedDate
+        lastUpdate: formattedDate,
+        badges: {}
       };
     });
+
+  // 다했니 API에서 뱃지 정보 가져오기 (전체 학생)
+  try {
+    const apiKey = getApiKey();
+
+    for (let i = 0; i < students.length; i++) {
+      try {
+        const url = `${API_BASE}/get/student/total?code=${students[i].code}`;
+        const options = {
+          method: 'get',
+          headers: {
+            'X-API-Key': apiKey
+          },
+          muteHttpExceptions: true
+        };
+
+        const response = UrlFetchApp.fetch(url, options);
+        const json = JSON.parse(response.getContentText());
+
+        if (json.result && json.data && json.data.badges) {
+          students[i].badges = json.data.badges;
+        }
+
+        // Rate limiting: 100ms 대기 (5 req/sec)
+        if (i < students.length - 1) {
+          Utilities.sleep(100);
+        }
+      } catch (e) {
+        Logger.log(`학생 ${students[i].code} 뱃지 로드 실패: ${e.message}`);
+      }
+    }
+  } catch (e) {
+    Logger.log('전체 뱃지 정보 로드 실패: ' + e.message);
+  }
 
   return { success: true, data: students };
 }
