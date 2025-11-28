@@ -113,10 +113,22 @@ export async function testSheetsConnection(): Promise<SheetsResponse<null>> {
 export interface SheetsClassInfo {
   name: string;
   studentCount: number;
+  active?: boolean; // 활성화 상태
 }
 
 export async function getClassListFromSheets(): Promise<SheetsResponse<SheetsClassInfo[]>> {
   return callSheetsApi('getClassList');
+}
+
+// 학급 활성화 상태 설정
+export async function setClassActivation(
+  className: string,
+  active: boolean
+): Promise<SheetsResponse<null>> {
+  return callSheetsApi('setClassActivation', {
+    className,
+    active: active ? '1' : '0'
+  });
 }
 
 // 학생 정보 조회
