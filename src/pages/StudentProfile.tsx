@@ -37,10 +37,10 @@ interface StudentProfilePageProps {
 }
 
 export function StudentProfilePage({ onBack, onNavigate }: StudentProfilePageProps) {
-  const { user, selectedClass } = useAuth();
+  const { studentCode: authStudentCode, studentClassName } = useAuth();
 
-  const studentCode = user?.code || '';
-  const studentName = user?.name || '학생';
+  const studentCode = authStudentCode || '';
+  const className = studentClassName || '';
 
   // 학생 데이터
   const [student, setStudent] = useState<SheetStudent | null>(null);
@@ -61,11 +61,11 @@ export function StudentProfilePage({ onBack, onNavigate }: StudentProfilePagePro
   // 데이터 로드
   useEffect(() => {
     const loadData = async () => {
-      if (!studentCode || !selectedClass) return;
+      if (!studentCode || !className) return;
 
       setLoading(true);
       try {
-        const data = await getStudent(studentCode, selectedClass);
+        const data = await getStudent(studentCode, className);
         if (data) {
           setStudent(data);
           setTitle(data.title || '');
@@ -83,7 +83,7 @@ export function StudentProfilePage({ onBack, onNavigate }: StudentProfilePagePro
     };
 
     loadData();
-  }, [studentCode, selectedClass]);
+  }, [studentCode, className]);
 
   // 보유한 아이템인지 확인
   const isOwned = (code: string): boolean => {
@@ -96,13 +96,13 @@ export function StudentProfilePage({ onBack, onNavigate }: StudentProfilePagePro
 
   // 저장
   const handleSave = async () => {
-    if (!studentCode || !selectedClass) return;
+    if (!studentCode || !className) return;
 
     setSaving(true);
     setMessage(null);
 
     try {
-      const success = await saveProfile(selectedClass, studentCode, {
+      const success = await saveProfile(className, studentCode, {
         emojiCode,
         title: title.slice(0, 5),
         titleColorCode,
@@ -200,7 +200,7 @@ export function StudentProfilePage({ onBack, onNavigate }: StudentProfilePagePro
             </span>
           )}
           <span className={`text-xl font-bold ${nameEffectClass}`}>
-            {studentName}
+            {student?.name || '학생'}
           </span>
         </div>
 
