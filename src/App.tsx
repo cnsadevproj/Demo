@@ -236,19 +236,23 @@ function DemoMode({ onExitDemo }: { onExitDemo: () => void }) {
   );
 }
 
-// 교사 모드 네비게이션 메뉴
-function TeacherNavigationMenu({ currentPage, onNavigate }: {
+// 교사 모드 사이드바 메뉴 (항상 표시)
+function TeacherSidebarMenu({ currentPage, onNavigate }: {
   currentPage: string;
   onNavigate: (page: string) => void;
 }) {
-  const [isOpen, setIsOpen] = useState(true); // 기본 표시 상태
   const { classes, selectedClass, selectClass } = useAuth();
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   // 활성화된 클래스 목록
   const activeClasses = classes.filter(c => c.active !== false);
 
-  const teacherPages = [
-    { id: 'teacher-dashboard', label: '학생 관리', emoji: '👨‍🎓' },
+  // 메인 페이지 (기존 탭들을 메뉴로)
+  const mainPages = [
+    { id: 'setup', label: '초기설정', emoji: '⚙️' },
+    { id: 'students', label: '학생목록', emoji: '👨‍🎓' },
+    { id: 'wishes', label: '소원의돌', emoji: '⭐' },
+    { id: 'shop', label: '상점', emoji: '🛒' },
   ];
 
   const gamePages = [
@@ -260,155 +264,154 @@ function TeacherNavigationMenu({ currentPage, onNavigate }: {
   const demoPages = [
     { id: 'demo-admin', label: '관리자 데모', emoji: '⚙️' },
     { id: 'demo-report', label: '리포트 데모', emoji: '📊' },
-    { id: 'demo-student', label: '학생 데모', emoji: '👨‍🎓' },
-    { id: 'team-assign', label: '팀 배정', emoji: '👥' },
-    { id: 'snapshot', label: '스냅샷', emoji: '📸' },
   ];
 
   // 클래스 선택 후 페이지 이동
   const handleClassSelect = (className: string, targetPage: string) => {
     selectClass(className);
     onNavigate(targetPage);
-    setIsOpen(false);
   };
 
-  return (
-    <>
+  if (isCollapsed) {
+    return (
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 z-50 px-6 py-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all"
+        onClick={() => setIsCollapsed(false)}
+        className="fixed bottom-6 right-6 z-50 px-4 py-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all"
       >
-        {isOpen ? '✕ 닫기' : '📱 메뉴'}
+        📱
       </button>
+    );
+  }
 
-      {isOpen && (
-        <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setIsOpen(false)}>
-          <div
-            className="fixed right-0 top-0 bottom-0 w-80 bg-white shadow-2xl overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
+  return (
+    <div className="fixed right-0 top-0 bottom-0 w-64 bg-white shadow-xl overflow-y-auto z-40 border-l">
+      <div className="p-4">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-bold text-gray-800">교사 메뉴</h2>
+          <button
+            onClick={() => setIsCollapsed(true)}
+            className="p-1 hover:bg-gray-100 rounded text-gray-500"
           >
-            <div className="p-6">
-              <h2 className="mb-2">교사 메뉴</h2>
-              <p className="text-sm text-gray-500 mb-6">페이지를 이동합니다</p>
+            ✕
+          </button>
+        </div>
 
-              {/* 교사 페이지 */}
-              <div className="mb-6">
-                <h3 className="mb-3 text-blue-600">📚 메인 페이지</h3>
-                <div className="space-y-2">
-                  {teacherPages.map((page) => (
-                    <button
-                      key={page.id}
-                      onClick={() => {
-                        onNavigate(page.id);
-                        setIsOpen(false);
-                      }}
-                      className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${
-                        currentPage === page.id
-                          ? 'bg-blue-100 text-blue-900'
-                          : 'hover:bg-gray-100'
-                      }`}
-                    >
-                      {page.emoji} {page.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+        {/* 현재 선택된 학급 */}
+        <div className="mb-4 p-2 bg-blue-50 rounded-lg text-sm">
+          <span className="text-gray-600">선택된 학급: </span>
+          <span className="font-medium text-blue-700">{selectedClass || '없음'}</span>
+        </div>
 
-              {/* 활성화된 클래스별 관리 */}
-              {activeClasses.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="mb-3 text-amber-600">🏫 클래스별 관리</h3>
-                  <div className="space-y-3">
-                    {activeClasses.map((classInfo) => (
-                      <div key={classInfo.name} className="border rounded-lg p-3">
-                        <div className="font-medium text-sm mb-2 flex items-center justify-between">
-                          <span>📚 {classInfo.name}</span>
-                          {selectedClass === classInfo.name && (
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">선택됨</span>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleClassSelect(classInfo.name, 'game-teams')}
-                            className="flex-1 text-xs px-2 py-1.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-700"
-                          >
-                            👥 팀 관리
-                          </button>
-                          <button
-                            onClick={() => handleClassSelect(classInfo.name, 'battle-game')}
-                            className="flex-1 text-xs px-2 py-1.5 rounded bg-red-50 hover:bg-red-100 text-red-700"
-                          >
-                            ⚔️ 배틀
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 쿠키 배틀 게임 (클래스 선택 없이) */}
-              <div className="mb-6">
-                <h3 className="mb-3 text-amber-600">🍪 쿠키 배틀</h3>
-                <p className="text-xs text-gray-500 mb-2">현재 선택: {selectedClass || '없음'}</p>
-                <div className="space-y-2">
-                  {gamePages.map((page) => (
-                    <button
-                      key={page.id}
-                      onClick={() => {
-                        onNavigate(page.id);
-                        setIsOpen(false);
-                      }}
-                      className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${
-                        currentPage === page.id
-                          ? 'bg-amber-100 text-amber-900'
-                          : 'hover:bg-gray-100'
-                      }`}
-                    >
-                      {page.emoji} {page.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 데모/추가 페이지 */}
-              <div className="mb-6">
-                <h3 className="mb-3 text-purple-600">🧪 추가 페이지 (데모)</h3>
-                <div className="space-y-2">
-                  {demoPages.map((page) => (
-                    <button
-                      key={page.id}
-                      onClick={() => {
-                        onNavigate(page.id);
-                        setIsOpen(false);
-                      }}
-                      className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${
-                        currentPage === page.id
-                          ? 'bg-purple-100 text-purple-900'
-                          : 'hover:bg-gray-100'
-                      }`}
-                    >
-                      {page.emoji} {page.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+        {/* 메인 페이지 */}
+        <div className="mb-4">
+          <h3 className="mb-2 text-xs font-semibold text-gray-500 uppercase">메인</h3>
+          <div className="space-y-1">
+            {mainPages.map((page) => (
+              <button
+                key={page.id}
+                onClick={() => onNavigate(page.id)}
+                className={`w-full text-left px-3 py-2 rounded-lg transition-colors text-sm ${
+                  currentPage === page.id
+                    ? 'bg-blue-100 text-blue-900 font-medium'
+                    : 'hover:bg-gray-100 text-gray-700'
+                }`}
+              >
+                {page.emoji} {page.label}
+              </button>
+            ))}
           </div>
         </div>
-      )}
-    </>
+
+        {/* 쿠키 배틀 */}
+        <div className="mb-4">
+          <h3 className="mb-2 text-xs font-semibold text-gray-500 uppercase">쿠키 배틀</h3>
+          <div className="space-y-1">
+            {gamePages.map((page) => (
+              <button
+                key={page.id}
+                onClick={() => onNavigate(page.id)}
+                className={`w-full text-left px-3 py-2 rounded-lg transition-colors text-sm ${
+                  currentPage === page.id
+                    ? 'bg-amber-100 text-amber-900 font-medium'
+                    : 'hover:bg-gray-100 text-gray-700'
+                }`}
+              >
+                {page.emoji} {page.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 클래스별 바로가기 */}
+        {activeClasses.length > 0 && (
+          <div className="mb-4">
+            <h3 className="mb-2 text-xs font-semibold text-gray-500 uppercase">학급 바로가기</h3>
+            <div className="space-y-2">
+              {activeClasses.slice(0, 5).map((classInfo) => (
+                <div key={classInfo.name} className="border rounded-lg p-2">
+                  <div className="text-xs font-medium mb-1 flex items-center justify-between">
+                    <span>{classInfo.name}</span>
+                    {selectedClass === classInfo.name && (
+                      <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">선택</span>
+                    )}
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => handleClassSelect(classInfo.name, 'game-teams')}
+                      className="flex-1 text-xs px-2 py-1 rounded bg-purple-50 hover:bg-purple-100 text-purple-700"
+                    >
+                      팀
+                    </button>
+                    <button
+                      onClick={() => handleClassSelect(classInfo.name, 'battle-game')}
+                      className="flex-1 text-xs px-2 py-1 rounded bg-red-50 hover:bg-red-100 text-red-700"
+                    >
+                      배틀
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 데모 페이지 */}
+        <div className="mb-4">
+          <h3 className="mb-2 text-xs font-semibold text-gray-500 uppercase">데모</h3>
+          <div className="space-y-1">
+            {demoPages.map((page) => (
+              <button
+                key={page.id}
+                onClick={() => onNavigate(page.id)}
+                className={`w-full text-left px-3 py-2 rounded-lg transition-colors text-sm ${
+                  currentPage === page.id
+                    ? 'bg-purple-100 text-purple-900 font-medium'
+                    : 'hover:bg-gray-100 text-gray-700'
+                }`}
+              >
+                {page.emoji} {page.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
 // 교사 모드 컴포넌트
 function TeacherMode({ onLogout }: { onLogout: () => void }) {
-  const [currentPage, setCurrentPage] = useState('teacher-dashboard');
+  const [currentPage, setCurrentPage] = useState('setup');
 
   const renderPage = () => {
     switch (currentPage) {
-      case 'teacher-dashboard':
-        return <TeacherDashboard onLogout={onLogout} />;
+      // 메인 페이지 (탭별로 분리)
+      case 'setup':
+      case 'students':
+      case 'wishes':
+      case 'shop':
+        return <TeacherDashboard onLogout={onLogout} activeTab={currentPage} onTabChange={setCurrentPage} />;
       // 쿠키 배틀 게임 페이지
       case 'game-teams':
         return <GameTeamManager onNavigate={setCurrentPage} />;
@@ -421,22 +424,16 @@ function TeacherMode({ onLogout }: { onLogout: () => void }) {
         return <DemoAdmin />;
       case 'demo-report':
         return <DemoAdminReport />;
-      case 'demo-student':
-        return <DemoStudent />;
-      case 'team-assign':
-        return <AdminTeamAssign onNavigate={setCurrentPage} />;
-      case 'snapshot':
-        return <AdminSnapshot onNavigate={setCurrentPage} />;
       default:
-        return <TeacherDashboard onLogout={onLogout} />;
+        return <TeacherDashboard onLogout={onLogout} activeTab="setup" onTabChange={setCurrentPage} />;
     }
   };
 
   return (
-    <>
+    <div className="mr-64"> {/* 사이드바 공간 확보 */}
       {renderPage()}
-      <TeacherNavigationMenu currentPage={currentPage} onNavigate={setCurrentPage} />
-    </>
+      <TeacherSidebarMenu currentPage={currentPage} onNavigate={setCurrentPage} />
+    </div>
   );
 }
 
