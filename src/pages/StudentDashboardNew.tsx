@@ -40,6 +40,12 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // 로그아웃 핸들러
+  const handleLogout = () => {
+    logout();
+    onLogout?.();
+  };
+
   // 학생 정보 로드
   useEffect(() => {
     if (studentCode && studentClassName) {
@@ -76,12 +82,6 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     }
   };
 
-  // 로그아웃 핸들러
-  const handleLogout = () => {
-    logout();
-    onLogout?.();
-  };
-
   // 날짜별로 잔디 데이터 집계 (같은 날짜의 여러 새로고침을 합산)
   const grassByDate = grassData.reduce((acc, g) => {
     const existing = acc.get(g.date);
@@ -112,6 +112,10 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
           <div className="text-center">
             <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-blue-600" />
             <p className="text-gray-600">학생 정보를 불러오는 중...</p>
+            <Button onClick={handleLogout} variant="outline" size="sm" className="mt-4">
+              <LogOut className="w-4 h-4 mr-2" />
+              로그아웃
+            </Button>
           </div>
         </div>
       </PageLayout>
@@ -126,13 +130,19 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
           <CardContent className="p-6">
             <div className="flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <div>
+              <div className="flex-1">
                 <p className="text-red-900 font-medium">오류가 발생했습니다</p>
                 <p className="text-sm text-red-700 mt-1">{error}</p>
-                <Button onClick={loadStudentData} className="mt-4" size="sm">
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  다시 시도
-                </Button>
+                <div className="flex gap-2 mt-4">
+                  <Button onClick={loadStudentData} size="sm">
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    다시 시도
+                  </Button>
+                  <Button onClick={handleLogout} variant="outline" size="sm">
+                    <LogOut className="w-4 h-4 mr-2" />
+                    로그아웃
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>
