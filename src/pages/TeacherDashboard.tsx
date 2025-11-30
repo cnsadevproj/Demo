@@ -493,71 +493,62 @@ export function TeacherDashboard({ onLogout, activeTab: propActiveTab, onTabChan
   return (
     <PageLayout title="교사 대시보드" role="admin">
       <div className="space-y-4">
-        {/* 헤더 + 클래스 선택 */}
-        <Card className="p-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
+        {/* 헤더 + 클래스 선택 - 개선된 디자인 */}
+        <Card className="p-4 bg-white border-2 border-blue-200">
           <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-4 flex-wrap">
-              <Select value={selectedClass || ''} onValueChange={handleClassSelect}>
-                <SelectTrigger className="w-48 bg-white/20 border-white/30 text-white">
-                  <SelectValue placeholder="클래스 선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  {classes.map((cls) => (
-                    <SelectItem key={cls.name} value={cls.name}>
-                      {cls.name} {cls.studentCount !== undefined ? `(${cls.studentCount}명)` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="secondary" size="icon" onClick={refreshClasses}>
-                <RefreshCw className="w-4 h-4" />
-              </Button>
+            {/* 학급 선택 영역 */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-lg">
+                <span className="text-sm font-medium text-blue-700">학급:</span>
+                <Select value={selectedClass || ''} onValueChange={handleClassSelect}>
+                  <SelectTrigger className="w-52 bg-white border-blue-300">
+                    <SelectValue placeholder="학급을 선택하세요" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classes.map((cls) => (
+                      <SelectItem key={cls.name} value={cls.name}>
+                        {cls.name} {cls.studentCount !== undefined ? `(${cls.studentCount}명)` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="icon" onClick={refreshClasses} className="border-blue-300">
+                  <RefreshCw className="w-4 h-4 text-blue-600" />
+                </Button>
+              </div>
+
               {selectedClass && (
                 <Button
-                  variant="secondary"
+                  variant="outline"
                   size="sm"
                   onClick={handleRefreshCookies}
                   disabled={isRefreshingCookies}
+                  className="border-amber-300 text-amber-700 hover:bg-amber-50"
                 >
                   {isRefreshingCookies ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cookie className="w-4 h-4" />}
-                  <span className="ml-1 hidden sm:inline">잔디 새로고침</span>
+                  <span className="ml-1">잔디 새로고침</span>
                 </Button>
               )}
             </div>
-            <div className="flex items-center gap-2">
+
+            {/* 통계 및 로그아웃 */}
+            <div className="flex items-center gap-3">
               {selectedClass && loadedCount > 0 && (
-                <div className="flex gap-3 text-sm mr-4">
-                  <span>총 {totalCookies}</span>
-                  <span className="text-green-200">남은 {totalRemainingCookies}</span>
+                <div className="flex gap-3 text-sm px-3 py-1 bg-gray-100 rounded-lg">
+                  <span className="text-gray-700">총 <strong className="text-amber-600">{totalCookies}</strong></span>
+                  <span className="text-gray-700">남은 <strong className="text-green-600">{totalRemainingCookies}</strong></span>
                 </div>
               )}
-              <Button variant="secondary" size="sm" onClick={handleLogout}>
-                <LogOut className="w-4 h-4" />
+              <Button variant="outline" size="sm" onClick={handleLogout} className="border-red-200 text-red-600 hover:bg-red-50">
+                <LogOut className="w-4 h-4 mr-1" />
+                로그아웃
               </Button>
             </div>
           </div>
         </Card>
 
-        {/* 메인 탭 메뉴 */}
+        {/* 탭 컨텐츠 (탭 버튼 제거 - 사이드바에서 전환) */}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="setup" className="flex items-center gap-1">
-              <Settings className="w-4 h-4" />
-              <span className="hidden sm:inline">초기설정</span>
-            </TabsTrigger>
-            <TabsTrigger value="students" className="flex items-center gap-1">
-              <Users className="w-4 h-4" />
-              <span className="hidden sm:inline">학생</span>
-            </TabsTrigger>
-            <TabsTrigger value="wishes" className="flex items-center gap-1">
-              <Star className="w-4 h-4" />
-              <span className="hidden sm:inline">소원</span>
-            </TabsTrigger>
-            <TabsTrigger value="shop" className="flex items-center gap-1">
-              <ShoppingBag className="w-4 h-4" />
-              <span className="hidden sm:inline">상점</span>
-            </TabsTrigger>
-          </TabsList>
 
           {/* 학생 관리 탭 */}
           <TabsContent value="students" className="space-y-4 mt-4">
