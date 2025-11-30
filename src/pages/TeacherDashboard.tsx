@@ -41,16 +41,16 @@ import { StudentRankingTable, convertToRankedStudents } from '../components/Stud
 
 interface TeacherDashboardProps {
   onLogout?: () => void;
+  activeTab?: string;
+  onTabChange?: (tab: string) => void;
 }
 
-export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
+export function TeacherDashboard({ onLogout, activeTab: propActiveTab, onTabChange }: TeacherDashboardProps) {
   const {
     apiKey,
     classes,
     selectedClass,
     selectClass,
-    getClassStudents,
-    saveClassStudents,
     refreshClasses,
     logout,
   } = useAuth();
@@ -316,46 +316,36 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     }
   };
 
-  // 선택된 클래스 변경 시 학생 목록 로드 + 자동으로 정보 불러오기
+  // 선택된 클래스 변경 시 학생 목록 로드 (Sheets에서만)
   useEffect(() => {
     if (selectedClass) {
       const loadClassData = async () => {
-        // 먼저 로컬 저장된 학생 목록 확인
-        const savedStudents = getClassStudents(selectedClass);
+        // Sheets에서 학생 목록 로드
+        const response = await getClassStudentsFromSheets(selectedClass);
+        if (response.success && response.data) {
+          // Sheets에서 가져온 학생 목록으로 업데이트
+          const sheetsStudents: StoredStudent[] = response.data.map((s: SheetsStudentData) => ({
+            number: s.number,
+            name: s.name,
+            code: s.code
+          }));
+          setStudents(sheetsStudents);
 
-        // API 키가 없으면 Sheets에서 자동으로 학생 목록 로드
-        if (!apiKey) {
-          const response = await getClassStudentsFromSheets(selectedClass);
-          if (response.success && response.data) {
-            // Sheets에서 가져온 학생 목록으로 업데이트
-            const sheetsStudents: StoredStudent[] = response.data.map((s: SheetsStudentData) => ({
-              number: s.number,
-              name: s.name,
-              code: s.code
-            }));
-            setStudents(sheetsStudents);
-
-            // 동시에 상세 정보도 설정
-            const infoMap = new Map<string, StudentInfo | null>();
-            response.data.forEach((student: SheetsStudentData) => {
-              infoMap.set(student.code, {
-                cookie: student.cookie,
-                usedCookie: student.usedCookie,
-                totalCookie: student.totalCookie,
-                badges: student.badges || {}
-              });
+          // 동시에 상세 정보도 설정
+          const infoMap = new Map<string, StudentInfo | null>();
+          response.data.forEach((student: SheetsStudentData) => {
+            infoMap.set(student.code, {
+              cookie: student.cookie,
+              usedCookie: student.usedCookie,
+              totalCookie: student.totalCookie,
+              badges: student.badges || {}
             });
-            setStudentInfoMap(infoMap);
-            return;
-          }
-        }
-
-        // API 키가 있거나 Sheets 로드 실패 시 기존 방식
-        setStudents(savedStudents);
-        setStudentInfoMap(new Map());
-
-        if (savedStudents.length > 0) {
-          loadStudentInfoAuto(savedStudents);
+          });
+          setStudentInfoMap(infoMap);
+        } else {
+          // Sheets 로드 실패 시 빈 배열로 초기화
+          setStudents([]);
+          setStudentInfoMap(new Map());
         }
       };
 
@@ -382,22 +372,21 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     try {
       const parsedStudents = await parseCsvFile(file);
       setStudents(parsedStudents);
-      saveClassStudents(selectedClass, parsedStudents);
 
-      // Google Sheets에도 저장
+      // Google Sheets에 저장 (로컬 저장 제거)
       const sheetsResult = await saveStudentsToSheets(selectedClass, parsedStudents);
       if (sheetsResult.success) {
-        setUploadSuccess(`${parsedStudents.length}명의 학생이 등록되고 Google Sheets에 저장되었습니다.`);
+        setUploadSuccess(`${parsedStudents.length}명의 학생이 Google Sheets에 저장되었습니다.`);
         toast.success(`${parsedStudents.length}명 학생 목록이 Sheets에 저장됨`);
       } else {
-        setUploadSuccess(`${parsedStudents.length}명의 학생이 등록되었습니다. (Sheets 저장 실패: ${sheetsResult.message})`);
+        setUploadError(`Sheets 저장 실패: ${sheetsResult.message}`);
         toast.error('Sheets 저장 실패: ' + sheetsResult.message);
       }
 
       setStudentInfoMap(new Map());
 
       // 자동으로 학생 정보 불러오기
-      if (parsedStudents.length > 0) {
+      if (parsedStudents.length > 0 && sheetsResult.success) {
         loadStudentInfoAuto(parsedStudents);
       }
     } catch (error) {
@@ -457,8 +446,8 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     if (!selectedClass) return;
     if (window.confirm('학생 목록을 초기화하시겠습니까?')) {
       setStudents([]);
-      saveClassStudents(selectedClass, []);
       setStudentInfoMap(new Map());
+      // TODO: Sheets에서도 학생 삭제하려면 별도 API 호출 필요
     }
   };
 
@@ -493,20 +482,13 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   // 랭킹 데이터 계산
   const rankedStudents = convertToRankedStudents(studentInfoMap, students);
 
-  // 메인 탭 상태 - 학생 데이터 유무에 따라 초기 탭 결정
-  const [activeTab, setActiveTab] = useState('setup');
-
-  // 학생 데이터 유무에 따라 초기 탭 설정
-  useEffect(() => {
-    // 학급이 선택되어 있고, 학생이 있으면 students 탭으로
-    // 학급이 선택되어 있고, 학생이 없으면 setup 탭으로
-    // 학급 목록이 없으면 setup 탭으로
-    if (selectedClass && students.length > 0) {
-      setActiveTab('students');
-    } else if (classes.length === 0 || !selectedClass || students.length === 0) {
-      setActiveTab('setup');
+  // 탭 상태 - props에서 받거나 내부 상태 사용
+  const activeTab = propActiveTab || 'setup';
+  const handleTabChange = (tab: string) => {
+    if (onTabChange) {
+      onTabChange(tab);
     }
-  }, [selectedClass, students.length, classes.length]);
+  };
 
   return (
     <PageLayout title="교사 대시보드" role="admin">
@@ -557,7 +539,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
         </Card>
 
         {/* 메인 탭 메뉴 */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="setup" className="flex items-center gap-1">
               <Settings className="w-4 h-4" />
