@@ -35,6 +35,7 @@ import {
   Star,
   Heart,
   Gift,
+  AlertCircle,
 } from 'lucide-react';
 import { StudentRankingTable, convertToRankedStudents } from '../components/StudentRankingTable';
 
