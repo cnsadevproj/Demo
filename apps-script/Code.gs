@@ -347,12 +347,12 @@ function getAllClassesFromListSheet() {
     return { success: true, data: [] };
   }
 
-  const data = listSheet.getRange(2, 1, lastRow - 1, 4).getValues();
+  const data = listSheet.getRange(2, 1, lastRow - 1, 4).getDisplayValues(); // getDisplayValues로 변경 (날짜 문제 해결)
   const classList = data.filter(row => row[0]).map(row => ({
     name: String(row[0]),
     studentCount: Number(row[1]) || 0,
     lastUpdate: String(row[2] || ''),
-    active: row[3] === 1 || row[3] === true
+    active: row[3] === '1' || row[3] === 'TRUE' || row[3] === 'true'
   }));
 
   return { success: true, data: classList };
