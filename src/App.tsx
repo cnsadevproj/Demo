@@ -241,7 +241,7 @@ function TeacherNavigationMenu({ currentPage, onNavigate }: {
   currentPage: string;
   onNavigate: (page: string) => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true); // 기본 표시 상태
   const { classes, selectedClass, selectClass } = useAuth();
 
   // 활성화된 클래스 목록
