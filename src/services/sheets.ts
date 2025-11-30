@@ -40,12 +40,14 @@ export interface SheetsTeamData {
   defense: number;
 }
 
-// 잔디 데이터 타입
+// 잔디 데이터 타입 (열 기반 구조)
 export interface SheetsGrassData {
-  date: string;
+  date: string;           // 기본 날짜 (2024-11-28)
+  dateColumn?: string;    // 열 헤더 (2024-11-28(2))
   studentCode: string;
-  completed: boolean;
-  missionType: 'team' | 'personal';
+  studentName?: string;
+  cookieChange: number;   // 해당 날짜의 쿠키 변화량
+  refreshCount?: number;  // 새로고침 횟수 (같은 날 2회 이상이면 진한 잔디)
 }
 
 // 스냅샷 데이터 타입
@@ -215,4 +217,30 @@ export async function findStudentClass(
     }
   }
   return null;
+}
+
+// ========================================
+// 학급 가져오기 및 시트 생성 (교사용)
+// ========================================
+
+// 클래스룸에서 학급 목록 가져오기 (API에서 import)
+export interface ImportClassroomsResult {
+  totalClasses: number;
+  activeClasses: number;
+  message: string;
+}
+
+export async function importClassroomsFromApi(): Promise<SheetsResponse<ImportClassroomsResult>> {
+  return callSheetsApi('importClassrooms');
+}
+
+// 활성화된 학급의 시트 생성
+export interface CreateSheetsResult {
+  createdCount: number;
+  createdClasses: string[];
+  message: string;
+}
+
+export async function createSheetsForActivatedClasses(): Promise<SheetsResponse<CreateSheetsResult>> {
+  return callSheetsApi('createActivatedSheets');
 }
