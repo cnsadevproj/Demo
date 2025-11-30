@@ -8,7 +8,7 @@ import { Progress } from '../components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useAuth } from '../contexts/AuthContext';
 import { getMultipleStudentsInfo, StudentInfo, StoredStudent } from '../services/api';
-import { getClassStudents as getClassStudentsFromSheets, SheetsStudentData, setClassActivation, getClassListFromSheets, SheetsClassInfo } from '../services/sheets';
+import { getClassStudents as getClassStudentsFromSheets, SheetsStudentData, setClassActivation, getClassListFromSheets, SheetsClassInfo, importClassroomsFromApi, createSheetsForActivatedClasses } from '../services/sheets';
 import { getWishes, grantWish, deleteWish, SheetWish, refreshCookies } from '../services/sheetsApi';
 import { getShopItems, SheetShopItem } from '../services/sheetsApi';
 import { toast } from 'sonner@2.0.3';
@@ -77,6 +77,10 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
   // 쿠키 새로고침 상태
   const [isRefreshingCookies, setIsRefreshingCookies] = useState(false);
+
+  // 클래스룸 가져오기 상태
+  const [isImportingClassrooms, setIsImportingClassrooms] = useState(false);
+  const [isCreatingSheets, setIsCreatingSheets] = useState(false);
 
   // 학급 활성화 상태 로드 (모든 학급 포함)
   useEffect(() => {
@@ -194,6 +198,54 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       console.error('활성화 상태 변경 실패:', error);
     } finally {
       setActivationLoading(null);
+    }
+  };
+
+  // 클래스룸에서 학급 목록 가져오기
+  const handleImportClassrooms = async () => {
+    setIsImportingClassrooms(true);
+    try {
+      const response = await importClassroomsFromApi();
+      if (response.success && response.data) {
+        toast.success(response.data.message);
+        // 학급 목록 새로고침
+        const classListResponse = await getClassListFromSheets();
+        if (classListResponse.success && classListResponse.data) {
+          setAllSheetsClasses(classListResponse.data);
+          const activationMap: Record<string, boolean> = {};
+          classListResponse.data.forEach((cls: SheetsClassInfo) => {
+            activationMap[cls.name] = cls.active !== false;
+          });
+          setClassActivationMap(activationMap);
+        }
+      } else {
+        toast.error(response.message || '클래스룸 가져오기 실패');
+      }
+    } catch (error) {
+      console.error('클래스룸 가져오기 실패:', error);
+      toast.error('클래스룸 가져오기 중 오류가 발생했습니다');
+    } finally {
+      setIsImportingClassrooms(false);
+    }
+  };
+
+  // 활성화된 학급 시트 생성
+  const handleCreateSheets = async () => {
+    setIsCreatingSheets(true);
+    try {
+      const response = await createSheetsForActivatedClasses();
+      if (response.success && response.data) {
+        toast.success(response.data.message);
+        // 학급 목록 새로고침
+        await refreshClasses();
+      } else {
+        toast.error(response.message || '시트 생성 실패');
+      }
+    } catch (error) {
+      console.error('시트 생성 실패:', error);
+      toast.error('시트 생성 중 오류가 발생했습니다');
+    } finally {
+      setIsCreatingSheets(false);
     }
   };
 
@@ -400,161 +452,81 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   // 랭킹 데이터 계산
   const rankedStudents = convertToRankedStudents(studentInfoMap, students);
 
+  // 메인 탭 상태
+  const [activeTab, setActiveTab] = useState('students');
+
   return (
     <PageLayout title="교사 대시보드" role="admin">
-      <div className="space-y-6">
-        {/* 헤더 */}
-        <Card className="p-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-white mb-2">다했니? 학습 관리</h2>
-              <p className="text-blue-100">클래스별 학생 현황을 관리합니다</p>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleLogout}
-              className="flex items-center gap-2"
-            >
-              <LogOut className="w-4 h-4" />
-              로그아웃
-            </Button>
-          </div>
-        </Card>
-
-        {/* 클래스 선택 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              클래스 선택
-            </CardTitle>
-            <CardDescription>
-              관리할 클래스를 선택하세요
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      <div className="space-y-4">
+        {/* 헤더 + 클래스 선택 */}
+        <Card className="p-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-4 flex-wrap">
               <Select value={selectedClass || ''} onValueChange={handleClassSelect}>
-                <SelectTrigger className="w-64">
-                  <SelectValue placeholder="클래스를 선택하세요" />
+                <SelectTrigger className="w-48 bg-white/20 border-white/30 text-white">
+                  <SelectValue placeholder="클래스 선택" />
                 </SelectTrigger>
                 <SelectContent>
                   {classes.map((cls) => (
                     <SelectItem key={cls.name} value={cls.name}>
-                      {cls.name} {cls.cookies !== undefined ? `(${cls.cookies} 쿠키)` : cls.studentCount !== undefined ? `(${cls.studentCount}명)` : ''}
+                      {cls.name} {cls.studentCount !== undefined ? `(${cls.studentCount}명)` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="icon" onClick={refreshClasses}>
+              <Button variant="secondary" size="icon" onClick={refreshClasses}>
                 <RefreshCw className="w-4 h-4" />
               </Button>
               {selectedClass && (
                 <Button
-                  variant="outline"
+                  variant="secondary"
+                  size="sm"
                   onClick={handleRefreshCookies}
                   disabled={isRefreshingCookies}
-                  className="flex items-center gap-2"
                 >
-                  {isRefreshingCookies ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Cookie className="w-4 h-4" />
-                  )}
-                  쿠키 새로고침
+                  {isRefreshingCookies ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cookie className="w-4 h-4" />}
+                  <span className="ml-1 hidden sm:inline">잔디 새로고침</span>
                 </Button>
               )}
             </div>
-
-            {selectedClass && loadedCount > 0 && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="text-sm text-gray-500">총 쿠키</p>
-                    <p className="text-xl font-bold">{totalCookies}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">남은 쿠키</p>
-                    <p className="text-xl font-bold text-green-600">{totalRemainingCookies}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">사용한 쿠키</p>
-                    <p className="text-xl font-bold text-orange-600">{totalUsedCookies}</p>
-                  </div>
+            <div className="flex items-center gap-2">
+              {selectedClass && loadedCount > 0 && (
+                <div className="flex gap-3 text-sm mr-4">
+                  <span>총 {totalCookies}</span>
+                  <span className="text-green-200">남은 {totalRemainingCookies}</span>
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* 학급 활성화 관리 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="w-5 h-5" />
-              학급 활성화 관리
-            </CardTitle>
-            <CardDescription>
-              이번 학기에 사용할 학급만 활성화하세요. 비활성 학급은 시트가 생성되지 않습니다.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {allSheetsClasses.map((cls) => {
-                const isActive = classActivationMap[cls.name] !== false;
-                const isLoading = activationLoading === cls.name;
-                return (
-                  <div
-                    key={cls.name}
-                    className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
-                      isActive
-                        ? 'bg-green-50 border-green-200'
-                        : 'bg-gray-50 border-gray-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className={`font-medium ${isActive ? 'text-green-700' : 'text-gray-500'}`}>
-                        {cls.name}
-                      </span>
-                      <Badge variant={isActive ? 'default' : 'secondary'} className="text-xs">
-                        {isActive ? '활성' : '비활성'}
-                      </Badge>
-                      {cls.studentCount !== undefined && (
-                        <span className="text-xs text-gray-400">({cls.studentCount}명)</span>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => handleToggleActivation(cls.name)}
-                      disabled={isLoading}
-                      className={`p-1 rounded-full transition-colors ${
-                        isActive
-                          ? 'text-green-600 hover:bg-green-100'
-                          : 'text-gray-400 hover:bg-gray-200'
-                      }`}
-                    >
-                      {isLoading ? (
-                        <Loader2 className="w-6 h-6 animate-spin" />
-                      ) : isActive ? (
-                        <ToggleRight className="w-6 h-6" />
-                      ) : (
-                        <ToggleLeft className="w-6 h-6" />
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
+              )}
+              <Button variant="secondary" size="sm" onClick={handleLogout}>
+                <LogOut className="w-4 h-4" />
+              </Button>
             </div>
-            {allSheetsClasses.length === 0 && (
-              <p className="text-center text-gray-500 py-4">
-                등록된 학급이 없습니다. Google Sheets에서 학급 목록을 불러오세요.
-              </p>
-            )}
-          </CardContent>
+          </div>
         </Card>
 
-        {/* 학생 목록/랭킹 */}
-        {selectedClass && students.length > 0 && (
+        {/* 메인 탭 메뉴 */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="students" className="flex items-center gap-1">
+              <Users className="w-4 h-4" />
+              <span className="hidden sm:inline">학생</span>
+            </TabsTrigger>
+            <TabsTrigger value="classes" className="flex items-center gap-1">
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">학급설정</span>
+            </TabsTrigger>
+            <TabsTrigger value="wishes" className="flex items-center gap-1">
+              <Star className="w-4 h-4" />
+              <span className="hidden sm:inline">소원</span>
+            </TabsTrigger>
+            <TabsTrigger value="shop" className="flex items-center gap-1">
+              <ShoppingBag className="w-4 h-4" />
+              <span className="hidden sm:inline">상점</span>
+            </TabsTrigger>
+          </TabsList>
+
+          {/* 학생 관리 탭 */}
+          <TabsContent value="students" className="space-y-4 mt-4">
+            {selectedClass && students.length > 0 && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -754,24 +726,205 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           </Card>
         )}
 
-        {/* 학생이 없을 때 안내 */}
+        {/* 학생이 없을 때 CSV 업로드 UI */}
         {selectedClass && students.length === 0 && (
-          <Card className="p-12 text-center">
-            <FileSpreadsheet className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-            <h3 className="text-lg font-medium mb-2">학생 정보를 불러오는 중...</h3>
-            <p className="text-gray-500 mb-4">
-              Google Sheets에서 학생 목록을 불러오고 있습니다.<br />
-              학생 정보가 표시되지 않으면 Sheets에 학생 데이터가 있는지 확인해주세요.
-            </p>
-            <Button onClick={() => window.location.reload()} variant="outline">
-              <RefreshCw className="w-4 h-4 mr-2" />
-              새로고침
-            </Button>
-          </Card>
-        )}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="w-5 h-5" />
+                학생 목록 업로드
+              </CardTitle>
+              <CardDescription>
+                CSV 파일로 학생 목록을 업로드하세요. 시트에 학생이 없으면 직접 추가할 수 있습니다.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* 현재 상태 안내 */}
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-amber-800">학생 데이터 없음</p>
+                    <p className="text-sm text-amber-700">
+                      Google Sheets의 "{selectedClass}_학생" 시트에 데이터가 없습니다.
+                      CSV 파일을 업로드하거나 Sheets에서 직접 학생을 추가해주세요.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
-        {/* 소원의 돌 관리 (학급 선택 시) */}
-        {selectedClass && (
+              {/* CSV 업로드 영역 */}
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                <FileSpreadsheet className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                <p className="mb-4 text-gray-600">CSV 파일을 선택하여 학생 목록을 업로드하세요</p>
+                <div className="flex justify-center gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={downloadCsvTemplate}
+                    className="flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    템플릿 다운로드
+                  </Button>
+                  <Button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2"
+                  >
+                    <Upload className="w-4 h-4" />
+                    CSV 업로드
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </div>
+              </div>
+
+              {/* 업로드 결과 메시지 */}
+              {uploadError && (
+                <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-lg">
+                  <XCircle className="w-5 h-5" />
+                  {uploadError}
+                </div>
+              )}
+              {uploadSuccess && (
+                <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-lg">
+                  <CheckCircle className="w-5 h-5" />
+                  {uploadSuccess}
+                </div>
+              )}
+
+              {/* 새로고침 버튼 */}
+              <div className="text-center pt-4">
+                <Button onClick={() => window.location.reload()} variant="outline">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  시트에서 다시 불러오기
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+            )}
+          </TabsContent>
+
+          {/* 학급 설정 탭 */}
+          <TabsContent value="classes" className="space-y-4 mt-4">
+            {/* 클래스룸 가져오기 카드 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileSpreadsheet className="w-5 h-5" />
+                  클래스룸에서 학급 가져오기
+                </CardTitle>
+                <CardDescription>
+                  Google Classroom API에서 학급 목록을 가져오고, 활성화된 학급의 시트를 생성합니다.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    onClick={handleImportClassrooms}
+                    disabled={isImportingClassrooms || isCreatingSheets}
+                    variant="outline"
+                    className="flex items-center gap-2"
+                  >
+                    {isImportingClassrooms ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    1. 학급 목록 가져오기
+                  </Button>
+                  <Button
+                    onClick={handleCreateSheets}
+                    disabled={isImportingClassrooms || isCreatingSheets || allSheetsClasses.length === 0}
+                    className="flex items-center gap-2"
+                  >
+                    {isCreatingSheets ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <FileSpreadsheet className="w-4 h-4" />
+                    )}
+                    2. 활성화된 학급 시트 만들기
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 mt-3">
+                  순서: 목록 가져오기 → 활성화 설정 (아래) → 시트 만들기
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* 학급 활성화 관리 카드 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="w-5 h-5" />
+                  학급 활성화 관리
+                </CardTitle>
+                <CardDescription>
+                  이번 학기에 사용할 학급만 활성화하세요. 비활성 학급은 시트가 생성되지 않습니다.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {allSheetsClasses.map((cls) => {
+                    const isActive = classActivationMap[cls.name] !== false;
+                    const isLoading = activationLoading === cls.name;
+                    return (
+                      <div
+                        key={cls.name}
+                        className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                          isActive
+                            ? 'bg-green-50 border-green-200'
+                            : 'bg-gray-50 border-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium ${isActive ? 'text-green-700' : 'text-gray-500'}`}>
+                            {cls.name}
+                          </span>
+                          <Badge variant={isActive ? 'default' : 'secondary'} className="text-xs">
+                            {isActive ? '활성' : '비활성'}
+                          </Badge>
+                          {cls.studentCount !== undefined && (
+                            <span className="text-xs text-gray-400">({cls.studentCount}명)</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleToggleActivation(cls.name)}
+                          disabled={isLoading}
+                          className={`p-1 rounded-full transition-colors ${
+                            isActive
+                              ? 'text-green-600 hover:bg-green-100'
+                              : 'text-gray-400 hover:bg-gray-200'
+                          }`}
+                        >
+                          {isLoading ? (
+                            <Loader2 className="w-6 h-6 animate-spin" />
+                          ) : isActive ? (
+                            <ToggleRight className="w-6 h-6" />
+                          ) : (
+                            <ToggleLeft className="w-6 h-6" />
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                {allSheetsClasses.length === 0 && (
+                  <p className="text-center text-gray-500 py-4">
+                    등록된 학급이 없습니다. Google Sheets에서 학급 목록을 불러오세요.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* 소원의 돌 탭 */}
+          <TabsContent value="wishes" className="space-y-4 mt-4">
+            {selectedClass ? (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -854,10 +1007,17 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               )}
             </CardContent>
           </Card>
-        )}
+            ) : (
+              <Card className="p-8 text-center">
+                <Star className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                <p className="text-gray-500">클래스를 먼저 선택해주세요</p>
+              </Card>
+            )}
+          </TabsContent>
 
-        {/* 상점 아이템 관리 */}
-        <Card>
+          {/* 상점 탭 */}
+          <TabsContent value="shop" className="space-y-4 mt-4">
+            <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ShoppingBag className="w-5 h-5 text-purple-500" />
@@ -906,8 +1066,10 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 ))}
               </Tabs>
             )}
-          </CardContent>
-        </Card>
+            </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </PageLayout>
   );
