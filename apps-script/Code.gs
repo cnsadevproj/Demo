@@ -393,6 +393,9 @@ function importClassroomsFromApi() {
 
     listSheet.getRange(2, 1, data.length, 4).setValues(data);
 
+    // 학급명 열을 텍스트 형식으로 설정 (1-8 같은 값이 날짜로 변환되는 것 방지)
+    listSheet.getRange(2, 1, data.length, 1).setNumberFormat('@');
+
     // 시트 생성은 하지 않음 (별도로 createActivatedSheets 호출 필요)
     const activeCount = data.filter(row => row[3] === 1).length;
 
