@@ -67,6 +67,10 @@ function doGet(e) {
         result = getClassListFromSheets();
         break;
 
+      case 'getAllClassList':
+        result = getAllClassesFromListSheet();
+        break;
+
       case 'setClassActivation':
         result = setClassActivation(params.className, params.active);
         break;
@@ -205,6 +209,10 @@ function doPost(e) {
         result = saveTeams(params.className, postData.teams);
         break;
 
+      case 'saveStudents':
+        result = saveStudents(params.className, postData.students);
+        break;
+
       // === 전투 ===
       case 'saveBattleResult':
         result = saveBattleResult(params.className, postData);
@@ -321,6 +329,31 @@ function getClassListFromSheets() {
       });
     }
   }
+
+  return { success: true, data: classList };
+}
+
+// 학급목록 시트에서 모든 학급 가져오기 (시트 유무와 관계없이)
+function getAllClassesFromListSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const listSheet = ss.getSheetByName('학급목록');
+
+  if (!listSheet) {
+    return { success: true, data: [] };
+  }
+
+  const lastRow = listSheet.getLastRow();
+  if (lastRow < 2) {
+    return { success: true, data: [] };
+  }
+
+  const data = listSheet.getRange(2, 1, lastRow - 1, 4).getValues();
+  const classList = data.filter(row => row[0]).map(row => ({
+    name: String(row[0]),
+    studentCount: Number(row[1]) || 0,
+    lastUpdate: String(row[2] || ''),
+    active: row[3] === 1 || row[3] === true
+  }));
 
   return { success: true, data: classList };
 }
@@ -763,6 +796,62 @@ function saveTeams(className, teams) {
   }
 
   return { success: true };
+}
+
+// 학생 목록 저장 (웹에서 CSV 업로드 시)
+function saveStudents(className, students) {
+  if (!className || !students) return { success: false, message: '필수 값이 누락되었습니다.' };
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = getOrCreateSheet(`${sanitizeSheetName(className)}_학생`, STUDENT_HEADERS);
+
+  // 기존 데이터 삭제
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, 16).clearContent();
+  }
+
+  // 새 데이터 입력
+  if (students.length > 0) {
+    const now = new Date();
+    const data = students.map(student => [
+      student.number || 0,
+      student.name || '',
+      student.code || '',
+      student.cookie || 0,
+      student.usedCookie || 0,
+      student.totalCookie || 0,
+      student.chocoChips || 0,
+      student.previousCookie || 0,
+      student.emojiCode || 'emoji_00',
+      student.title || '',
+      student.titleColorCode || 'title_00',
+      student.borderCode || 'border_00',
+      student.nameEffectCode || 'name_00',
+      student.backgroundCode || 'bg_00',
+      student.ownedItems ? student.ownedItems.join(',') : '',
+      now
+    ]);
+    sheet.getRange(2, 1, data.length, 16).setValues(data);
+  }
+
+  // 학급목록의 학생수 업데이트
+  const listSheet = ss.getSheetByName('학급목록');
+  if (listSheet) {
+    const listLastRow = listSheet.getLastRow();
+    if (listLastRow > 1) {
+      const classNames = listSheet.getRange(2, 1, listLastRow - 1, 1).getValues().flat();
+      const sanitized = sanitizeSheetName(className);
+      for (let i = 0; i < classNames.length; i++) {
+        if (sanitizeSheetName(classNames[i]) === sanitized) {
+          listSheet.getRange(i + 2, 2).setValue(students.length);
+          break;
+        }
+      }
+    }
+  }
+
+  return { success: true, data: { savedCount: students.length } };
 }
 
 // ========================================

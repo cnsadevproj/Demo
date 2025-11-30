@@ -244,3 +244,82 @@ export interface CreateSheetsResult {
 export async function createSheetsForActivatedClasses(): Promise<SheetsResponse<CreateSheetsResult>> {
   return callSheetsApi('createActivatedSheets');
 }
+
+// 학생 목록 저장 (CSV 업로드 시)
+export interface SaveStudentsResult {
+  savedCount: number;
+}
+
+export interface StudentToSave {
+  number: number;
+  name: string;
+  code: string;
+  cookie?: number;
+  usedCookie?: number;
+  totalCookie?: number;
+  chocoChips?: number;
+  previousCookie?: number;
+  emojiCode?: string;
+  title?: string;
+  titleColorCode?: string;
+  borderCode?: string;
+  nameEffectCode?: string;
+  backgroundCode?: string;
+  ownedItems?: string[];
+}
+
+export async function saveStudentsToSheets(
+  className: string,
+  students: StudentToSave[]
+): Promise<SheetsResponse<SaveStudentsResult>> {
+  const sheetsUrl = getSheetsUrl();
+
+  if (!sheetsUrl) {
+    return {
+      success: false,
+      message: 'Sheets URL이 설정되지 않았습니다.'
+    };
+  }
+
+  try {
+    const url = `${sheetsUrl}?action=saveStudents&className=${encodeURIComponent(className)}`;
+    console.log('[Sheets API] POST saveStudents:', { className, studentCount: students.length });
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ students }),
+    });
+
+    if (!response.ok) {
+      return {
+        success: false,
+        message: `HTTP 오류: ${response.status}`
+      };
+    }
+
+    const data = await response.json();
+    console.log('[Sheets API] saveStudents 응답:', data);
+    return data;
+  } catch (error) {
+    console.error('[Sheets API] saveStudents 오류:', error);
+    return {
+      success: false,
+      message: '네트워크 오류가 발생했습니다.'
+    };
+  }
+}
+
+// 학급목록 시트에서 모든 학급 가져오기 (시트 유무와 관계없이)
+export interface ClassListItem {
+  name: string;
+  studentCount: number;
+  lastUpdate: string;
+  active: boolean;
+}
+
+export async function getAllClassesFromList(): Promise<SheetsResponse<ClassListItem[]>> {
+  return callSheetsApi('getAllClassList');
+}
