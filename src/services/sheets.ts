@@ -285,10 +285,11 @@ export async function saveStudentsToSheets(
     const url = `${sheetsUrl}?action=saveStudents&className=${encodeURIComponent(className)}`;
     console.log('[Sheets API] POST saveStudents:', { className, studentCount: students.length });
 
+    // Google Apps Script CORS 문제 해결: text/plain 사용
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'text/plain;charset=utf-8',
       },
       body: JSON.stringify({ students }),
     });
