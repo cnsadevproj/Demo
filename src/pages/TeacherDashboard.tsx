@@ -8,7 +8,7 @@ import { Progress } from '../components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useAuth } from '../contexts/AuthContext';
 import { getMultipleStudentsInfo, StudentInfo, StoredStudent } from '../services/api';
-import { getClassStudents as getClassStudentsFromSheets, SheetsStudentData, setClassActivation, getClassListFromSheets, SheetsClassInfo, importClassroomsFromApi, createSheetsForActivatedClasses } from '../services/sheets';
+import { getClassStudents as getClassStudentsFromSheets, SheetsStudentData, setClassActivation, getClassListFromSheets, SheetsClassInfo, importClassroomsFromApi, createSheetsForActivatedClasses, saveStudentsToSheets, getAllClassesFromList, ClassListItem } from '../services/sheets';
 import { getWishes, grantWish, deleteWish, SheetWish, refreshCookies } from '../services/sheetsApi';
 import { getShopItems, SheetShopItem } from '../services/sheetsApi';
 import { toast } from 'sonner@2.0.3';
@@ -69,6 +69,10 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [classActivationMap, setClassActivationMap] = useState<Record<string, boolean>>({});
   const [activationLoading, setActivationLoading] = useState<string | null>(null);
   const [allSheetsClasses, setAllSheetsClasses] = useState<SheetsClassInfo[]>([]);
+  const [allClassList, setAllClassList] = useState<ClassListItem[]>([]);
+
+  // CSV 저장 상태
+  const [isSavingStudents, setIsSavingStudents] = useState(false);
 
   // 교사용 상점/소원 상태
   const [shopItems, setShopItems] = useState<SheetShopItem[]>([]);
@@ -86,6 +90,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   // 학급 활성화 상태 로드 (모든 학급 포함)
   useEffect(() => {
     const loadClassActivation = async () => {
+      // 시트가 있는 학급 목록
       const response = await getClassListFromSheets();
       if (response.success && response.data) {
         setAllSheetsClasses(response.data);
@@ -94,6 +99,18 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           activationMap[cls.name] = cls.active !== false;
         });
         setClassActivationMap(activationMap);
+      }
+
+      // 학급목록 시트의 모든 학급 (시트 유무와 관계없이)
+      const allClassResponse = await getAllClassesFromList();
+      if (allClassResponse.success && allClassResponse.data) {
+        setAllClassList(allClassResponse.data);
+        // 모든 학급의 활성화 맵도 업데이트
+        const activationMap: Record<string, boolean> = {};
+        allClassResponse.data.forEach((cls: ClassListItem) => {
+          activationMap[cls.name] = cls.active;
+        });
+        setClassActivationMap(prev => ({ ...prev, ...activationMap }));
       }
     };
     loadClassActivation();
@@ -209,7 +226,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       const response = await importClassroomsFromApi();
       if (response.success && response.data) {
         toast.success(response.data.message);
-        // 학급 목록 새로고침
+        // 학급 목록 새로고침 (시트가 있는 학급)
         const classListResponse = await getClassListFromSheets();
         if (classListResponse.success && classListResponse.data) {
           setAllSheetsClasses(classListResponse.data);
@@ -218,6 +235,16 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             activationMap[cls.name] = cls.active !== false;
           });
           setClassActivationMap(activationMap);
+        }
+        // 학급목록 시트의 모든 학급 새로고침
+        const allClassResponse = await getAllClassesFromList();
+        if (allClassResponse.success && allClassResponse.data) {
+          setAllClassList(allClassResponse.data);
+          const activationMap: Record<string, boolean> = {};
+          allClassResponse.data.forEach((cls: ClassListItem) => {
+            activationMap[cls.name] = cls.active;
+          });
+          setClassActivationMap(prev => ({ ...prev, ...activationMap }));
         }
       } else {
         toast.error(response.message || '클래스룸 가져오기 실패');
@@ -350,12 +377,23 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
     setUploadError('');
     setUploadSuccess('');
+    setIsSavingStudents(true);
 
     try {
       const parsedStudents = await parseCsvFile(file);
       setStudents(parsedStudents);
       saveClassStudents(selectedClass, parsedStudents);
-      setUploadSuccess(`${parsedStudents.length}명의 학생이 등록되었습니다.`);
+
+      // Google Sheets에도 저장
+      const sheetsResult = await saveStudentsToSheets(selectedClass, parsedStudents);
+      if (sheetsResult.success) {
+        setUploadSuccess(`${parsedStudents.length}명의 학생이 등록되고 Google Sheets에 저장되었습니다.`);
+        toast.success(`${parsedStudents.length}명 학생 목록이 Sheets에 저장됨`);
+      } else {
+        setUploadSuccess(`${parsedStudents.length}명의 학생이 등록되었습니다. (Sheets 저장 실패: ${sheetsResult.message})`);
+        toast.error('Sheets 저장 실패: ' + sheetsResult.message);
+      }
+
       setStudentInfoMap(new Map());
 
       // 자동으로 학생 정보 불러오기
@@ -364,6 +402,8 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       }
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : '파일 처리 중 오류가 발생했습니다.');
+    } finally {
+      setIsSavingStudents(false);
     }
 
     // 파일 입력 초기화
@@ -453,8 +493,20 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   // 랭킹 데이터 계산
   const rankedStudents = convertToRankedStudents(studentInfoMap, students);
 
-  // 메인 탭 상태
-  const [activeTab, setActiveTab] = useState('students');
+  // 메인 탭 상태 - 학생 데이터 유무에 따라 초기 탭 결정
+  const [activeTab, setActiveTab] = useState('setup');
+
+  // 학생 데이터 유무에 따라 초기 탭 설정
+  useEffect(() => {
+    // 학급이 선택되어 있고, 학생이 있으면 students 탭으로
+    // 학급이 선택되어 있고, 학생이 없으면 setup 탭으로
+    // 학급 목록이 없으면 setup 탭으로
+    if (selectedClass && students.length > 0) {
+      setActiveTab('students');
+    } else if (classes.length === 0 || !selectedClass || students.length === 0) {
+      setActiveTab('setup');
+    }
+  }, [selectedClass, students.length, classes.length]);
 
   return (
     <PageLayout title="교사 대시보드" role="admin">
@@ -507,13 +559,13 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
         {/* 메인 탭 메뉴 */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="setup" className="flex items-center gap-1">
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">초기설정</span>
+            </TabsTrigger>
             <TabsTrigger value="students" className="flex items-center gap-1">
               <Users className="w-4 h-4" />
               <span className="hidden sm:inline">학생</span>
-            </TabsTrigger>
-            <TabsTrigger value="classes" className="flex items-center gap-1">
-              <Settings className="w-4 h-4" />
-              <span className="hidden sm:inline">학급설정</span>
             </TabsTrigger>
             <TabsTrigger value="wishes" className="flex items-center gap-1">
               <Star className="w-4 h-4" />
@@ -810,50 +862,32 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             )}
           </TabsContent>
 
-          {/* 학급 설정 탭 */}
-          <TabsContent value="classes" className="space-y-4 mt-4">
+          {/* 초기 설정 탭 */}
+          <TabsContent value="setup" className="space-y-4 mt-4">
             {/* 클래스룸 가져오기 카드 */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <FileSpreadsheet className="w-5 h-5" />
-                  클래스룸에서 학급 가져오기
+                  1단계: 클래스룸에서 학급 가져오기
                 </CardTitle>
                 <CardDescription>
-                  Google Classroom API에서 학급 목록을 가져오고, 활성화된 학급의 시트를 생성합니다.
+                  Google Classroom API에서 학급 목록을 가져옵니다.
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <Button
-                    onClick={handleImportClassrooms}
-                    disabled={isImportingClassrooms || isCreatingSheets}
-                    variant="outline"
-                    className="flex items-center gap-2"
-                  >
-                    {isImportingClassrooms ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Download className="w-4 h-4" />
-                    )}
-                    1. 학급 목록 가져오기
-                  </Button>
-                  <Button
-                    onClick={handleCreateSheets}
-                    disabled={isImportingClassrooms || isCreatingSheets || allSheetsClasses.length === 0}
-                    className="flex items-center gap-2"
-                  >
-                    {isCreatingSheets ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <FileSpreadsheet className="w-4 h-4" />
-                    )}
-                    2. 활성화된 학급 시트 만들기
-                  </Button>
-                </div>
-                <p className="text-xs text-gray-500 mt-3">
-                  순서: 목록 가져오기 → 활성화 설정 (아래) → 시트 만들기
-                </p>
+                <Button
+                  onClick={handleImportClassrooms}
+                  disabled={isImportingClassrooms || isCreatingSheets}
+                  className="flex items-center gap-2"
+                >
+                  {isImportingClassrooms ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  클래스룸에서 학급 가져오기
+                </Button>
               </CardContent>
             </Card>
 
@@ -862,65 +896,214 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Settings className="w-5 h-5" />
-                  학급 활성화 관리
+                  2단계: 학급 활성화 선택
                 </CardTitle>
                 <CardDescription>
-                  이번 학기에 사용할 학급만 활성화하세요. 비활성 학급은 시트가 생성되지 않습니다.
+                  이번 학기에 사용할 학급만 활성화하세요. 활성화된 학급만 시트가 생성됩니다.
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {allSheetsClasses.map((cls) => {
-                    const isActive = classActivationMap[cls.name] !== false;
-                    const isLoading = activationLoading === cls.name;
-                    return (
-                      <div
-                        key={cls.name}
-                        className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
-                          isActive
-                            ? 'bg-green-50 border-green-200'
-                            : 'bg-gray-50 border-gray-200'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className={`font-medium ${isActive ? 'text-green-700' : 'text-gray-500'}`}>
-                            {cls.name}
-                          </span>
-                          <Badge variant={isActive ? 'default' : 'secondary'} className="text-xs">
-                            {isActive ? '활성' : '비활성'}
-                          </Badge>
-                          {cls.studentCount !== undefined && (
-                            <span className="text-xs text-gray-400">({cls.studentCount}명)</span>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => handleToggleActivation(cls.name)}
-                          disabled={isLoading}
-                          className={`p-1 rounded-full transition-colors ${
+                {/* 학급목록 시트의 모든 학급 표시 */}
+                {allClassList.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                    {allClassList.map((cls) => {
+                      const isActive = classActivationMap[cls.name] === true;
+                      const isLoading = activationLoading === cls.name;
+                      const hasSheet = allSheetsClasses.some(s => s.name === cls.name);
+                      return (
+                        <div
+                          key={cls.name}
+                          className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
                             isActive
-                              ? 'text-green-600 hover:bg-green-100'
-                              : 'text-gray-400 hover:bg-gray-200'
+                              ? 'bg-green-50 border-green-200'
+                              : 'bg-gray-50 border-gray-200'
                           }`}
                         >
-                          {isLoading ? (
-                            <Loader2 className="w-6 h-6 animate-spin" />
-                          ) : isActive ? (
-                            <ToggleRight className="w-6 h-6" />
-                          ) : (
-                            <ToggleLeft className="w-6 h-6" />
-                          )}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                {allSheetsClasses.length === 0 && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`font-medium ${isActive ? 'text-green-700' : 'text-gray-500'}`}>
+                              {cls.name}
+                            </span>
+                            <Badge variant={isActive ? 'default' : 'secondary'} className="text-xs">
+                              {isActive ? '활성' : '비활성'}
+                            </Badge>
+                            {hasSheet && (
+                              <Badge variant="outline" className="text-xs text-blue-600">
+                                시트있음
+                              </Badge>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => handleToggleActivation(cls.name)}
+                            disabled={isLoading}
+                            className={`p-1 rounded-full transition-colors ${
+                              isActive
+                                ? 'text-green-600 hover:bg-green-100'
+                                : 'text-gray-400 hover:bg-gray-200'
+                            }`}
+                          >
+                            {isLoading ? (
+                              <Loader2 className="w-6 h-6 animate-spin" />
+                            ) : isActive ? (
+                              <ToggleRight className="w-6 h-6" />
+                            ) : (
+                              <ToggleLeft className="w-6 h-6" />
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : allSheetsClasses.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                    {allSheetsClasses.map((cls) => {
+                      const isActive = classActivationMap[cls.name] !== false;
+                      const isLoading = activationLoading === cls.name;
+                      return (
+                        <div
+                          key={cls.name}
+                          className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                            isActive
+                              ? 'bg-green-50 border-green-200'
+                              : 'bg-gray-50 border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className={`font-medium ${isActive ? 'text-green-700' : 'text-gray-500'}`}>
+                              {cls.name}
+                            </span>
+                            <Badge variant={isActive ? 'default' : 'secondary'} className="text-xs">
+                              {isActive ? '활성' : '비활성'}
+                            </Badge>
+                            {cls.studentCount !== undefined && cls.studentCount > 0 && (
+                              <span className="text-xs text-gray-400">({cls.studentCount}명)</span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => handleToggleActivation(cls.name)}
+                            disabled={isLoading}
+                            className={`p-1 rounded-full transition-colors ${
+                              isActive
+                                ? 'text-green-600 hover:bg-green-100'
+                                : 'text-gray-400 hover:bg-gray-200'
+                            }`}
+                          >
+                            {isLoading ? (
+                              <Loader2 className="w-6 h-6 animate-spin" />
+                            ) : isActive ? (
+                              <ToggleRight className="w-6 h-6" />
+                            ) : (
+                              <ToggleLeft className="w-6 h-6" />
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
                   <p className="text-center text-gray-500 py-4">
-                    등록된 학급이 없습니다. Google Sheets에서 학급 목록을 불러오세요.
+                    등록된 학급이 없습니다. 먼저 클래스룸에서 학급을 가져오세요.
                   </p>
+                )}
+
+                {/* 시트 생성 버튼 */}
+                {(allClassList.length > 0 || allSheetsClasses.length > 0) && (
+                  <Button
+                    onClick={handleCreateSheets}
+                    disabled={isImportingClassrooms || isCreatingSheets}
+                    className="flex items-center gap-2"
+                  >
+                    {isCreatingSheets ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <FileSpreadsheet className="w-4 h-4" />
+                    )}
+                    활성화된 학급 시트 만들기
+                  </Button>
                 )}
               </CardContent>
             </Card>
+
+            {/* 학생 목록 업로드 카드 */}
+            {selectedClass && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Upload className="w-5 h-5" />
+                    3단계: 학생 목록 업로드
+                  </CardTitle>
+                  <CardDescription>
+                    선택된 학급: <strong>{selectedClass}</strong> - CSV 파일로 학생 목록을 업로드하세요.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* CSV 업로드 영역 */}
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                    <FileSpreadsheet className="w-10 h-10 mx-auto text-gray-400 mb-3" />
+                    <p className="mb-4 text-gray-600">CSV 파일을 선택하여 학생 목록을 업로드하세요</p>
+                    <div className="flex justify-center gap-3 flex-wrap">
+                      <Button
+                        variant="outline"
+                        onClick={downloadCsvTemplate}
+                        className="flex items-center gap-2"
+                      >
+                        <Download className="w-4 h-4" />
+                        템플릿 다운로드
+                      </Button>
+                      <Button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isSavingStudents}
+                        className="flex items-center gap-2"
+                      >
+                        {isSavingStudents ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Upload className="w-4 h-4" />
+                        )}
+                        CSV 업로드
+                      </Button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".csv"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 업로드 결과 메시지 */}
+                  {uploadError && (
+                    <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-lg">
+                      <XCircle className="w-5 h-5" />
+                      {uploadError}
+                    </div>
+                  )}
+                  {uploadSuccess && (
+                    <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-lg">
+                      <CheckCircle className="w-5 h-5" />
+                      {uploadSuccess}
+                    </div>
+                  )}
+
+                  {/* 현재 학생 수 표시 */}
+                  {students.length > 0 && (
+                    <div className="p-4 bg-blue-50 rounded-lg">
+                      <p className="text-blue-800">
+                        현재 {students.length}명의 학생이 등록되어 있습니다.
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* 학급 미선택 안내 */}
+            {!selectedClass && classes.length > 0 && (
+              <Card className="p-8 text-center">
+                <AlertCircle className="w-12 h-12 mx-auto text-amber-500 mb-4" />
+                <p className="text-gray-600">상단에서 학급을 선택하면 학생 목록을 업로드할 수 있습니다.</p>
+              </Card>
+            )}
           </TabsContent>
 
           {/* 소원의 돌 탭 */}
