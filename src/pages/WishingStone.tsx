@@ -15,7 +15,6 @@ import {
   Flame,
   Check,
   Trash2,
-  Cookie,
 } from 'lucide-react';
 
 interface WishingStoneProps {
@@ -49,7 +48,7 @@ export function WishingStone({ onBack }: WishingStoneProps) {
   // 상태
   const [wishContent, setWishContent] = useState('');
   const [showGrantModal, setShowGrantModal] = useState<string | null>(null);
-  const [grantReward, setGrantReward] = useState(50);
+  const [grantMessage, setGrantMessage] = useState('');
 
   // 데이터
   const classWishes = getClassWishes(classId);
@@ -84,9 +83,9 @@ export function WishingStone({ onBack }: WishingStoneProps) {
 
   // 소원 선정 (교사)
   const handleGrantWish = (wishId: string) => {
-    grantWish(wishId, grantReward);
+    grantWish(wishId, grantMessage);
     setShowGrantModal(null);
-    setGrantReward(50);
+    setGrantMessage('');
   };
 
   // 날짜 포맷
@@ -245,11 +244,21 @@ export function WishingStone({ onBack }: WishingStoneProps) {
                 {classWishes.map(wish => (
                   <div
                     key={wish.id}
-                    className={`p-4 rounded-lg border ${
+                    className={`p-4 rounded-lg ${
                       wish.isGranted
-                        ? 'bg-yellow-50 border-yellow-200'
-                        : 'bg-gray-50 border-gray-200'
+                        ? 'shadow-lg'
+                        : 'bg-gray-50 border border-gray-200'
                     }`}
+                    style={{
+                      border: wish.isGranted
+                        ? '3px solid transparent'
+                        : undefined,
+                      backgroundImage: wish.isGranted
+                        ? 'linear-gradient(to right, rgb(254 243 199), rgb(253 230 138), rgb(254 243 199)), linear-gradient(to right, rgb(239 68 68), rgb(234 179 8), rgb(34 197 94), rgb(59 130 246), rgb(168 85 247))'
+                        : undefined,
+                      backgroundOrigin: 'border-box',
+                      backgroundClip: wish.isGranted ? 'padding-box, border-box' : undefined,
+                    }}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
@@ -317,11 +326,11 @@ export function WishingStone({ onBack }: WishingStoneProps) {
                       </div>
                     </div>
 
-                    {/* 선정 보상 표시 */}
-                    {wish.isGranted && wish.grantedReward && (
-                      <div className="mt-2 text-sm text-yellow-700">
-                        🍪 +{wish.grantedReward} 쿠키 보상!
-                      </div>
+                    {/* 선정 메시지 표시 */}
+                    {wish.isGranted && wish.grantedMessage && (
+                      <p className="text-sm text-purple-600 mt-2 italic">
+                        💬 어디선가 들려오는 목소리: "{wish.grantedMessage}"
+                      </p>
                     )}
                   </div>
                 ))}
@@ -335,36 +344,23 @@ export function WishingStone({ onBack }: WishingStoneProps) {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <Card className="w-full max-w-sm">
               <CardHeader>
-                <CardTitle>소원 선정하기</CardTitle>
+                <CardTitle>✨ 소원 선정하기</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">보상 쿠키</label>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setGrantReward(prev => Math.max(10, prev - 10))}
-                    >
-                      -10
-                    </Button>
-                    <div className="flex items-center gap-1 px-4 py-2 border rounded-lg">
-                      <Cookie className="w-4 h-4 text-amber-500" />
-                      <span className="font-bold">{grantReward}</span>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setGrantReward(prev => prev + 10)}
-                    >
-                      +10
-                    </Button>
-                  </div>
+                  <label className="block text-sm font-medium mb-2">💬 전달할 메시지 (선택사항)</label>
+                  <input
+                    type="text"
+                    value={grantMessage}
+                    onChange={(e) => setGrantMessage(e.target.value)}
+                    placeholder="어디선가 들려오는 목소리로 전달됩니다..."
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
+                  />
                 </div>
 
                 <div className="flex gap-2">
                   <Button
-                    className="flex-1"
+                    className="flex-1 bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-500 hover:to-orange-500"
                     onClick={() => handleGrantWish(showGrantModal)}
                   >
                     <Check className="w-4 h-4 mr-2" />
