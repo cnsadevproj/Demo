@@ -43,6 +43,7 @@ import {
   Wish
 } from '../services/firestoreApi';
 import { parseCsvFile, downloadCsvTemplate, exportStudentsToCsv } from '../utils/csv';
+import { TEAM_FLAGS } from '../types/game';
 
 interface TeacherDashboardProps {
   onLogout: () => void;
@@ -185,7 +186,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [teams, setTeams] = useState<Team[]>([]);
   const [isLoadingTeams, setIsLoadingTeams] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
-  const [newTeamFlag, setNewTeamFlag] = useState('🔴');
+  const [newTeamFlag, setNewTeamFlag] = useState(TEAM_FLAGS[0]);
   const [selectedTeamForMember, setSelectedTeamForMember] = useState<string | null>(null);
 
   // 배틀 상태
@@ -693,8 +694,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     }
   };
 
-  // 팀 플래그 옵션
-  const teamFlags = ['🔴', '🔵', '🟢', '🟡', '🟣', '🟠', '⚪', '⚫'];
+  // 팀 플래그 옵션 - game.ts의 TEAM_FLAGS 사용 (동물/자연 이모지)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -1286,9 +1286,8 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                             size="sm"
                             onClick={async () => {
                               if (!user || !selectedClass) return;
-                              const flags = ['🔴', '🔵', '🟢', '🟡', '🟣', '🟠'];
                               for (let i = 0; i < num; i++) {
-                                await createTeam(user.uid, selectedClass, `${i + 1}팀`, flags[i % flags.length]);
+                                await createTeam(user.uid, selectedClass, `${i + 1}팀`, TEAM_FLAGS[i % TEAM_FLAGS.length]);
                               }
                               await loadTeams();
                               toast.success(`${num}개 팀이 생성되었습니다!`);
@@ -1313,7 +1312,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         onChange={(e) => setNewTeamFlag(e.target.value)}
                         className="px-3 py-2 border rounded-md text-2xl"
                       >
-                        {teamFlags.map((flag) => (
+                        {TEAM_FLAGS.slice(0, 20).map((flag) => (
                           <option key={flag} value={flag}>{flag}</option>
                         ))}
                       </select>
