@@ -6,7 +6,7 @@ import { Badge } from '../components/ui/badge';
 import { useGame } from '../contexts/GameContext';
 import { useAuth } from '../contexts/AuthContext';
 import { TEAM_FLAGS, GameTeam } from '../types/game';
-import { getClassStudents, SheetStudent } from '../services/sheetsApi';
+import { getClassStudents, Student } from '../services/firestoreApi';
 import {
   Users,
   Plus,
@@ -25,13 +25,23 @@ import {
 
 // 랜덤 팀 이름 생성용 단어
 const TEAM_ADJECTIVES = [
-  '불꽃', '번개', '천둥', '폭풍', '태양', '달빛', '별빛', '은하', '우주', '빛나는',
-  '용감한', '지혜로운', '강철', '황금', '다이아', '전설의', '무적의', '최강', '빠른', '멋진',
+  // 색깔
+  '붉은', '푸른', '노란', '초록', '보라', '하얀', '검은', '금빛', '은빛', '무지개',
+  // 자연
+  '불꽃', '번개', '천둥', '폭풍', '태양', '달빛', '별빛', '은하', '우주', '바람의',
+  // 성격
+  '용감한', '지혜로운', '웃고있는', '화난', '춤추는', '노래하는', '달리는', '날아가는',
+  // 특성
+  '강철', '황금', '다이아', '전설의', '무적의', '최강', '빠른', '멋진', '빛나는', '신비한',
 ];
 
 const TEAM_NOUNS = [
+  // 동물
   '드래곤', '피닉스', '유니콘', '타이거', '라이온', '이글', '울프', '베어', '폭스', '팬더',
+  '염소', '토끼', '독수리', '매', '사슴', '고래', '돌고래', '상어', '펭귄', '부엉이',
+  // 그룹
   '기사단', '탐험대', '전사들', '영웅들', '챔피언', '스타즈', '레전드', '히어로즈', '파이터', '윈너즈',
+  '어벤저스', '가디언즈', '레인저스', '워리어즈', '킹덤',
 ];
 
 function generateRandomTeamName(): string {
@@ -46,10 +56,12 @@ interface GameTeamManagerProps {
 
 export function GameTeamManager({ onNavigate }: GameTeamManagerProps) {
   const { teams, createTeam, updateTeam, deleteTeam, addBonusCookies, clearTeams } = useGame();
-  const { selectedClass, role, studentClassName } = useAuth();
+  const { selectedClass, role, student, user, studentTeacherId } = useAuth();
 
-  // 교사는 selectedClass, 학생은 studentClassName 사용
-  const currentClass = role === 'teacher' ? selectedClass : studentClassName;
+  // 교사는 selectedClass, 학생은 student.classId 사용
+  const currentClass = role === 'teacher' ? selectedClass : student?.classId;
+  // 교사는 user.uid, 학생은 studentTeacherId 사용
+  const teacherId = role === 'teacher' ? user?.uid : studentTeacherId;
 
   const [isCreating, setIsCreating] = useState(false);
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
@@ -58,21 +70,23 @@ export function GameTeamManager({ onNavigate }: GameTeamManagerProps) {
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [bonusAmount, setBonusAmount] = useState(100);
   const [showBonusModal, setShowBonusModal] = useState<string | null>(null);
-  const [membersPerTeam, setMembersPerTeam] = useState(4);
+  const [teamCount, setTeamCount] = useState(4);
+  const [swapStudent1, setSwapStudent1] = useState<string | null>(null);
+  const [swapStudent2, setSwapStudent2] = useState<string | null>(null);
 
   // 학생 목록 로드
-  const [classStudents, setClassStudents] = useState<SheetStudent[]>([]);
+  const [classStudents, setClassStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadStudents = async () => {
-      if (!currentClass) {
+      if (!currentClass || !teacherId) {
         setLoading(false);
         return;
       }
       setLoading(true);
       try {
-        const students = await getClassStudents(currentClass);
+        const students = await getClassStudents(teacherId, currentClass);
         setClassStudents(students);
       } catch (error) {
         console.error('학생 로드 실패:', error);
@@ -81,7 +95,7 @@ export function GameTeamManager({ onNavigate }: GameTeamManagerProps) {
       }
     };
     loadStudents();
-  }, [currentClass]);
+  }, [currentClass, teacherId]);
 
   // 이미 팀에 배정된 학생 코드
   const assignedStudentCodes = teams.flatMap(t => t.memberCodes);
@@ -109,7 +123,7 @@ export function GameTeamManager({ onNavigate }: GameTeamManagerProps) {
     setIsCreating(false);
   };
 
-  // 자동 팀 배정 (3-5명, 기본 4명)
+  // 자동 팀 배정 (팀 개수 기반)
   const handleAutoAssign = () => {
     if (classStudents.length === 0) return;
 
@@ -119,11 +133,8 @@ export function GameTeamManager({ onNavigate }: GameTeamManagerProps) {
     // 학생 섞기
     const shuffled = [...classStudents].sort(() => Math.random() - 0.5);
 
-    // 팀 수 계산
-    const teamCount = Math.ceil(shuffled.length / membersPerTeam);
-
-    // 팀별 학생 배분
-    const teamStudents: SheetStudent[][] = Array.from({ length: teamCount }, () => []);
+    // 팀별 학생 배분 (균등 배분 - 차이 최대 1명)
+    const teamStudents: Student[][] = Array.from({ length: teamCount }, () => []);
 
     shuffled.forEach((student, index) => {
       const teamIndex = index % teamCount;
@@ -141,6 +152,94 @@ export function GameTeamManager({ onNavigate }: GameTeamManagerProps) {
         );
       }
     });
+  };
+
+  // 학생 섞기 (팀 다시 랜덤 배치)
+  const handleShuffleStudents = () => {
+    if (teams.length === 0 || classStudents.length === 0) return;
+
+    const currentTeamCount = teams.length;
+    const currentFlags = teams.map(t => t.flag);
+    const currentNames = teams.map(t => t.name);
+
+    // 기존 팀 초기화
+    clearTeams();
+
+    // 학생 섞기
+    const shuffled = [...classStudents].sort(() => Math.random() - 0.5);
+
+    // 팀별 학생 배분
+    const teamStudents: Student[][] = Array.from({ length: currentTeamCount }, () => []);
+
+    shuffled.forEach((student, index) => {
+      const teamIndex = index % currentTeamCount;
+      teamStudents[teamIndex].push(student);
+    });
+
+    // 기존 팀 이름/플래그 유지하며 재생성
+    teamStudents.forEach((members, index) => {
+      if (members.length > 0) {
+        createTeam(
+          currentNames[index] || generateRandomTeamName(),
+          currentFlags[index] || TEAM_FLAGS[index % TEAM_FLAGS.length],
+          members.map(m => m.code),
+          members.map(m => m.name)
+        );
+      }
+    });
+  };
+
+  // 두 학생 팀 교환
+  const handleSwapStudents = () => {
+    if (!swapStudent1 || !swapStudent2) return;
+    if (swapStudent1 === swapStudent2) return;
+
+    // 각 학생이 속한 팀 찾기
+    const team1 = teams.find(t => t.memberCodes.includes(swapStudent1));
+    const team2 = teams.find(t => t.memberCodes.includes(swapStudent2));
+
+    if (!team1 || !team2) return;
+    if (team1.id === team2.id) {
+      setSwapStudent1(null);
+      setSwapStudent2(null);
+      return;
+    }
+
+    // 학생 정보 가져오기
+    const student1 = classStudents.find(s => s.code === swapStudent1);
+    const student2 = classStudents.find(s => s.code === swapStudent2);
+    if (!student1 || !student2) return;
+
+    // team1에서 student1 제거하고 student2 추가
+    const idx1 = team1.memberCodes.indexOf(swapStudent1);
+    const newCodes1 = [...team1.memberCodes];
+    const newNames1 = [...team1.memberNames];
+    newCodes1[idx1] = swapStudent2;
+    newNames1[idx1] = student2.name;
+
+    // team2에서 student2 제거하고 student1 추가
+    const idx2 = team2.memberCodes.indexOf(swapStudent2);
+    const newCodes2 = [...team2.memberCodes];
+    const newNames2 = [...team2.memberNames];
+    newCodes2[idx2] = swapStudent1;
+    newNames2[idx2] = student1.name;
+
+    updateTeam(team1.id, { memberCodes: newCodes1, memberNames: newNames1 });
+    updateTeam(team2.id, { memberCodes: newCodes2, memberNames: newNames2 });
+
+    setSwapStudent1(null);
+    setSwapStudent2(null);
+  };
+
+  // 학생 클릭 시 교환 선택
+  const handleStudentClickForSwap = (studentCode: string) => {
+    if (!swapStudent1) {
+      setSwapStudent1(studentCode);
+    } else if (swapStudent1 === studentCode) {
+      setSwapStudent1(null);
+    } else {
+      setSwapStudent2(studentCode);
+    }
   };
 
   // 팀 이름 랜덤 변경
@@ -236,43 +335,111 @@ export function GameTeamManager({ onNavigate }: GameTeamManagerProps) {
                 자동 팀 배정
               </CardTitle>
               <CardDescription>
-                학생들을 자동으로 팀에 배정합니다. 팀당 인원을 선택하세요.
+                학생들을 자동으로 팀에 배정합니다. 팀 개수를 선택하세요.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center gap-4">
-                <label className="text-sm">팀당 인원:</label>
-                <div className="flex gap-2">
-                  {[3, 4, 5].map(num => (
-                    <Button
-                      key={num}
-                      variant={membersPerTeam === num ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setMembersPerTeam(num)}
-                    >
-                      {num}명
-                    </Button>
+              <div className="flex items-center gap-4 flex-wrap">
+                <label className="text-sm font-medium">팀 개수:</label>
+                <select
+                  value={teamCount}
+                  onChange={(e) => setTeamCount(parseInt(e.target.value))}
+                  className="px-4 py-2 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  {[2, 3, 4, 5, 6, 7, 8].map(num => (
+                    <option key={num} value={num}>{num}팀</option>
                   ))}
-                </div>
+                </select>
                 <span className="text-sm text-gray-500">
-                  → 약 {Math.ceil(classStudents.length / membersPerTeam)}팀 생성
+                  → 팀당 약 {Math.floor(classStudents.length / teamCount)}~{Math.ceil(classStudents.length / teamCount)}명
                 </span>
               </div>
-              <Button
-                onClick={() => {
-                  if (teams.length > 0) {
-                    if (window.confirm('기존 팀이 모두 삭제됩니다. 계속하시겠습니까?')) {
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => {
+                    if (teams.length > 0) {
+                      if (window.confirm('기존 팀이 모두 삭제됩니다. 계속하시겠습니까?')) {
+                        handleAutoAssign();
+                      }
+                    } else {
                       handleAutoAssign();
                     }
-                  } else {
-                    handleAutoAssign();
-                  }
-                }}
-                className="w-full"
-              >
-                <Shuffle className="w-4 h-4 mr-2" />
-                자동 배정하기 (랜덤 팀 이름)
-              </Button>
+                  }}
+                  className="flex-1"
+                >
+                  <Shuffle className="w-4 h-4 mr-2" />
+                  자동 배정하기
+                </Button>
+                {teams.length > 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (window.confirm('학생들을 다시 섞습니다. 팀 이름은 유지됩니다.')) {
+                        handleShuffleStudents();
+                      }
+                    }}
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    학생 섞기
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 학생 교환 */}
+        {teams.length > 0 && (
+          <Card className="border-blue-200 bg-blue-50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-blue-700">
+                <Users className="w-5 h-5" />
+                학생 교환
+              </CardTitle>
+              <CardDescription>
+                두 학생을 선택하면 팀을 서로 바꿉니다. 아래 팀에서 학생을 클릭하세요.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-4">
+                <div className="flex-1 p-3 bg-white rounded-lg border text-center">
+                  {swapStudent1 ? (
+                    <span className="font-medium">
+                      {classStudents.find(s => s.code === swapStudent1)?.name}
+                    </span>
+                  ) : (
+                    <span className="text-gray-400">첫 번째 학생 선택</span>
+                  )}
+                </div>
+                <span className="text-2xl">↔️</span>
+                <div className="flex-1 p-3 bg-white rounded-lg border text-center">
+                  {swapStudent2 ? (
+                    <span className="font-medium">
+                      {classStudents.find(s => s.code === swapStudent2)?.name}
+                    </span>
+                  ) : (
+                    <span className="text-gray-400">두 번째 학생 선택</span>
+                  )}
+                </div>
+                <Button
+                  onClick={handleSwapStudents}
+                  disabled={!swapStudent1 || !swapStudent2}
+                  className="bg-blue-500 hover:bg-blue-600"
+                >
+                  교환
+                </Button>
+                {(swapStudent1 || swapStudent2) && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSwapStudent1(null);
+                      setSwapStudent2(null);
+                    }}
+                  >
+                    취소
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         )}
@@ -489,10 +656,22 @@ export function GameTeamManager({ onNavigate }: GameTeamManagerProps) {
                 <div className="mt-4">
                   <div className="flex flex-wrap gap-2">
                     {team.memberCodes.map((code, idx) => (
-                      <Badge key={code} variant="secondary" className="flex items-center gap-1">
+                      <Badge
+                        key={code}
+                        variant="secondary"
+                        className={`flex items-center gap-1 cursor-pointer transition-all ${
+                          swapStudent1 === code || swapStudent2 === code
+                            ? 'ring-2 ring-blue-500 bg-blue-100'
+                            : 'hover:bg-gray-200'
+                        }`}
+                        onClick={() => handleStudentClickForSwap(code)}
+                      >
                         {team.memberNames[idx]}
                         <button
-                          onClick={() => handleRemoveMemberFromTeam(team.id, code)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveMemberFromTeam(team.id, code);
+                          }}
                           className="ml-1 text-gray-500 hover:text-red-600"
                           title="팀에서 제거"
                         >

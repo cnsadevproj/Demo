@@ -3,8 +3,7 @@ import { PageLayout } from '../components/PageLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { useAuth } from '../contexts/AuthContext';
-import { getMultipleStudentsInfo, StudentInfo, StoredStudent } from '../services/api';
+import { getMultipleStudentsInfo, StudentInfo, StoredStudent } from '../services/firestoreApi';
 import { StudentRankingTable, convertToRankedStudents, RankedStudent } from '../components/StudentRankingTable';
 import { Progress } from '../components/ui/progress';
 import {

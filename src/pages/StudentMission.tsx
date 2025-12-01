@@ -3,16 +3,20 @@ import { PageLayout } from '../components/PageLayout';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { useAuth } from '../contexts/AuthContext';
-import { checkTodayGrass, addGrass } from '../services/sheetsApi';
+import { checkTodayGrass, addGrass } from '../services/firestoreApi';
 import { Timer, Camera, CheckCircle2, Upload, Loader2 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface StudentMissionProps {
   onNavigate?: (page: string) => void;
 }
 
 export function StudentMission({ onNavigate }: StudentMissionProps) {
-  const { studentCode, studentClassName } = useAuth();
+  const { student, studentTeacherId } = useAuth();
+
+  const studentCode = student?.code || '';
+  const classId = student?.classId || '';
+  const teacherId = studentTeacherId || '';
 
   const [timerMinutes, setTimerMinutes] = useState(20);
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -26,12 +30,12 @@ export function StudentMission({ onNavigate }: StudentMissionProps) {
   // 오늘 잔디 여부 확인
   useEffect(() => {
     const checkGrass = async () => {
-      if (!studentClassName || !studentCode) {
+      if (!teacherId || !classId || !studentCode) {
         setLoading(false);
         return;
       }
       try {
-        const hasGrass = await checkTodayGrass(studentClassName, studentCode);
+        const hasGrass = await checkTodayGrass(teacherId, classId, studentCode);
         setTodayHasGrass(hasGrass);
         if (hasGrass) {
           setIsCompleted(true);
@@ -43,7 +47,7 @@ export function StudentMission({ onNavigate }: StudentMissionProps) {
       }
     };
     checkGrass();
-  }, [studentClassName, studentCode]);
+  }, [teacherId, classId, studentCode]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -92,7 +96,7 @@ export function StudentMission({ onNavigate }: StudentMissionProps) {
   };
 
   const handleComplete = async () => {
-    if (!studentClassName || !studentCode) {
+    if (!teacherId || !classId || !studentCode) {
       toast.error('로그인 정보가 없습니다. 다시 로그인해주세요.');
       return;
     }
@@ -106,7 +110,7 @@ export function StudentMission({ onNavigate }: StudentMissionProps) {
 
     setSubmitting(true);
     try {
-      const result = await addGrass(studentClassName, studentCode, 1);
+      const result = await addGrass(teacherId, classId, studentCode, 1);
 
       if (result.success) {
         setIsCompleted(true);

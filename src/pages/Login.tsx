@@ -1,255 +1,315 @@
-import React, { useState, useEffect } from 'react';
+// src/pages/Login.tsx
+// Firebase 기반 로그인 페이지
+
+import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { findStudentByCode, getSheetsUrl, setSheetsUrl as setLocalSheetsUrl } from '../services/sheets';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { GraduationCap, User, Loader2, Hash, Link } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface LoginProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess?: () => void;
 }
 
 export default function Login({ onLoginSuccess }: LoginProps) {
-  const { loginAsTeacher, loginAsStudent, sheetsUrl, setSheetsUrl, setStudentClassName } = useAuth();
-
-  // 교사 로그인 상태
-  const [teacherSheetsUrl, setTeacherSheetsUrl] = useState(sheetsUrl || '');
-  const [teacherLoading, setTeacherLoading] = useState(false);
-  const [teacherError, setTeacherError] = useState('');
-
+  const { loginAsTeacher, registerAsTeacher, loginAsStudent } = useAuth();
+  
+  // 선생님 로그인 상태
+  const [teacherEmail, setTeacherEmail] = useState('');
+  const [teacherPassword, setTeacherPassword] = useState('');
+  const [isTeacherLoading, setIsTeacherLoading] = useState(false);
+  
+  // 선생님 회원가입 상태
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerPasswordConfirm, setRegisterPasswordConfirm] = useState('');
+  const [registerName, setRegisterName] = useState('');
+  const [registerSchool, setRegisterSchool] = useState('');
+  const [registerApiKey, setRegisterApiKey] = useState('');
+  const [isRegisterLoading, setIsRegisterLoading] = useState(false);
+  
   // 학생 로그인 상태
   const [studentCode, setStudentCode] = useState('');
-  const [studentLoading, setStudentLoading] = useState(false);
-  const [studentError, setStudentError] = useState('');
-  const [studentSheetsUrl, setStudentSheetsUrl] = useState('');
-  const [needsSheetsUrl, setNeedsSheetsUrl] = useState(false);
+  const [isStudentLoading, setIsStudentLoading] = useState(false);
 
-  // 학생 로그인 시 Sheets URL 확인
-  useEffect(() => {
-    const localUrl = getSheetsUrl();
-    if (!localUrl && !sheetsUrl) {
-      setNeedsSheetsUrl(true);
-    } else {
-      setNeedsSheetsUrl(false);
-    }
-  }, [sheetsUrl]);
+  // 선생님 로그인/회원가입 모드 토글
+  const [teacherMode, setTeacherMode] = useState<'login' | 'register'>('login');
 
-  // 교사 로그인 핸들러
+  // 선생님 로그인 처리
   const handleTeacherLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setTeacherError('');
-
-    if (!teacherSheetsUrl.trim()) {
-      setTeacherError('Google Sheets URL을 입력해주세요.');
+    
+    if (!teacherEmail || !teacherPassword) {
+      toast.error('이메일과 비밀번호를 입력해주세요.');
       return;
     }
-
-    setTeacherLoading(true);
-
-    try {
-      // Sheets URL 먼저 저장
-      setSheetsUrl(teacherSheetsUrl.trim());
-
-      // Sheets 연결 테스트 & 클래스 목록 가져오기
-      const { testSheetsConnection, getClassListFromSheets } = await import('../services/sheets');
-      const testResult = await testSheetsConnection();
-
-      if (!testResult.success) {
-        setTeacherError('Sheets 연결에 실패했습니다. URL을 확인해주세요.');
-        return;
-      }
-
-      // Sheets에서 클래스 목록 가져오기
-      const classListResult = await getClassListFromSheets();
-
-      if (!classListResult.success) {
-        setTeacherError('클래스 목록을 불러올 수 없습니다.');
-        return;
-      }
-
-      // 교사로 로그인 (클래스 목록과 함께)
-      const result = await loginAsTeacher('SHEETS_BASED_AUTH', classListResult.data || []);
-      if (result.success) {
-        onLoginSuccess();
-      } else {
-        setTeacherError(result.message);
-      }
-    } catch (error) {
-      setTeacherError('로그인 중 오류가 발생했습니다.');
-    } finally {
-      setTeacherLoading(false);
+    
+    setIsTeacherLoading(true);
+    const result = await loginAsTeacher(teacherEmail, teacherPassword);
+    setIsTeacherLoading(false);
+    
+    if (result.success) {
+      toast.success(result.message);
+      onLoginSuccess?.();
+    } else {
+      toast.error(result.message);
     }
   };
 
-  // 학생 로그인 핸들러
+  // 선생님 회원가입 처리
+  const handleTeacherRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!registerEmail || !registerPassword || !registerName || !registerSchool || !registerApiKey) {
+      toast.error('모든 항목을 입력해주세요.');
+      return;
+    }
+    
+    if (registerPassword !== registerPasswordConfirm) {
+      toast.error('비밀번호가 일치하지 않습니다.');
+      return;
+    }
+    
+    if (registerPassword.length < 6) {
+      toast.error('비밀번호는 6자 이상이어야 합니다.');
+      return;
+    }
+    
+    setIsRegisterLoading(true);
+    const result = await registerAsTeacher(
+      registerEmail,
+      registerPassword,
+      registerName,
+      registerSchool,
+      registerApiKey
+    );
+    setIsRegisterLoading(false);
+    
+    if (result.success) {
+      toast.success(result.message);
+      onLoginSuccess?.();
+    } else {
+      toast.error(result.message);
+    }
+  };
+
+  // 학생 로그인 처리
   const handleStudentLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStudentError('');
-
-    if (!studentCode.trim()) {
-      setStudentError('학생 코드를 입력해주세요.');
+    
+    if (!studentCode) {
+      toast.error('학생 코드를 입력해주세요.');
       return;
     }
-
-    // Sheets URL 확인 - localStorage 또는 입력된 URL 사용
-    const localUrl = getSheetsUrl();
-    const effectiveUrl = localUrl || sheetsUrl || studentSheetsUrl.trim();
-
-    if (!effectiveUrl) {
-      setStudentError('시스템 URL이 필요합니다. 선생님께 받은 URL을 아래에 입력하세요.');
-      setNeedsSheetsUrl(true);
-      return;
-    }
-
-    // 입력된 URL이 있으면 저장
-    if (studentSheetsUrl.trim() && !localUrl) {
-      setLocalSheetsUrl(studentSheetsUrl.trim());
-      setSheetsUrl(studentSheetsUrl.trim());
-    }
-
-    setStudentLoading(true);
-
-    try {
-      console.log('[학생 로그인] 시도:', { code: studentCode, url: effectiveUrl });
-
-      // Sheets에서 학생 찾기 (API 키 불필요)
-      const result = await findStudentByCode(studentCode.trim().toUpperCase());
-      console.log('[학생 로그인] 결과:', result);
-
-      if (result.success && result.data) {
-        // 학급명 저장
-        setStudentClassName(result.data.className);
-        loginAsStudent(studentCode.trim().toUpperCase());
-        onLoginSuccess();
-      } else {
-        setStudentError(result.message || '학생 코드를 찾을 수 없습니다. 선생님께 확인해주세요.');
-      }
-    } catch (error) {
-      console.error('[학생 로그인] 오류:', error);
-      setStudentError('로그인 중 오류가 발생했습니다.');
-    } finally {
-      setStudentLoading(false);
+    
+    setIsStudentLoading(true);
+    const result = await loginAsStudent(studentCode);
+    setIsStudentLoading(false);
+    
+    if (result.success) {
+      toast.success(result.message);
+      onLoginSuccess?.();
+    } else {
+      toast.error(result.message);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">다했니?</CardTitle>
-          <CardDescription>학습 루틴 게임화 시스템</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="student" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="student" className="flex items-center gap-2">
-                <User className="w-4 h-4" />
-                학생
-              </TabsTrigger>
-              <TabsTrigger value="teacher" className="flex items-center gap-2">
-                <GraduationCap className="w-4 h-4" />
-                교사
-              </TabsTrigger>
-            </TabsList>
+    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-orange-100 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* 로고/타이틀 */}
+        <div className="text-center mb-8">
+          <div className="text-6xl mb-4">🍪</div>
+          <h1 className="text-3xl font-bold text-amber-800">다했니?</h1>
+          <p className="text-amber-600 mt-2">학습루틴 게임화 시스템</p>
+        </div>
 
-            {/* 학생 로그인 */}
-            <TabsContent value="student">
-              <form onSubmit={handleStudentLogin} className="space-y-4 mt-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium flex items-center gap-2">
-                    <Hash className="w-4 h-4" />
-                    학생 코드
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="예: DAX96V5UG"
-                    value={studentCode}
-                    onChange={(e) => setStudentCode(e.target.value.toUpperCase())}
-                    className="uppercase"
-                    maxLength={20}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    선생님께 받은 학생 코드를 입력하세요.
-                  </p>
-                </div>
+        {/* 로그인 카드 */}
+        <Card className="shadow-xl">
+          <CardHeader>
+            <CardTitle className="text-center">로그인</CardTitle>
+            <CardDescription className="text-center">
+              선생님 또는 학생으로 로그인하세요
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="student" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsTrigger value="student">🎒 학생</TabsTrigger>
+                <TabsTrigger value="teacher">👨‍🏫 선생님</TabsTrigger>
+              </TabsList>
 
-                {/* Sheets URL 입력 (필요한 경우) */}
-                {needsSheetsUrl && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium flex items-center gap-2">
-                      <Link className="w-4 h-4" />
-                      시스템 URL
-                    </label>
+              {/* 학생 로그인 */}
+              <TabsContent value="student">
+                <form onSubmit={handleStudentLogin} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">학생 코드</label>
                     <Input
-                      type="url"
-                      placeholder="https://script.google.com/macros/s/.../exec"
-                      value={studentSheetsUrl}
-                      onChange={(e) => setStudentSheetsUrl(e.target.value)}
+                      type="text"
+                      placeholder="선생님께 받은 코드를 입력하세요"
+                      value={studentCode}
+                      onChange={(e) => setStudentCode(e.target.value)}
+                      className="text-center text-lg tracking-wider"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      선생님께 받은 시스템 URL을 입력하세요.
+                    <p className="text-xs text-gray-500 mt-1">
+                      예: ABC123XYZ
                     </p>
                   </div>
-                )}
+                  <button
+                    type="submit"
+                    className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                    disabled={isStudentLoading}
+                  >
+                    <span className="text-xl">🚀</span>
+                    <span>{isStudentLoading ? '로그인 중...' : '로그인'}</span>
+                  </button>
+                </form>
+              </TabsContent>
 
-                {studentError && (
-                  <p className="text-sm text-red-500">{studentError}</p>
-                )}
-
-                <Button type="submit" className="w-full" disabled={studentLoading}>
-                  {studentLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      확인 중...
-                    </>
-                  ) : (
-                    '로그인'
-                  )}
-                </Button>
-              </form>
-            </TabsContent>
-
-            {/* 교사 로그인 */}
-            <TabsContent value="teacher">
-              <form onSubmit={handleTeacherLogin} className="space-y-4 mt-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    📊 Google Sheets Web App URL
-                  </label>
-                  <Input
-                    type="url"
-                    placeholder="https://script.google.com/macros/s/.../exec"
-                    value={teacherSheetsUrl}
-                    onChange={(e) => setTeacherSheetsUrl(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Apps Script를 배포한 Web App URL을 입력하세요.
-                    <br />
-                    💡 API 키는 Google Sheets의 [설정] 시트에 입력되어 있어야 합니다.
-                  </p>
+              {/* 선생님 탭 */}
+              <TabsContent value="teacher">
+                {/* 로그인/회원가입 버튼 토글 */}
+                <div className="flex gap-2 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setTeacherMode('login')}
+                    className={`flex-1 py-2 rounded-lg font-medium flex items-center justify-center gap-1 transition-colors ${
+                      teacherMode === 'login'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    <span>🔑</span>
+                    <span>로그인</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTeacherMode('register')}
+                    className={`flex-1 py-2 rounded-lg font-medium flex items-center justify-center gap-1 transition-colors ${
+                      teacherMode === 'register'
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    <span>📝</span>
+                    <span>회원가입</span>
+                  </button>
                 </div>
 
-                {teacherError && (
-                  <p className="text-sm text-red-500">{teacherError}</p>
+                {/* 선생님 로그인 */}
+                {teacherMode === 'login' && (
+                  <form onSubmit={handleTeacherLogin} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">이메일</label>
+                      <Input
+                        type="email"
+                        placeholder="teacher@school.com"
+                        value={teacherEmail}
+                        onChange={(e) => setTeacherEmail(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">비밀번호</label>
+                      <Input
+                        type="password"
+                        placeholder="••••••••"
+                        value={teacherPassword}
+                        onChange={(e) => setTeacherPassword(e.target.value)}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                      disabled={isTeacherLoading}
+                    >
+                      <span className="text-xl">🔑</span>
+                      <span>{isTeacherLoading ? '로그인 중...' : '로그인'}</span>
+                    </button>
+                  </form>
                 )}
 
-                <Button type="submit" className="w-full" disabled={teacherLoading}>
-                  {teacherLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      확인 중...
-                    </>
-                  ) : (
-                    '로그인'
-                  )}
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+                {/* 선생님 회원가입 */}
+                {teacherMode === 'register' && (
+                  <form onSubmit={handleTeacherRegister} className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">이메일</label>
+                      <Input
+                        type="email"
+                        placeholder="teacher@school.com"
+                        value={registerEmail}
+                        onChange={(e) => setRegisterEmail(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">비밀번호</label>
+                      <Input
+                        type="password"
+                        placeholder="6자 이상"
+                        value={registerPassword}
+                        onChange={(e) => setRegisterPassword(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">비밀번호 확인</label>
+                      <Input
+                        type="password"
+                        placeholder="비밀번호 다시 입력"
+                        value={registerPasswordConfirm}
+                        onChange={(e) => setRegisterPasswordConfirm(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">이름</label>
+                      <Input
+                        type="text"
+                        placeholder="홍길동"
+                        value={registerName}
+                        onChange={(e) => setRegisterName(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">학교명</label>
+                      <Input
+                        type="text"
+                        placeholder="OO고등학교"
+                        value={registerSchool}
+                        onChange={(e) => setRegisterSchool(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">다했니 API 키</label>
+                      <Input
+                        type="text"
+                        placeholder="다했니에서 발급받은 API 키"
+                        value={registerApiKey}
+                        onChange={(e) => setRegisterApiKey(e.target.value)}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        다했니 사이트에서 발급받은 API 키를 입력하세요
+                      </p>
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                      disabled={isRegisterLoading}
+                    >
+                      <span className="text-xl">📝</span>
+                      <span>{isRegisterLoading ? '가입 중...' : '회원가입'}</span>
+                    </button>
+                  </form>
+                )}
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+
+        {/* 푸터 */}
+        <p className="text-center text-amber-700 text-sm mt-6">
+          © 2024 다했니? - 학습루틴 게임화 시스템
+        </p>
+      </div>
     </div>
   );
 }

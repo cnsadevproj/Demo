@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
-import { StudentInfo } from '../services/api';
+import { StudentInfo } from '../services/firestoreApi';
 import { Trophy, Medal, Cookie, Award } from 'lucide-react';
 
 export interface RankedStudent {
