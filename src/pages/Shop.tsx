@@ -60,7 +60,12 @@ export function Shop({ onBack }: ShopProps) {
   // 데이터 로드
   useEffect(() => {
     const loadData = async () => {
-      if (!authStudent?.code || !studentTeacherId) return;
+      // 로그인 정보가 없으면 기본 상품만 표시
+      if (!authStudent?.code || !studentTeacherId) {
+        setShopItems(ALL_SHOP_ITEMS);
+        setLoading(false);
+        return;
+      }
 
       setLoading(true);
       try {

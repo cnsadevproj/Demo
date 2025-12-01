@@ -1275,9 +1275,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     <CardDescription>학생들을 팀으로 나누어 관리하세요</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {/* 빠른 팀 생성 */}
+                    {/* 빠른 팀 생성 + 학생 자동 배치 */}
                     <div className="p-3 bg-blue-50 rounded-lg">
-                      <p className="text-sm font-medium text-blue-700 mb-2">⚡ 빠른 팀 생성</p>
+                      <p className="text-sm font-medium text-blue-700 mb-2">⚡ 빠른 팀 생성 (학생 자동 배치)</p>
                       <div className="flex flex-wrap gap-2">
                         {[2, 3, 4, 5, 6].map((num) => (
                           <Button
@@ -1286,11 +1286,27 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                             size="sm"
                             onClick={async () => {
                               if (!user || !selectedClass) return;
-                              for (let i = 0; i < num; i++) {
-                                await createTeam(user.uid, selectedClass, `${i + 1}팀`, TEAM_FLAGS[i % TEAM_FLAGS.length]);
+                              if (students.length === 0) {
+                                toast.error('학생 목록을 먼저 등록해주세요.');
+                                return;
                               }
+
+                              // 팀 생성
+                              const teamIds: string[] = [];
+                              for (let i = 0; i < num; i++) {
+                                const teamId = await createTeam(user.uid, selectedClass, `${i + 1}팀`, TEAM_FLAGS[i % TEAM_FLAGS.length]);
+                                teamIds.push(teamId);
+                              }
+
+                              // 학생들을 팀에 균등 배치
+                              const shuffledStudents = [...students].sort(() => Math.random() - 0.5);
+                              for (let i = 0; i < shuffledStudents.length; i++) {
+                                const teamIndex = i % num;
+                                await addTeamMember(user.uid, selectedClass, teamIds[teamIndex], shuffledStudents[i].code);
+                              }
+
                               await loadTeams();
-                              toast.success(`${num}개 팀이 생성되었습니다!`);
+                              toast.success(`${num}개 팀에 ${students.length}명의 학생을 배치했습니다!`);
                             }}
                           >
                             {num}팀 만들기
