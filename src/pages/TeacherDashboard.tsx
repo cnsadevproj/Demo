@@ -44,6 +44,7 @@ import {
 } from '../services/firestoreApi';
 import { parseCsvFile, downloadCsvTemplate, exportStudentsToCsv } from '../utils/csv';
 import { TEAM_FLAGS } from '../types/game';
+import { ALL_SHOP_ITEMS } from '../types/shop';
 
 interface TeacherDashboardProps {
   onLogout: () => void;
@@ -177,6 +178,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   // 상점 상태
   const [shopItems, setShopItems] = useState<ShopItem[]>([]);
   const [isLoadingShop, setIsLoadingShop] = useState(false);
+  const [isRegisteringDefaults, setIsRegisteringDefaults] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemCategory, setNewItemCategory] = useState('emoji');
@@ -516,6 +518,32 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     } catch (error) {
       toast.error('상품 삭제에 실패했습니다.');
     }
+  };
+
+  // 기본 상품 일괄 등록
+  const handleRegisterDefaultItems = async () => {
+    if (!user) return;
+
+    setIsRegisteringDefaults(true);
+    try {
+      let count = 0;
+      for (const item of ALL_SHOP_ITEMS) {
+        await addShopItem(user.uid, {
+          name: item.name,
+          price: item.price,
+          category: item.category,
+          description: item.description || '',
+          value: item.value
+        });
+        count++;
+      }
+      await loadShopItems();
+      toast.success(`${count}개의 기본 상품이 등록되었습니다!`);
+    } catch (error) {
+      console.error('Failed to register default items:', error);
+      toast.error('기본 상품 등록에 실패했습니다.');
+    }
+    setIsRegisteringDefaults(false);
   };
 
   // ========== 팀 핸들러 ==========
@@ -1227,6 +1255,23 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   </Button>
                 </div>
                 <p className="text-xs text-gray-400">카테고리별 값: 이모지(😎), 테두리(gradient-rainbow), 이름효과(gradient-fire), 배경(stars), 칭호색상(0~9)</p>
+
+                {/* 기본 상품 일괄 등록 */}
+                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-amber-800">📦 기본 상품 일괄 등록</p>
+                      <p className="text-xs text-amber-600">100개 이상의 이모지, 테두리, 효과 등을 한 번에 등록합니다</p>
+                    </div>
+                    <Button
+                      onClick={handleRegisterDefaultItems}
+                      disabled={isRegisteringDefaults}
+                      className="bg-amber-500 hover:bg-amber-600"
+                    >
+                      {isRegisteringDefaults ? '등록 중...' : '🛒 기본 상품 등록'}
+                    </Button>
+                  </div>
+                </div>
 
                 {/* 아이템 목록 */}
                 {isLoadingShop ? (
