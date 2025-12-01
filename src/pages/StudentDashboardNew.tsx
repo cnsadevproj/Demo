@@ -24,7 +24,7 @@ import {
   Team,
   Badge
 } from '../services/firestoreApi';
-import { getItemByCode } from '../types/shop';
+import { getItemByCode, ALL_SHOP_ITEMS } from '../types/shop';
 
 // 이모지 코드를 실제 이모지로 변환
 const getEmojiFromCode = (code: string | undefined): string => {
@@ -119,15 +119,18 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     }
   };
 
-  // 상점 로드
+  // 상점 로드 (Firebase에 없으면 기본 아이템 사용)
   const loadShop = async () => {
     if (!studentTeacherId) return;
     setIsLoadingShop(true);
     try {
       const items = await getTeacherShopItems(studentTeacherId);
-      setShopItems(items);
+      // Firebase에 상품이 없으면 기본 상품 목록 사용
+      setShopItems(items.length > 0 ? items : ALL_SHOP_ITEMS);
     } catch (error) {
       console.error('Failed to load shop:', error);
+      // 에러 시에도 기본 상품 표시
+      setShopItems(ALL_SHOP_ITEMS);
     }
     setIsLoadingShop(false);
   };

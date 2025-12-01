@@ -138,9 +138,13 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     
     setIsRefreshing(true);
     try {
-      const count = await refreshStudentCookies(user.uid, selectedClass, teacher.dahandinApiKey);
-      await loadStudents();
-      toast.success(`${count}명의 쿠키 정보를 업데이트했습니다!`);
+      const result = await refreshStudentCookies(user.uid, selectedClass, teacher.dahandinApiKey);
+      if (result.success) {
+        await loadStudents();
+        toast.success(`${result.count}명의 쿠키 정보를 업데이트했습니다!`);
+      } else {
+        toast.error(result.error || '새로고침할 수 없습니다.');
+      }
     } catch (error) {
       console.error('Failed to refresh cookies:', error);
       toast.error('쿠키 새로고침에 실패했습니다.');
@@ -312,9 +316,11 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       if (successCount > 0 && teacher) {
         toast.info('쿠키 정보를 불러오는 중...');
         try {
-          const refreshedCount = await refreshStudentCookies(user.uid, selectedClass, teacher.dahandinApiKey);
+          const result = await refreshStudentCookies(user.uid, selectedClass, teacher.dahandinApiKey);
           await loadStudents();
-          toast.success(`${refreshedCount}명의 쿠키/뱃지 정보를 불러왔습니다!`);
+          if (result.success) {
+            toast.success(`${result.count}명의 쿠키/뱃지 정보를 불러왔습니다!`);
+          }
         } catch (refreshError) {
           console.error('Failed to auto-refresh cookies:', refreshError);
           toast.error('쿠키 정보 자동 불러오기에 실패했습니다. 수동으로 새로고침해주세요.');
