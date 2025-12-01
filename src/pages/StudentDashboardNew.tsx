@@ -121,7 +121,12 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
 
   // 상점 로드 (Firebase에 없으면 기본 아이템 사용)
   const loadShop = async () => {
-    if (!studentTeacherId) return;
+    // teacherId 없어도 기본 상품 표시
+    if (!studentTeacherId) {
+      setShopItems(ALL_SHOP_ITEMS);
+      setIsLoadingShop(false);
+      return;
+    }
     setIsLoadingShop(true);
     try {
       const items = await getTeacherShopItems(studentTeacherId);
