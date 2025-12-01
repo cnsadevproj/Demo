@@ -59,11 +59,14 @@ export interface Student {
     emojiCode: string;
     title: string;
     titleColorCode: string;
-    borderCode: string;
+    borderCode?: string; // deprecated - 더이상 사용하지 않음
     nameEffectCode: string;
     backgroundCode: string;
     buttonBorderCode?: string;
     buttonFillCode?: string;
+    animationCode?: string;
+    titlePermitActive?: boolean; // 칭호권 활성화 여부
+    profileBadgeKey?: string; // 프로필에 표시할 뱃지 키
   };
   ownedItems: string[];
   badges?: Record<string, Badge>;
@@ -106,7 +109,8 @@ export interface Wish {
   createdAt: Timestamp;
   likes: string[];
   isGranted: boolean;
-  grantedReward: number;
+  grantedReward: number;  // deprecated - 더이상 사용하지 않음
+  grantedMessage?: string; // 선정 시 교사 코멘트
 }
 
 // 상점 아이템
@@ -298,6 +302,20 @@ export async function updateStudent(
   });
 }
 
+// 학생에게 쿠키 부여 (교사용)
+export async function addCookiesToStudent(
+  teacherId: string,
+  studentCode: string,
+  amount: number
+): Promise<void> {
+  const studentRef = doc(db, 'teachers', teacherId, 'students', studentCode);
+  await updateDoc(studentRef, {
+    cookie: increment(amount),
+    totalCookie: increment(amount),
+    lastUpdate: serverTimestamp()
+  });
+}
+
 // 학생 삭제
 export async function deleteStudent(
   teacherId: string,
@@ -365,7 +383,8 @@ export async function checkTodayWish(
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const wishesRef = collection(db, 'teachers', teacherId, 'classes', classId, 'wishes');
+  // 모든 클래스룸에서 소원 공유 - teacher 레벨에 저장
+  const wishesRef = collection(db, 'teachers', teacherId, 'wishes');
   const q = query(wishesRef, where('studentCode', '==', studentCode));
   const snapshot = await getDocs(q);
 
@@ -392,7 +411,8 @@ export async function addWish(
     return { success: false, error: '오늘은 이미 소원을 작성했어요! 내일 다시 도전해주세요.' };
   }
 
-  const wishesRef = collection(db, 'teachers', teacherId, 'classes', classId, 'wishes');
+  // 모든 클래스룸에서 소원 공유 - teacher 레벨에 저장
+  const wishesRef = collection(db, 'teachers', teacherId, 'wishes');
   const wishRef = doc(wishesRef);
 
   await setDoc(wishRef, {
@@ -452,77 +472,78 @@ export async function updateWishStreak(
   });
 }
 
-// 소원 목록 조회
+// 소원 목록 조회 (모든 클래스룸 공유)
 export async function getWishes(
   teacherId: string,
   classId: string
 ): Promise<Wish[]> {
-  const wishesRef = collection(db, 'teachers', teacherId, 'classes', classId, 'wishes');
+  // 모든 클래스룸에서 소원 공유 - teacher 레벨에서 조회
+  const wishesRef = collection(db, 'teachers', teacherId, 'wishes');
   const q = query(wishesRef, orderBy('createdAt', 'desc'));
   const snapshot = await getDocs(q);
-  
+
   return snapshot.docs.map(doc => doc.data()) as Wish[];
 }
 
-// 소원 좋아요
+// 소원 좋아요 (모든 클래스룸 공유)
 export async function likeWish(
   teacherId: string,
   classId: string,
   wishId: string,
   studentCode: string
 ): Promise<void> {
-  const wishRef = doc(db, 'teachers', teacherId, 'classes', classId, 'wishes', wishId);
+  const wishRef = doc(db, 'teachers', teacherId, 'wishes', wishId);
   await updateDoc(wishRef, {
     likes: arrayUnion(studentCode)
   });
 }
 
-// 소원 좋아요 취소
+// 소원 좋아요 취소 (모든 클래스룸 공유)
 export async function unlikeWish(
   teacherId: string,
   classId: string,
   wishId: string,
   studentCode: string
 ): Promise<void> {
-  const wishRef = doc(db, 'teachers', teacherId, 'classes', classId, 'wishes', wishId);
+  const wishRef = doc(db, 'teachers', teacherId, 'wishes', wishId);
   await updateDoc(wishRef, {
     likes: arrayRemove(studentCode)
   });
 }
 
-// 소원 선정
+// 소원 선정 (모든 클래스룸 공유)
 export async function grantWish(
   teacherId: string,
   classId: string,
   wishId: string,
-  reward: number
+  message: string
 ): Promise<void> {
-  const wishRef = doc(db, 'teachers', teacherId, 'classes', classId, 'wishes', wishId);
+  const wishRef = doc(db, 'teachers', teacherId, 'wishes', wishId);
   await updateDoc(wishRef, {
     isGranted: true,
-    grantedReward: reward
+    grantedMessage: message
   });
 }
 
-// 소원 삭제
+// 소원 삭제 (모든 클래스룸 공유)
 export async function deleteWish(
   teacherId: string,
   classId: string,
   wishId: string
 ): Promise<void> {
-  const wishRef = doc(db, 'teachers', teacherId, 'classes', classId, 'wishes', wishId);
+  const wishRef = doc(db, 'teachers', teacherId, 'wishes', wishId);
   await deleteDoc(wishRef);
 }
 
-// 실시간 소원 구독
+// 실시간 소원 구독 (모든 클래스룸 공유)
 export function subscribeToWishes(
   teacherId: string,
   classId: string,
   callback: (wishes: Wish[]) => void
 ): () => void {
-  const wishesRef = collection(db, 'teachers', teacherId, 'classes', classId, 'wishes');
+  const wishesRef = collection(db, 'teachers', teacherId, 'wishes');
   const q = query(wishesRef, orderBy('createdAt', 'desc'));
-  
+
   return onSnapshot(q, (snapshot) => {
     const wishes = snapshot.docs.map(doc => doc.data()) as Wish[];
     callback(wishes);
@@ -677,6 +698,19 @@ export async function purchaseItem(
   });
 }
 
+// 칭호권 활성화
+export async function activateTitlePermit(
+  teacherId: string,
+  studentCode: string
+): Promise<void> {
+  const studentRef = doc(db, 'teachers', teacherId, 'students', studentCode);
+
+  await updateDoc(studentRef, {
+    'profile.titlePermitActive': true,
+    lastUpdate: serverTimestamp()
+  });
+}
+
 // 선생님별 상점 아이템 조회
 export async function getTeacherShopItems(teacherId: string): Promise<ShopItem[]> {
   const itemsRef = collection(db, 'teachers', teacherId, 'shop');
@@ -721,6 +755,20 @@ export async function deleteShopItem(
 ): Promise<void> {
   const itemRef = doc(db, 'teachers', teacherId, 'shop', itemCode);
   await deleteDoc(itemRef);
+}
+
+// 상점 아이템 전체 삭제
+export async function deleteAllShopItems(teacherId: string): Promise<number> {
+  const shopRef = collection(db, 'teachers', teacherId, 'shop');
+  const shopSnap = await getDocs(shopRef);
+
+  let deletedCount = 0;
+  for (const itemDoc of shopSnap.docs) {
+    await deleteDoc(itemDoc.ref);
+    deletedCount++;
+  }
+
+  return deletedCount;
 }
 
 // ========================================
@@ -813,6 +861,23 @@ export async function getGrassData(
   });
   
   return grassData;
+}
+
+// 잔디 데이터 초기화 (전체 삭제)
+export async function resetGrassData(
+  teacherId: string,
+  classId: string
+): Promise<{ success: boolean; deletedCount: number }> {
+  const grassRef = collection(db, 'teachers', teacherId, 'classes', classId, 'grass');
+  const snapshot = await getDocs(grassRef);
+
+  let deletedCount = 0;
+  for (const docSnap of snapshot.docs) {
+    await deleteDoc(doc(db, 'teachers', teacherId, 'classes', classId, 'grass', docSnap.id));
+    deletedCount++;
+  }
+
+  return { success: true, deletedCount };
 }
 
 // ========================================
@@ -932,8 +997,8 @@ export async function refreshStudentCookies(
     try {
       const dahandinData = await fetchStudentFromDahandin(apiKey, student.code);
 
-      // 첫 로드인지 확인 (previousCookie가 0이고 cookie도 0이면 첫 로드)
-      const isFirstLoad = student.previousCookie === 0 && student.cookie === 0;
+      // 첫 로드인지 확인 (previousCookie가 0이면 첫 등록 후 첫 동기화)
+      const isFirstLoad = student.previousCookie === 0;
       const cookieChange = dahandinData.cookie - student.previousCookie;
 
       // 학생 정보 업데이트 (뱃지 포함)
