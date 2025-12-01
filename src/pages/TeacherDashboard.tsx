@@ -2520,54 +2520,83 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             </div>
 
             {/* 프로필 꾸미기 미리보기 */}
-            <div className="px-4 py-3 bg-purple-50 border-b">
-              <p className="text-sm font-medium text-purple-700 mb-2">🎨 프로필 꾸미기</p>
-              <div className="bg-white rounded-lg p-3 border border-purple-200">
-                <div className="flex items-center gap-3">
-                  {/* 이모지 + 애니메이션 */}
-                  <div className={`text-4xl ${getAnimationClass(selectedStudent?.profile?.animationCode || 'none')}`}>
-                    {selectedStudent?.profile?.emojiCode
-                      ? (() => {
-                          const emojiItem = ALL_SHOP_ITEMS.find(item => item.code === selectedStudent.profile?.emojiCode);
-                          return emojiItem?.value || '😀';
-                        })()
-                      : '😀'}
-                  </div>
-                  <div className="flex-1">
-                    {/* 칭호 */}
-                    {selectedStudent?.profile?.title && (
-                      <span className={`inline-block text-xs px-2 py-0.5 rounded mb-1 ${
-                        selectedStudent?.profile?.titleColorCode
-                          ? (() => {
-                              const colorItem = ALL_SHOP_ITEMS.find(item => item.code === selectedStudent.profile?.titleColorCode);
-                              const colorIndex = colorItem?.value ? parseInt(colorItem.value) : 0;
-                              const colors = ['bg-red-100 text-red-700', 'bg-orange-100 text-orange-700', 'bg-yellow-100 text-yellow-700', 'bg-green-100 text-green-700', 'bg-blue-100 text-blue-700', 'bg-purple-100 text-purple-700', 'bg-pink-100 text-pink-700', 'bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 text-white'];
-                              return colors[colorIndex] || colors[0];
-                            })()
-                          : 'bg-gray-100 text-gray-700'
-                      }`}>
-                        {selectedStudent.profile.title}
-                      </span>
-                    )}
-                    {/* 이름 + 효과 */}
-                    <p className={`font-bold text-lg ${
-                      selectedStudent?.profile?.nameEffectCode === 'name_effect_rainbow'
-                        ? 'bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 bg-clip-text text-transparent'
-                        : selectedStudent?.profile?.nameEffectCode === 'name_effect_glow'
-                        ? 'text-amber-500 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]'
-                        : ''
-                    }`}>
-                      {selectedStudent?.name}
-                    </p>
-                  </div>
-                </div>
-                {/* 설정 요약 */}
-                <div className="mt-2 pt-2 border-t border-purple-100 grid grid-cols-2 gap-1 text-xs text-gray-500">
-                  <div>테두리: {selectedStudent?.profile?.buttonBorderCode ? '✅' : '❌'}</div>
-                  <div>배경: {selectedStudent?.profile?.buttonFillCode ? '✅' : '❌'}</div>
-                  <div>애니메이션: {selectedStudent?.profile?.animationCode && selectedStudent.profile.animationCode !== 'none' ? '✅' : '❌'}</div>
-                  <div>이름효과: {selectedStudent?.profile?.nameEffectCode ? '✅' : '❌'}</div>
-                </div>
+            <div className="px-4 py-4 bg-gradient-to-b from-purple-50 to-pink-50 border-b">
+              <p className="text-sm font-medium text-purple-700 mb-3 text-center">🎨 프로필 미리보기</p>
+              <div className="flex justify-center">
+                {(() => {
+                  const profile = selectedStudent?.profile;
+                  const emojiItem = ALL_SHOP_ITEMS.find(item => item.code === profile?.emojiCode);
+                  const emoji = emojiItem?.value || '😀';
+                  const borderItem = ALL_SHOP_ITEMS.find(item => item.code === profile?.buttonBorderCode);
+                  const fillItem = ALL_SHOP_ITEMS.find(item => item.code === profile?.buttonFillCode);
+                  const nameEffectItem = ALL_SHOP_ITEMS.find(item => item.code === profile?.nameEffectCode);
+                  const titleColorItem = ALL_SHOP_ITEMS.find(item => item.code === profile?.titleColorCode);
+
+                  const borderColorMap: Record<string, string> = {
+                    'border-blue-500': 'rgb(59 130 246)', 'border-red-500': 'rgb(239 68 68)',
+                    'border-green-500': 'rgb(34 197 94)', 'border-yellow-500': 'rgb(234 179 8)',
+                    'border-purple-500': 'rgb(168 85 247)', 'border-pink-500': 'rgb(236 72 153)',
+                    'border-amber-400': 'rgb(251 191 36)', 'border-gray-800': 'rgb(31 41 55)',
+                  };
+                  const borderColor = borderItem?.value ? borderColorMap[borderItem.value] || 'rgb(229 231 235)' : 'rgb(229 231 235)';
+
+                  const fillColorMap: Record<string, string> = {
+                    'bg-blue-500': 'rgb(59 130 246)', 'bg-red-500': 'rgb(239 68 68)',
+                    'bg-green-500': 'rgb(34 197 94)', 'bg-yellow-500': 'rgb(234 179 8)',
+                    'bg-purple-500': 'rgb(168 85 247)', 'bg-pink-500': 'rgb(236 72 153)',
+                    'bg-amber-400': 'rgb(251 191 36)', 'bg-gray-800': 'rgb(31 41 55)',
+                  };
+                  const gradientMap: Record<string, string> = {
+                    'gradient-rainbow': 'linear-gradient(to right, rgb(239 68 68), rgb(234 179 8), rgb(34 197 94), rgb(59 130 246), rgb(168 85 247))',
+                    'gradient-fire': 'linear-gradient(to right, rgb(239 68 68), rgb(249 115 22), rgb(234 179 8))',
+                    'gradient-ocean': 'linear-gradient(to right, rgb(6 182 212), rgb(59 130 246), rgb(99 102 241))',
+                    'gradient-sunset': 'linear-gradient(to right, rgb(249 115 22), rgb(236 72 153), rgb(168 85 247))',
+                    'gradient-aurora': 'linear-gradient(to right, rgb(34 197 94), rgb(6 182 212), rgb(168 85 247))',
+                    'gradient-pink-purple': 'linear-gradient(to right, rgb(236 72 153), rgb(168 85 247))',
+                    'gradient-mint': 'linear-gradient(to right, rgb(6 182 212), rgb(20 184 166))',
+                    'gradient-orange': 'linear-gradient(to right, rgb(234 179 8), rgb(249 115 22))',
+                  };
+                  const isGradient = fillItem?.value?.startsWith('gradient-');
+                  const fillStyle = isGradient
+                    ? { backgroundImage: gradientMap[fillItem?.value || ''] || 'none' }
+                    : { backgroundColor: fillColorMap[fillItem?.value || ''] || 'white' };
+
+                  const nameEffectClass = nameEffectItem?.value === 'rainbow'
+                    ? 'bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 bg-clip-text text-transparent'
+                    : nameEffectItem?.value === 'glow'
+                    ? 'text-amber-500 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]'
+                    : nameEffectItem?.value === 'neon'
+                    ? 'text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.9)]'
+                    : '';
+
+                  const titleColors = ['bg-red-100 text-red-700', 'bg-orange-100 text-orange-700', 'bg-yellow-100 text-yellow-700', 'bg-green-100 text-green-700', 'bg-blue-100 text-blue-700', 'bg-purple-100 text-purple-700', 'bg-pink-100 text-pink-700', 'bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 text-white'];
+                  const titleColorIndex = titleColorItem?.value ? parseInt(titleColorItem.value) : 0;
+                  const titleColorClass = titleColors[titleColorIndex] || 'bg-gray-100 text-gray-700';
+
+                  return (
+                    <div
+                      className="px-8 py-5 rounded-xl text-center shadow-lg"
+                      style={{
+                        border: `3px solid ${borderColor}`,
+                        ...fillStyle,
+                      }}
+                    >
+                      <div className={`text-5xl mb-3 ${getAnimationClass(profile?.animationCode || 'none')}`}>
+                        {emoji}
+                      </div>
+                      {profile?.title && (
+                        <div className="mb-2">
+                          <span className={`inline-block text-sm px-3 py-1 rounded-full ${titleColorClass}`}>
+                            {profile.title}
+                          </span>
+                        </div>
+                      )}
+                      <p className={`font-bold text-xl ${nameEffectClass}`}>
+                        {selectedStudent?.name}
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 

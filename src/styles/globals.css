@@ -187,3 +187,1565 @@
 html {
   font-size: var(--font-size);
 }
+
+/* ========================================
+   상점 아이템 CSS 유틸리티 클래스
+   ======================================== */
+
+/* Display utilities */
+.inline-block {
+  display: inline-block;
+}
+
+.bg-transparent {
+  background-color: transparent;
+}
+
+/* Gradient text utilities */
+.bg-clip-text {
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.text-transparent {
+  color: transparent;
+}
+
+/* Missing color classes */
+.text-red-500 {
+  color: rgb(239 68 68);
+}
+
+.text-orange-500 {
+  color: rgb(249 115 22);
+}
+
+.text-yellow-500 {
+  color: rgb(234 179 8);
+}
+
+.text-green-500 {
+  color: rgb(34 197 94);
+}
+
+.text-blue-500 {
+  color: rgb(59 130 246);
+}
+
+.text-purple-500 {
+  color: rgb(168 85 247);
+}
+
+.text-pink-500 {
+  color: rgb(236 72 153);
+}
+
+.text-gray-800 {
+  color: rgb(31 41 55);
+}
+
+.text-amber-500 {
+  color: rgb(245 158 11);
+}
+
+/* Glow effects */
+.drop-shadow-lg {
+  filter: drop-shadow(0 10px 8px rgb(0 0 0 / 0.04)) drop-shadow(0 4px 3px rgb(0 0 0 / 0.1));
+}
+
+.drop-shadow-md {
+  filter: drop-shadow(0 4px 3px rgb(0 0 0 / 0.07)) drop-shadow(0 2px 2px rgb(0 0 0 / 0.06));
+}
+
+/* Additional button fill colors */
+.bg-pink-50 {
+  background-color: rgb(253 242 248);
+}
+
+/* Gradient backgrounds for cards */
+.bg-gradient-to-br {
+  background-image: linear-gradient(to bottom right, var(--tw-gradient-stops));
+}
+
+.from-pink-100 {
+  --tw-gradient-from: rgb(252 231 243);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(252 231 243 / 0));
+}
+
+.to-blue-100 {
+  --tw-gradient-to: rgb(219 234 254);
+}
+
+.from-purple-200 {
+  --tw-gradient-from: rgb(233 213 255);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(233 213 255 / 0));
+}
+
+.to-pink-200 {
+  --tw-gradient-to: rgb(251 207 232);
+}
+
+.from-amber-100 {
+  --tw-gradient-from: rgb(254 243 199);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(254 243 199 / 0));
+}
+
+.via-pink-100 {
+  --tw-gradient-stops: var(--tw-gradient-from), rgb(252 231 243), var(--tw-gradient-to, rgb(252 231 243 / 0));
+}
+
+.to-purple-100 {
+  --tw-gradient-to: rgb(243 232 255);
+}
+
+/* Gradient text colors - via stops */
+.via-yellow-500 {
+  --tw-gradient-stops: var(--tw-gradient-from), rgb(234 179 8), var(--tw-gradient-to, rgb(234 179 8 / 0));
+}
+
+.to-blue-500 {
+  --tw-gradient-to: rgb(59 130 246);
+}
+
+.via-red-500 {
+  --tw-gradient-stops: var(--tw-gradient-from), rgb(239 68 68), var(--tw-gradient-to, rgb(239 68 68 / 0));
+}
+
+.from-orange-500 {
+  --tw-gradient-from: rgb(249 115 22);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(249 115 22 / 0));
+}
+
+.to-yellow-500 {
+  --tw-gradient-to: rgb(234 179 8);
+}
+
+.from-blue-400 {
+  --tw-gradient-from: rgb(96 165 250);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(96 165 250 / 0));
+}
+
+.via-cyan-500 {
+  --tw-gradient-stops: var(--tw-gradient-from), rgb(6 182 212), var(--tw-gradient-to, rgb(6 182 212 / 0));
+}
+
+.to-teal-500 {
+  --tw-gradient-to: rgb(20 184 166);
+}
+
+.from-yellow-400 {
+  --tw-gradient-from: rgb(250 204 21);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(250 204 21 / 0));
+}
+
+.via-amber-500 {
+  --tw-gradient-stops: var(--tw-gradient-from), rgb(245 158 11), var(--tw-gradient-to, rgb(245 158 11 / 0));
+}
+
+.to-yellow-600 {
+  --tw-gradient-to: rgb(202 138 4);
+}
+
+/* Ring utilities for rainbow border */
+.ring-purple-400 {
+  --tw-ring-color: rgb(192 132 252);
+}
+
+.ring-offset-1 {
+  --tw-ring-offset-width: 1px;
+}
+
+/* Border colors */
+.border-red-400 {
+  border-color: rgb(248 113 113);
+}
+
+.border-orange-400 {
+  border-color: rgb(251 146 60);
+}
+
+.border-yellow-400 {
+  border-color: rgb(250 204 21);
+}
+
+.border-green-400 {
+  border-color: rgb(74 222 128);
+}
+
+.border-blue-400 {
+  border-color: rgb(96 165 250);
+}
+
+.border-pink-400 {
+  border-color: rgb(244 114 182);
+}
+
+.border-pink-500 {
+  border-color: rgb(236 72 153);
+}
+
+/* 버튼 테두리 색상 - shop.ts 아이템용 */
+.border-blue-500 {
+  border-color: rgb(59 130 246);
+}
+
+.border-red-500 {
+  border-color: rgb(239 68 68);
+}
+
+.border-green-500 {
+  border-color: rgb(34 197 94);
+}
+
+.border-yellow-500 {
+  border-color: rgb(234 179 8);
+}
+
+.border-purple-500 {
+  border-color: rgb(168 85 247);
+}
+
+.border-amber-400 {
+  border-color: rgb(251 191 36);
+}
+
+.border-gray-800 {
+  border-color: rgb(31 41 55);
+}
+
+.border-gray-300 {
+  border-color: rgb(209 213 219);
+}
+
+/* 버튼 배경 색상 - shop.ts 아이템용 */
+.bg-purple-500 {
+  background-color: rgb(168 85 247);
+}
+
+.bg-pink-500 {
+  background-color: rgb(236 72 153);
+}
+
+.bg-yellow-500 {
+  background-color: rgb(234 179 8);
+}
+
+.bg-amber-400 {
+  background-color: rgb(251 191 36);
+}
+
+.bg-gray-800 {
+  background-color: rgb(31 41 55);
+}
+
+.from-pink-500 {
+  --tw-gradient-from: rgb(236 72 153);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(236 72 153 / 0));
+}
+
+.to-purple-500 {
+  --tw-gradient-to: rgb(168 85 247);
+}
+
+/* ========================================
+   Animation utilities - 프로필 애니메이션
+   ======================================== */
+
+/* 1. Pulse - 두근두근 (투명도 변화) */
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* 2. Spin - 빙글빙글 (느린 회전) */
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 3. Bounce - 통통 (위아래 튀기) */
+.animate-bounce {
+  animation: bounce 1s ease-in-out infinite;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* 4. Shake - 흔들흔들 (좌우 흔들림) */
+.animate-shake {
+  animation: shake 0.5s ease-in-out infinite;
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+
+/* 5. Sparkle - 반짝반짝 (크기+투명도) */
+.animate-sparkle {
+  animation: sparkle 1.5s ease-in-out infinite;
+}
+
+@keyframes sparkle {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+}
+
+/* 6. Wave - 출렁출렁 (좌우 기울임) */
+.animate-wave {
+  animation: wave 2s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+@keyframes wave {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-3deg);
+  }
+  75% {
+    transform: rotate(3deg);
+  }
+}
+
+/* 7. Float - 둥실둥실 (부드러운 위아래) */
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+/* 8. Confetti - 축하 (회전+크기 변화) */
+.animate-confetti {
+  animation: confetti 2s ease-in-out infinite;
+}
+
+@keyframes confetti {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+  }
+  25% {
+    transform: scale(1.02) rotate(-2deg);
+  }
+  50% {
+    transform: scale(1.05) rotate(0deg);
+  }
+  75% {
+    transform: scale(1.02) rotate(2deg);
+  }
+}
+
+/* 9. Flame - 불꽃 (깜빡임+크기) */
+.animate-flame {
+  animation: flame 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes flame {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  100% {
+    transform: scale(1.03);
+    filter: brightness(1.1);
+  }
+}
+
+/* 10. Snow - 눈송이 (부드러운 흔들림+낙하) */
+.animate-snow {
+  animation: snow 4s ease-in-out infinite;
+}
+
+@keyframes snow {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-3px) rotate(-5deg);
+  }
+  50% {
+    transform: translateY(0) rotate(0deg);
+  }
+  75% {
+    transform: translateY(-3px) rotate(5deg);
+  }
+}
+
+/* Green grass colors */
+.bg-green-300 {
+  background-color: rgb(134 239 172);
+}
+
+.bg-green-700 {
+  background-color: rgb(21 128 61);
+}
+
+/* ========================================
+   추가 유틸리티 클래스 - 버튼/텍스트/배경
+   ======================================== */
+
+/* Amber text colors */
+.text-amber-100 {
+  color: rgb(254 243 199);
+}
+
+.text-amber-600 {
+  color: rgb(217 119 6);
+}
+
+.text-amber-700 {
+  color: rgb(180 83 9);
+}
+
+/* White with opacity backgrounds */
+.bg-white\/20 {
+  background-color: rgb(255 255 255 / 0.2);
+}
+
+.bg-white\/30 {
+  background-color: rgb(255 255 255 / 0.3);
+}
+
+.hover\:bg-white\/30:hover {
+  background-color: rgb(255 255 255 / 0.3);
+}
+
+/* Rounded utilities */
+.rounded-full {
+  border-radius: 9999px;
+}
+
+/* Disabled state */
+.disabled\:opacity-50:disabled {
+  opacity: 0.5;
+}
+
+/* Display utilities */
+.block {
+  display: block;
+}
+
+/* Flex utilities */
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.flex-wrap {
+  flex-wrap: wrap;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.gap-2 {
+  gap: 0.5rem;
+}
+
+/* Width utilities */
+.w-full {
+  width: 100%;
+}
+
+.mx-auto {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Overflow utilities */
+.overflow-x-auto {
+  overflow-x: auto;
+}
+
+.overflow-hidden {
+  overflow: hidden;
+}
+
+/* Button base styles - 기본 버튼 스타일 강화 */
+button {
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+/* Gradient backgrounds */
+.bg-gradient-to-r {
+  background-image: linear-gradient(to right, var(--tw-gradient-stops));
+}
+
+.from-amber-400 {
+  --tw-gradient-from: rgb(251 191 36);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(251 191 36 / 0));
+}
+
+.to-orange-400 {
+  --tw-gradient-to: rgb(251 146 60);
+}
+
+/* Text sizes */
+.text-5xl {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.text-sm {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+/* Font weights */
+.font-bold {
+  font-weight: 700;
+}
+
+.font-medium {
+  font-weight: 500;
+}
+
+/* Spacing */
+.mt-3 {
+  margin-top: 0.75rem;
+}
+
+.mb-1 {
+  margin-bottom: 0.25rem;
+}
+
+.mb-2 {
+  margin-bottom: 0.5rem;
+}
+
+.px-4 {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.py-2 {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+/* Transitions */
+.transition-colors {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Position */
+.relative {
+  position: relative;
+}
+
+/* Text alignment */
+.text-center {
+  text-align: center;
+}
+
+/* ========================================
+   종합 유틸리티 클래스 - 전체 프로젝트용
+   ======================================== */
+
+/* Min/Max height */
+.min-h-screen {
+  min-height: 100vh;
+}
+
+/* Gradient directions */
+.bg-gradient-to-b {
+  background-image: linear-gradient(to bottom, var(--tw-gradient-stops));
+}
+
+/* Amber colors */
+.from-amber-50 {
+  --tw-gradient-from: rgb(255 251 235);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(255 251 235 / 0));
+}
+
+.to-orange-100 {
+  --tw-gradient-to: rgb(255 237 213);
+}
+
+.text-amber-800 {
+  color: rgb(146 64 14);
+}
+
+.bg-amber-500 {
+  background-color: rgb(245 158 11);
+}
+
+.bg-amber-600 {
+  background-color: rgb(217 119 6);
+}
+
+.hover\:bg-amber-600:hover {
+  background-color: rgb(217 119 6);
+}
+
+.bg-amber-50 {
+  background-color: rgb(255 251 235);
+}
+
+.bg-amber-100 {
+  background-color: rgb(254 243 199);
+}
+
+/* Blue colors */
+.bg-blue-500 {
+  background-color: rgb(59 130 246);
+}
+
+.bg-blue-600 {
+  background-color: rgb(37 99 235);
+}
+
+.hover\:bg-blue-600:hover {
+  background-color: rgb(37 99 235);
+}
+
+.bg-blue-50 {
+  background-color: rgb(239 246 255);
+}
+
+.bg-blue-100 {
+  background-color: rgb(219 234 254);
+}
+
+.hover\:bg-blue-200:hover {
+  background-color: rgb(191 219 254);
+}
+
+.text-blue-700 {
+  color: rgb(29 78 216);
+}
+
+/* Green colors */
+.bg-green-500 {
+  background-color: rgb(34 197 94);
+}
+
+.bg-green-600 {
+  background-color: rgb(22 163 74);
+}
+
+.hover\:bg-green-600:hover {
+  background-color: rgb(22 163 74);
+}
+
+.bg-green-100 {
+  background-color: rgb(220 252 231);
+}
+
+.hover\:bg-green-200:hover {
+  background-color: rgb(187 247 208);
+}
+
+.text-green-700 {
+  color: rgb(21 128 61);
+}
+
+/* Gray colors */
+.bg-gray-100 {
+  background-color: rgb(243 244 246);
+}
+
+.bg-gray-200 {
+  background-color: rgb(229 231 235);
+}
+
+.hover\:bg-gray-100:hover {
+  background-color: rgb(243 244 246);
+}
+
+.hover\:bg-gray-200:hover {
+  background-color: rgb(229 231 235);
+}
+
+.text-gray-600 {
+  color: rgb(75 85 99);
+}
+
+.text-gray-700 {
+  color: rgb(55 65 81);
+}
+
+/* Red colors */
+.bg-red-500 {
+  background-color: rgb(239 68 68);
+}
+
+.bg-red-600 {
+  background-color: rgb(220 38 38);
+}
+
+.hover\:bg-red-600:hover {
+  background-color: rgb(220 38 38);
+}
+
+.hover\:bg-red-50:hover {
+  background-color: rgb(254 242 242);
+}
+
+.text-red-600 {
+  color: rgb(220 38 38);
+}
+
+/* White */
+.text-white {
+  color: rgb(255 255 255);
+}
+
+.bg-white {
+  background-color: rgb(255 255 255);
+}
+
+/* Shadow */
+.shadow-xl {
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+.shadow-sm {
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+.shadow-md {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+.shadow-lg {
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+.hover\:shadow-lg:hover {
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+/* Text sizes */
+.text-6xl {
+  font-size: 3.75rem;
+  line-height: 1;
+}
+
+.text-3xl {
+  font-size: 1.875rem;
+  line-height: 2.25rem;
+}
+
+.text-2xl {
+  font-size: 1.5rem;
+  line-height: 2rem;
+}
+
+.text-xl {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+
+.text-lg {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+}
+
+.text-xs {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+/* Layout */
+.w-full {
+  width: 100%;
+}
+
+.max-w-md {
+  max-width: 28rem;
+}
+
+.max-w-lg {
+  max-width: 32rem;
+}
+
+.max-w-xl {
+  max-width: 36rem;
+}
+
+.max-w-2xl {
+  max-width: 42rem;
+}
+
+.max-w-3xl {
+  max-width: 48rem;
+}
+
+.max-w-4xl {
+  max-width: 56rem;
+}
+
+/* Spacing */
+.p-4 {
+  padding: 1rem;
+}
+
+.p-3 {
+  padding: 0.75rem;
+}
+
+.p-6 {
+  padding: 1.5rem;
+}
+
+.py-3 {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.py-4 {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+.py-6 {
+  padding-top: 1.5rem;
+  padding-bottom: 1.5rem;
+}
+
+.px-3 {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+.px-6 {
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+.mb-4 {
+  margin-bottom: 1rem;
+}
+
+.mb-6 {
+  margin-bottom: 1.5rem;
+}
+
+.mb-8 {
+  margin-bottom: 2rem;
+}
+
+.mt-2 {
+  margin-top: 0.5rem;
+}
+
+.mt-1 {
+  margin-top: 0.25rem;
+}
+
+/* Space between children */
+.space-y-4 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 1rem;
+}
+
+.space-y-2 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0.5rem;
+}
+
+.space-y-3 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0.75rem;
+}
+
+.space-y-6 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 1.5rem;
+}
+
+/* Grid */
+.grid {
+  display: grid;
+}
+
+.grid-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid-cols-1 {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+/* Flex */
+.flex-1 {
+  flex: 1 1 0%;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.flex-wrap {
+  flex-wrap: wrap;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.items-start {
+  align-items: flex-start;
+}
+
+.gap-1 {
+  gap: 0.25rem;
+}
+
+.gap-3 {
+  gap: 0.75rem;
+}
+
+.gap-4 {
+  gap: 1rem;
+}
+
+/* Rounded */
+.rounded-lg {
+  border-radius: 0.5rem;
+}
+
+.rounded-xl {
+  border-radius: 0.75rem;
+}
+
+.rounded-2xl {
+  border-radius: 1rem;
+}
+
+.rounded-3xl {
+  border-radius: 1.5rem;
+}
+
+.rounded-sm {
+  border-radius: 0.125rem;
+}
+
+.rounded {
+  border-radius: 0.25rem;
+}
+
+/* Border */
+.border {
+  border-width: 1px;
+  border-style: solid;
+}
+
+.border-0 {
+  border-width: 0px;
+}
+
+.border-b {
+  border-bottom-width: 1px;
+}
+
+.border-t {
+  border-top-width: 1px;
+}
+
+.border-2 {
+  border-width: 2px;
+  border-style: solid;
+}
+
+.border-amber-300 {
+  border-color: rgb(252 211 77);
+}
+
+.border-gray-200 {
+  border-color: rgb(229 231 235);
+}
+
+/* Tracking */
+.tracking-wider {
+  letter-spacing: 0.05em;
+}
+
+/* Block */
+.block {
+  display: block;
+}
+
+/* Width/Height */
+.w-3 {
+  width: 0.75rem;
+}
+
+.h-3 {
+  height: 0.75rem;
+}
+
+.w-4 {
+  width: 1rem;
+}
+
+.h-4 {
+  height: 1rem;
+}
+
+.w-5 {
+  width: 1.25rem;
+}
+
+.h-5 {
+  height: 1.25rem;
+}
+
+.w-6 {
+  width: 1.5rem;
+}
+
+.h-6 {
+  height: 1.5rem;
+}
+
+.w-8 {
+  width: 2rem;
+}
+
+.h-8 {
+  height: 2rem;
+}
+
+.w-12 {
+  width: 3rem;
+}
+
+.h-12 {
+  height: 3rem;
+}
+
+.w-10 {
+  width: 2.5rem;
+}
+
+.h-10 {
+  height: 2.5rem;
+}
+
+.w-16 {
+  width: 4rem;
+}
+
+.h-16 {
+  height: 4rem;
+}
+
+.w-20 {
+  width: 5rem;
+}
+
+.h-20 {
+  height: 5rem;
+}
+
+.w-24 {
+  width: 6rem;
+}
+
+.h-24 {
+  height: 6rem;
+}
+
+.size-4 {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Position */
+.absolute {
+  position: absolute;
+}
+
+.sticky {
+  position: sticky;
+}
+
+.left-0 {
+  left: 0px;
+}
+
+/* Overflow */
+.overflow-x-auto {
+  overflow-x: auto;
+}
+
+.overflow-hidden {
+  overflow: hidden;
+}
+
+/* Text */
+.text-left {
+  text-align: left;
+}
+
+.text-right {
+  text-align: right;
+}
+
+/* Margins */
+.ml-2 {
+  margin-left: 0.5rem;
+}
+
+.mr-1 {
+  margin-right: 0.25rem;
+}
+
+.mr-2 {
+  margin-right: 0.5rem;
+}
+
+.ml-8 {
+  margin-left: 2rem;
+}
+
+/* Padding */
+.py-1 {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.px-1 {
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+}
+
+.px-2 {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.py-8 {
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+}
+
+.py-12 {
+  padding-top: 3rem;
+  padding-bottom: 3rem;
+}
+
+.pb-2 {
+  padding-bottom: 0.5rem;
+}
+
+.pb-4 {
+  padding-bottom: 1rem;
+}
+
+.pt-0 {
+  padding-top: 0px;
+}
+
+/* Misc colors */
+.text-gray-400 {
+  color: rgb(156 163 175);
+}
+
+.text-gray-500 {
+  color: rgb(107 114 128);
+}
+
+.bg-gray-50 {
+  background-color: rgb(249 250 251);
+}
+
+.text-green-600 {
+  color: rgb(22 163 74);
+}
+
+.text-blue-600 {
+  color: rgb(37 99 235);
+}
+
+.text-purple-600 {
+  color: rgb(147 51 234);
+}
+
+.text-orange-600 {
+  color: rgb(234 88 12);
+}
+
+.text-yellow-500 {
+  color: rgb(234 179 8);
+}
+
+/* Orange colors */
+.bg-orange-100 {
+  background-color: rgb(255 237 213);
+}
+
+.bg-orange-50 {
+  background-color: rgb(255 247 237);
+}
+
+.hover\:bg-orange-200:hover {
+  background-color: rgb(254 215 170);
+}
+
+.text-orange-700 {
+  color: rgb(194 65 12);
+}
+
+/* Purple colors */
+.bg-purple-100 {
+  background-color: rgb(243 232 255);
+}
+
+.bg-purple-50 {
+  background-color: rgb(250 245 255);
+}
+
+.hover\:bg-purple-200:hover {
+  background-color: rgb(233 213 255);
+}
+
+.text-purple-700 {
+  color: rgb(126 34 206);
+}
+
+/* Pink colors */
+.bg-pink-100 {
+  background-color: rgb(252 231 243);
+}
+
+.hover\:bg-pink-200:hover {
+  background-color: rgb(251 207 232);
+}
+
+.text-pink-700 {
+  color: rgb(190 24 93);
+}
+
+/* Cyan colors */
+.bg-cyan-100 {
+  background-color: rgb(207 250 254);
+}
+
+.hover\:bg-cyan-200:hover {
+  background-color: rgb(165 243 252);
+}
+
+.text-cyan-700 {
+  color: rgb(14 116 144);
+}
+
+/* Indigo colors */
+.bg-indigo-100 {
+  background-color: rgb(224 231 255);
+}
+
+.hover\:bg-indigo-200:hover {
+  background-color: rgb(199 210 254);
+}
+
+.text-indigo-700 {
+  color: rgb(67 56 202);
+}
+
+/* Teal colors */
+.bg-teal-100 {
+  background-color: rgb(204 251 241);
+}
+
+.hover\:bg-teal-200:hover {
+  background-color: rgb(153 246 228);
+}
+
+.text-teal-700 {
+  color: rgb(15 118 110);
+}
+
+/* Yellow colors */
+.bg-yellow-100 {
+  background-color: rgb(254 249 195);
+}
+
+.hover\:bg-yellow-200:hover {
+  background-color: rgb(254 240 138);
+}
+
+.text-yellow-700 {
+  color: rgb(161 98 7);
+}
+
+/* Additional utilities */
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.cursor-not-allowed {
+  cursor: not-allowed;
+}
+
+.select-none {
+  user-select: none;
+}
+
+.opacity-50 {
+  opacity: 0.5;
+}
+
+.opacity-60 {
+  opacity: 0.6;
+}
+
+/* Hover states */
+.hover\:ring-2:hover {
+  box-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+}
+
+.hover\:ring-green-600:hover {
+  --tw-ring-color: rgb(22 163 74);
+}
+
+/* Z-index */
+.z-10 {
+  z-index: 10;
+}
+
+.z-50 {
+  z-index: 50;
+}
+
+/* Inset */
+.inset-0 {
+  inset: 0px;
+}
+
+/* Fixed */
+.fixed {
+  position: fixed;
+}
+
+/* Transform */
+.transform {
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+
+/* Backdrop */
+.backdrop-blur-sm {
+  backdrop-filter: blur(4px);
+}
+
+/* Ring */
+:root {
+  --tw-ring-offset-width: 0px;
+  --tw-ring-color: rgb(59 130 246 / 0.5);
+  --tw-ring-inset: ;
+}
+
+.ring-2 {
+  box-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+}
+
+.ring-yellow-200 {
+  --tw-ring-color: rgb(254 240 138);
+}
+
+/* Margin auto */
+.ml-auto {
+  margin-left: auto;
+}
+
+.mr-auto {
+  margin-right: auto;
+}
+
+/* Min width */
+.min-w-\[60px\] {
+  min-width: 60px;
+}
+
+.min-w-\[120px\] {
+  min-width: 120px;
+}
+
+/* Animate spin */
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Disabled states */
+.disabled\:bg-gray-300:disabled {
+  background-color: rgb(209 213 219);
+}
+
+.disabled\:cursor-not-allowed:disabled {
+  cursor: not-allowed;
+}
+
+/* ========================================
+   배경 패턴 스타일
+   ======================================== */
+
+/* 점무늬 패턴 */
+.bg-pattern-dots {
+  background-color: rgb(243 244 246);
+  background-image: radial-gradient(circle, rgb(156 163 175) 1px, transparent 1px);
+  background-size: 12px 12px;
+}
+
+/* 줄무늬 패턴 */
+.bg-pattern-stripes {
+  background-color: rgb(243 244 246);
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 8px,
+    rgb(209 213 219) 8px,
+    rgb(209 213 219) 10px
+  );
+}
+
+/* 물결 패턴 */
+.bg-pattern-waves {
+  background-color: rgb(239 246 255);
+  background-image:
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 10px,
+      rgb(191 219 254) 10px,
+      rgb(191 219 254) 12px
+    );
+}
+
+/* 하트 패턴 */
+.bg-pattern-hearts {
+  background-color: rgb(253 242 248);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23f9a8d4' d='M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'/%3E%3C/svg%3E");
+  background-size: 20px 20px;
+}
+
+/* 별 패턴 */
+.bg-pattern-stars {
+  background-color: rgb(254 249 195);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23fbbf24' d='M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z'/%3E%3C/svg%3E");
+  background-size: 24px 24px;
+}
+
+/* ========================================
+   잔디 셀 커스텀 사이즈
+   ======================================== */
+
+/* 11px 사이즈 (잔디용) */
+.w-\[11px\] {
+  width: 11px;
+}
+
+.h-\[11px\] {
+  height: 11px;
+}
+
+/* 9px 사이즈 (잔디용 - 53주 표시) */
+.w-\[9px\] {
+  width: 9px;
+}
+
+.h-\[9px\] {
+  height: 9px;
+}
+
+/* gap 2px */
+.gap-\[2px\] {
+  gap: 2px;
+}
+
+/* ring-1 */
+.ring-1 {
+  box-shadow: var(--tw-ring-inset) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+}
+
+/* Ring blue for today highlight */
+.ring-blue-400 {
+  --tw-ring-color: rgb(96 165 250);
+}
+
+/* Ring offset */
+.ring-offset-1 {
+  --tw-ring-offset-width: 1px;
+}
+
+/* Green grass colors for activity levels */
+.bg-green-200 {
+  background-color: rgb(187 247 208);
+}
+
+.bg-green-400 {
+  background-color: rgb(74 222 128);
+}
+
+.bg-green-500 {
+  background-color: rgb(34 197 94);
+}
+
+.bg-green-600 {
+  background-color: rgb(22 163 74);
+}
