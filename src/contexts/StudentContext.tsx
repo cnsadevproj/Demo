@@ -24,7 +24,7 @@ interface StudentContextType {
   addWish: (classId: string, studentCode: string, studentName: string, content: string) => Wish | null;
   likeWish: (wishId: string, studentCode: string) => void;
   unlikeWish: (wishId: string, studentCode: string) => void;
-  grantWish: (wishId: string, reward: number) => void;
+  grantWish: (wishId: string, message: string) => void;
   deleteWish: (wishId: string) => void;
   getClassWishes: (classId: string) => Wish[];
   getTodayWish: (classId: string, studentCode: string) => Wish | null;
@@ -153,10 +153,10 @@ export function StudentProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // 소원 선정 (교사)
-  const grantWish = useCallback((wishId: string, reward: number) => {
+  const grantWish = useCallback((wishId: string, message: string) => {
     setWishes(prev => prev.map(wish => {
       if (wish.id === wishId) {
-        return { ...wish, isGranted: true, grantedReward: reward };
+        return { ...wish, isGranted: true, grantedMessage: message };
       }
       return wish;
     }));
