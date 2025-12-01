@@ -3,19 +3,19 @@ import { PageLayout } from '../components/PageLayout';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { useAuth } from '../contexts/AuthContext';
-import { getCookieRanking, getGrass, SheetStudent } from '../services/sheetsApi';
+import { getCookieRanking, getGrass, RankedStudent } from '../services/firestoreApi';
 import { Trophy, Info, Loader2, Cookie } from 'lucide-react';
 
 interface StudentRankingProps {
   onNavigate?: (page: string) => void;
 }
 
-interface RankedStudent extends SheetStudent {
-  rank: number;
-}
-
 export function StudentRanking({ onNavigate }: StudentRankingProps) {
-  const { studentCode, studentClassName } = useAuth();
+  const { student, studentTeacherId } = useAuth();
+
+  const studentCode = student?.code || '';
+  const classId = student?.classId || '';
+  const teacherId = studentTeacherId || '';
 
   const [ranking, setRanking] = useState<RankedStudent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,14 +24,14 @@ export function StudentRanking({ onNavigate }: StudentRankingProps) {
 
   useEffect(() => {
     const loadRanking = async () => {
-      if (!studentClassName) {
+      if (!classId || !teacherId) {
         setLoading(false);
         return;
       }
 
       try {
         // 쿠키 랭킹 가져오기
-        const rankedStudents = await getCookieRanking(studentClassName);
+        const rankedStudents = await getCookieRanking(teacherId, classId);
         setRanking(rankedStudents);
 
         // 내 순위 찾기
@@ -42,7 +42,7 @@ export function StudentRanking({ onNavigate }: StudentRankingProps) {
           }
 
           // 내 잔디 통계 가져오기
-          const grassData = await getGrass(studentClassName, studentCode);
+          const grassData = await getGrass(teacherId, classId, studentCode);
           setMyStats({
             totalGrass: grassData.length,
             streak: calculateStreak(grassData.map(g => g.date))
@@ -56,7 +56,7 @@ export function StudentRanking({ onNavigate }: StudentRankingProps) {
     };
 
     loadRanking();
-  }, [studentClassName, studentCode]);
+  }, [classId, teacherId, studentCode]);
 
   // 연속 일수 계산
   const calculateStreak = (dates: string[]): number => {

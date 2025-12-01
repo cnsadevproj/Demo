@@ -1,47 +1,57 @@
+// src/contexts/AuthContext.tsx
+// Firebase 기반 인증 컨텍스트
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { ClassInfo, StoredStudent, ClassStudents, validateApiKey, getClassList } from '../services/api';
-import { SheetsClassInfo } from '../services/sheets';
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  User
+} from 'firebase/auth';
+import { auth } from '../services/firebase';
+import {
+  getTeacher,
+  createTeacher,
+  findStudentByCode,
+  getClasses,
+  Teacher,
+  Student,
+  ClassInfo
+} from '../services/firestoreApi';
 
-// 사용자 역할 타입
+// 사용자 역할
 export type UserRole = 'teacher' | 'student' | null;
-
-// 통합 클래스 정보 타입 (API와 Sheets 모두 지원)
-export interface UnifiedClassInfo {
-  name: string;
-  cookies?: number;
-  totalCookies?: number | null;
-  usedCookies?: number;
-  studentCount?: number;
-  active?: boolean;
-}
 
 // 인증 컨텍스트 타입
 interface AuthContextType {
   // 공통
   role: UserRole;
   isAuthenticated: boolean;
-  logout: () => void;
+  isLoading: boolean;
+  logout: () => Promise<void>;
 
-  // Google Sheets
-  sheetsUrl: string | null;
-  setSheetsUrl: (url: string) => void;
-
-  // 교사용
-  apiKey: string | null;
-  classes: UnifiedClassInfo[];
+  // 선생님용
+  user: User | null;
+  teacher: Teacher | null;
+  classes: ClassInfo[];
   selectedClass: string | null;
-  classStudentsMap: Record<string, ClassStudents>;
-  loginAsTeacher: (apiKey: string, classList?: UnifiedClassInfo[]) => Promise<{ success: boolean; message: string }>;
-  selectClass: (className: string) => void;
-  saveClassStudents: (className: string, students: StoredStudent[]) => void;
-  getClassStudents: (className: string) => StoredStudent[];
+  selectClass: (classId: string) => void;
+  loginAsTeacher: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
+  registerAsTeacher: (
+    email: string,
+    password: string,
+    name: string,
+    schoolName: string,
+    dahandinApiKey: string
+  ) => Promise<{ success: boolean; message: string }>;
   refreshClasses: () => Promise<void>;
 
   // 학생용
-  studentCode: string | null;
-  studentClassName: string | null;
-  loginAsStudent: (code: string) => void;
-  setStudentClassName: (className: string) => void;
+  student: Student | null;
+  studentTeacherId: string | null;
+  studentTeacher: Teacher | null;
+  loginAsStudent: (code: string) => Promise<{ success: boolean; message: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -49,12 +59,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // localStorage 키
 const STORAGE_KEYS = {
   ROLE: 'dahandin_role',
-  API_KEY: 'dahandin_api_key',
-  STUDENT_CODE: 'dahandin_student_code',
-  STUDENT_CLASS_NAME: 'dahandin_student_class_name',
   SELECTED_CLASS: 'dahandin_selected_class',
-  CLASS_STUDENTS: 'dahandin_class_students',
-  SHEETS_URL: 'dahandin_sheets_url',
+  STUDENT_CODE: 'dahandin_student_code',
+  STUDENT_TEACHER_ID: 'dahandin_student_teacher_id'
 };
 
 interface AuthProviderProps {
@@ -62,209 +69,231 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
+  // 공통 상태
   const [role, setRole] = useState<UserRole>(null);
-  const [apiKey, setApiKey] = useState<string | null>(null);
-  const [studentCode, setStudentCode] = useState<string | null>(null);
-  const [studentClassName, setStudentClassNameState] = useState<string | null>(null);
-  const [classes, setClasses] = useState<UnifiedClassInfo[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // 선생님 상태
+  const [user, setUser] = useState<User | null>(null);
+  const [teacher, setTeacher] = useState<Teacher | null>(null);
+  const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
-  const [sheetsUrl, setSheetsUrlState] = useState<string | null>(null);
-  const [classStudentsMap, setClassStudentsMap] = useState<Record<string, ClassStudents>>({});
 
-  // 초기 로드: localStorage에서 데이터 복원
+  // 학생 상태
+  const [student, setStudent] = useState<Student | null>(null);
+  const [studentTeacherId, setStudentTeacherId] = useState<string | null>(null);
+  const [studentTeacher, setStudentTeacher] = useState<Teacher | null>(null);
+
+  // Firebase Auth 상태 감지 (선생님)
   useEffect(() => {
-    const savedRole = localStorage.getItem(STORAGE_KEYS.ROLE) as UserRole;
-    const savedApiKey = localStorage.getItem(STORAGE_KEYS.API_KEY);
-    const savedStudentCode = localStorage.getItem(STORAGE_KEYS.STUDENT_CODE);
-    const savedStudentClassName = localStorage.getItem(STORAGE_KEYS.STUDENT_CLASS_NAME);
-    const savedSelectedClass = localStorage.getItem(STORAGE_KEYS.SELECTED_CLASS);
-    const savedClassStudents = localStorage.getItem(STORAGE_KEYS.CLASS_STUDENTS);
-    const savedSheetsUrl = localStorage.getItem(STORAGE_KEYS.SHEETS_URL);
-
-    // Sheets URL 복원
-    if (savedSheetsUrl) {
-      setSheetsUrlState(savedSheetsUrl);
-    }
-
-    if (savedRole === 'teacher' && savedApiKey) {
-      setRole('teacher');
-      setApiKey(savedApiKey);
-      setSelectedClass(savedSelectedClass);
-
-      if (savedClassStudents) {
-        try {
-          setClassStudentsMap(JSON.parse(savedClassStudents));
-        } catch {
-          setClassStudentsMap({});
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // 선생님 로그인 상태
+        setUser(firebaseUser);
+        
+        // Firestore에서 선생님 정보 가져오기
+        const teacherData = await getTeacher(firebaseUser.uid);
+        if (teacherData) {
+          setTeacher(teacherData);
+          setRole('teacher');
+          
+          // 학급 목록 가져오기
+          const classesData = await getClasses(firebaseUser.uid);
+          setClasses(classesData);
+          
+          // 저장된 선택 학급 복원
+          const savedClass = localStorage.getItem(STORAGE_KEYS.SELECTED_CLASS);
+          if (savedClass) {
+            setSelectedClass(savedClass);
+          }
+        }
+      } else {
+        // 로그아웃 상태 - 학생 로그인 확인
+        const savedRole = localStorage.getItem(STORAGE_KEYS.ROLE);
+        const savedStudentCode = localStorage.getItem(STORAGE_KEYS.STUDENT_CODE);
+        const savedTeacherId = localStorage.getItem(STORAGE_KEYS.STUDENT_TEACHER_ID);
+        
+        if (savedRole === 'student' && savedStudentCode && savedTeacherId) {
+          // 학생 세션 복원
+          const result = await findStudentByCode(savedStudentCode);
+          if (result) {
+            setStudent(result.student);
+            setStudentTeacherId(result.teacherId);
+            setStudentTeacher(result.teacher);
+            setRole('student');
+          } else {
+            // 학생 정보 없음 - 로그아웃 처리
+            clearStudentSession();
+          }
+        } else {
+          setUser(null);
+          setTeacher(null);
+          setRole(null);
         }
       }
+      
+      setIsLoading(false);
+    });
 
-      // 클래스 목록 새로고침
-      getClassList(savedApiKey).then(response => {
-        if (response.result && response.data) {
-          setClasses(response.data);
-        }
-      });
-    } else if (savedRole === 'student' && savedStudentCode) {
-      setRole('student');
-      setStudentCode(savedStudentCode);
-      setStudentClassNameState(savedStudentClassName);
-    }
+    return () => unsubscribe();
   }, []);
 
-  // 교사 로그인
-  const loginAsTeacher = async (key: string, classList?: UnifiedClassInfo[]): Promise<{ success: boolean; message: string }> => {
-    // Sheets 기반 인증인 경우 (API 키는 Sheets에 있음)
-    if (key === 'SHEETS_BASED_AUTH') {
-      setRole('teacher');
-      setApiKey(null);
-      setClasses(classList || []);
+  // 학생 세션 정리
+  const clearStudentSession = () => {
+    setStudent(null);
+    setStudentTeacherId(null);
+    setStudentTeacher(null);
+    setRole(null);
+    localStorage.removeItem(STORAGE_KEYS.ROLE);
+    localStorage.removeItem(STORAGE_KEYS.STUDENT_CODE);
+    localStorage.removeItem(STORAGE_KEYS.STUDENT_TEACHER_ID);
+  };
 
-      localStorage.setItem(STORAGE_KEYS.ROLE, 'teacher');
-      localStorage.removeItem(STORAGE_KEYS.API_KEY);
-
-      // 기존 저장된 학생 데이터 복원
-      const savedClassStudents = localStorage.getItem(STORAGE_KEYS.CLASS_STUDENTS);
-      if (savedClassStudents) {
-        try {
-          setClassStudentsMap(JSON.parse(savedClassStudents));
-        } catch {
-          // 파싱 실패 시 무시
-        }
+  // 선생님 회원가입
+  const registerAsTeacher = async (
+    email: string,
+    password: string,
+    name: string,
+    schoolName: string,
+    dahandinApiKey: string
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      // Firebase Auth 계정 생성
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      
+      // Firestore에 선생님 정보 저장
+      await createTeacher(
+        userCredential.user.uid,
+        email,
+        name,
+        schoolName,
+        dahandinApiKey
+      );
+      
+      return { success: true, message: '회원가입이 완료되었습니다!' };
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      
+      let message = '회원가입에 실패했습니다.';
+      if (error.code === 'auth/email-already-in-use') {
+        message = '이미 사용 중인 이메일입니다.';
+      } else if (error.code === 'auth/weak-password') {
+        message = '비밀번호는 6자 이상이어야 합니다.';
+      } else if (error.code === 'auth/invalid-email') {
+        message = '유효하지 않은 이메일 형식입니다.';
       }
-
-      // 기존 선택된 클래스 복원
-      const savedSelectedClass = localStorage.getItem(STORAGE_KEYS.SELECTED_CLASS);
-      if (savedSelectedClass) {
-        setSelectedClass(savedSelectedClass);
-      }
-
-      return { success: true, message: '로그인 성공!' };
+      
+      return { success: false, message };
     }
+  };
 
-    // 기존 API 키 기반 인증
-    const response = await validateApiKey(key);
-
-    if (response.result && response.data) {
-      setRole('teacher');
-      setApiKey(key);
-      setClasses(response.data);
-
+  // 선생님 로그인
+  const loginAsTeacher = async (
+    email: string,
+    password: string
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
       localStorage.setItem(STORAGE_KEYS.ROLE, 'teacher');
-      localStorage.setItem(STORAGE_KEYS.API_KEY, key);
-
-      // 기존 저장된 학생 데이터 복원
-      const savedClassStudents = localStorage.getItem(STORAGE_KEYS.CLASS_STUDENTS);
-      if (savedClassStudents) {
-        try {
-          setClassStudentsMap(JSON.parse(savedClassStudents));
-        } catch {
-          // 파싱 실패 시 무시
-        }
-      }
-
-      // 기존 선택된 클래스 복원
-      const savedSelectedClass = localStorage.getItem(STORAGE_KEYS.SELECTED_CLASS);
-      if (savedSelectedClass) {
-        setSelectedClass(savedSelectedClass);
-      }
-
       return { success: true, message: '로그인 성공!' };
-    } else {
-      return { success: false, message: response.message || 'API 키가 올바르지 않습니다.' };
+    } catch (error: any) {
+      console.error('Login error:', error);
+      
+      let message = '로그인에 실패했습니다.';
+      if (error.code === 'auth/user-not-found') {
+        message = '등록되지 않은 이메일입니다.';
+      } else if (error.code === 'auth/wrong-password') {
+        message = '비밀번호가 올바르지 않습니다.';
+      } else if (error.code === 'auth/invalid-email') {
+        message = '유효하지 않은 이메일 형식입니다.';
+      } else if (error.code === 'auth/invalid-credential') {
+        message = '이메일 또는 비밀번호가 올바르지 않습니다.';
+      }
+      
+      return { success: false, message };
     }
   };
 
   // 학생 로그인
-  const loginAsStudent = (code: string) => {
-    setRole('student');
-    setStudentCode(code);
-
-    localStorage.setItem(STORAGE_KEYS.ROLE, 'student');
-    localStorage.setItem(STORAGE_KEYS.STUDENT_CODE, code);
-  };
-
-  // 로그아웃
-  const logout = () => {
-    setRole(null);
-    setApiKey(null);
-    setStudentCode(null);
-    setClasses([]);
-    setSelectedClass(null);
-
-    localStorage.removeItem(STORAGE_KEYS.ROLE);
-    localStorage.removeItem(STORAGE_KEYS.API_KEY);
-    localStorage.removeItem(STORAGE_KEYS.STUDENT_CODE);
-    localStorage.removeItem(STORAGE_KEYS.SELECTED_CLASS);
-    // 학생 데이터는 유지 (교사가 다시 로그인해도 데이터 보존)
-  };
-
-  // 클래스 선택
-  const selectClass = (className: string) => {
-    setSelectedClass(className);
-    localStorage.setItem(STORAGE_KEYS.SELECTED_CLASS, className);
-  };
-
-  // 클래스별 학생 저장
-  const saveClassStudents = (className: string, students: StoredStudent[]) => {
-    const updated = {
-      ...classStudentsMap,
-      [className]: {
-        className,
-        students,
-        updatedAt: new Date().toISOString(),
-      },
-    };
-    setClassStudentsMap(updated);
-    localStorage.setItem(STORAGE_KEYS.CLASS_STUDENTS, JSON.stringify(updated));
-  };
-
-  // 클래스별 학생 조회
-  const getClassStudents = (className: string): StoredStudent[] => {
-    return classStudentsMap[className]?.students || [];
-  };
-
-  // 클래스 목록 새로고침
-  const refreshClasses = async () => {
-    if (apiKey) {
-      const response = await getClassList(apiKey);
-      if (response.result && response.data) {
-        setClasses(response.data);
+  const loginAsStudent = async (
+    code: string
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      const result = await findStudentByCode(code);
+      
+      if (!result) {
+        return { success: false, message: '학생 코드를 찾을 수 없습니다.' };
       }
+      
+      setStudent(result.student);
+      setStudentTeacherId(result.teacherId);
+      setStudentTeacher(result.teacher);
+      setRole('student');
+      
+      // 세션 저장
+      localStorage.setItem(STORAGE_KEYS.ROLE, 'student');
+      localStorage.setItem(STORAGE_KEYS.STUDENT_CODE, code);
+      localStorage.setItem(STORAGE_KEYS.STUDENT_TEACHER_ID, result.teacherId);
+      
+      return { success: true, message: '로그인 성공!' };
+    } catch (error) {
+      console.error('Student login error:', error);
+      return { success: false, message: '로그인에 실패했습니다.' };
     }
   };
 
-  // Sheets URL 설정
-  const setSheetsUrl = (url: string) => {
-    setSheetsUrlState(url);
-    localStorage.setItem(STORAGE_KEYS.SHEETS_URL, url);
+  // 로그아웃
+  const logout = async () => {
+    if (role === 'teacher') {
+      await signOut(auth);
+      setUser(null);
+      setTeacher(null);
+      setClasses([]);
+      setSelectedClass(null);
+      localStorage.removeItem(STORAGE_KEYS.ROLE);
+      localStorage.removeItem(STORAGE_KEYS.SELECTED_CLASS);
+    } else {
+      clearStudentSession();
+    }
+    setRole(null);
   };
 
-  // 학생 학급명 설정
-  const setStudentClassName = (className: string) => {
-    setStudentClassNameState(className);
-    localStorage.setItem(STORAGE_KEYS.STUDENT_CLASS_NAME, className);
+  // 학급 선택
+  const selectClass = (classId: string) => {
+    setSelectedClass(classId);
+    localStorage.setItem(STORAGE_KEYS.SELECTED_CLASS, classId);
+  };
+
+  // 학급 목록 새로고침
+  const refreshClasses = async () => {
+    if (user) {
+      const classesData = await getClasses(user.uid);
+      setClasses(classesData);
+    }
   };
 
   const value: AuthContextType = {
+    // 공통
     role,
     isAuthenticated: role !== null,
+    isLoading,
     logout,
-    sheetsUrl,
-    setSheetsUrl,
-    apiKey,
+
+    // 선생님용
+    user,
+    teacher,
     classes,
     selectedClass,
-    classStudentsMap,
-    loginAsTeacher,
     selectClass,
-    saveClassStudents,
-    getClassStudents,
+    loginAsTeacher,
+    registerAsTeacher,
     refreshClasses,
-    studentCode,
-    studentClassName,
-    loginAsStudent,
-    setStudentClassName,
+
+    // 학생용
+    student,
+    studentTeacherId,
+    studentTeacher,
+    loginAsStudent
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

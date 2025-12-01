@@ -5,6 +5,7 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Progress } from '../components/ui/progress';
 import { useGame } from '../contexts/GameContext';
+import { useAuth } from '../contexts/AuthContext';
 import {
   GameTeam,
   BattleBet,
@@ -16,6 +17,8 @@ import {
   LOSS_MECHANISM_INFO,
   getLossMechanismSettings,
 } from '../types/game';
+import { createBattle, endBattle, Battle } from '../services/firestoreApi';
+import { toast } from 'sonner';
 import {
   Swords,
   Shield,
@@ -30,6 +33,7 @@ import {
   ArrowRight,
   Check,
   X,
+  Save,
 } from 'lucide-react';
 
 interface BattleGameProps {
@@ -40,6 +44,11 @@ type GamePhase = 'setup' | 'betting' | 'reveal' | 'battle' | 'results' | 'finish
 
 export function BattleGame({ onBack }: BattleGameProps) {
   const { teams, settings, addBonusCookies } = useGame();
+  const { user, selectedClass } = useAuth();
+
+  // Firebase 저장 상태
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
 
   // 게임 상태
   const [phase, setPhase] = useState<GamePhase>('setup');
@@ -287,6 +296,56 @@ export function BattleGame({ onBack }: BattleGameProps) {
     setAttackTarget(null);
     setAttackBet(0);
     setDefenseBet(0);
+    setIsSaved(false);
+  };
+
+  // 배틀 결과 Firebase에 저장
+  const handleSaveBattleResults = async () => {
+    if (!user?.uid || !selectedClass || settlements.length === 0) {
+      toast.error('저장할 수 없습니다. 로그인 정보를 확인하세요.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      // 최종 순위 1, 2위 팀
+      const sortedSettlements = [...settlements].sort((a, b) => a.rank - b.rank);
+      const winner = sortedSettlements[0];
+      const runnerUp = sortedSettlements[1];
+
+      if (!winner || !runnerUp) {
+        toast.error('팀 정보가 충분하지 않습니다.');
+        setIsSaving(false);
+        return;
+      }
+
+      // 배틀 제목 생성
+      const today = new Date().toLocaleDateString('ko-KR');
+      const title = `${today} 쿠키 배틀 (${totalRounds}라운드)`;
+      const description = `손실 메커니즘: ${LOSS_MECHANISM_INFO[lossMechanism].name} | 참가팀: ${teams.length}팀`;
+
+      // 배틀 생성 및 저장
+      const battleId = await createBattle(
+        user.uid,
+        selectedClass,
+        title,
+        description,
+        winner.teamId,
+        runnerUp.teamId,
+        winner.finalCookies - winner.startCookies // 승자의 쿠키 변화량을 보상으로 기록
+      );
+
+      // 배틀 종료 처리 (승자 기록)
+      await endBattle(user.uid, selectedClass, battleId, winner.teamId);
+
+      setIsSaved(true);
+      toast.success('배틀 결과가 저장되었습니다! 🎉');
+    } catch (error) {
+      console.error('배틀 결과 저장 실패:', error);
+      toast.error('저장에 실패했습니다.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // 현재 배팅 중인 팀 정보
@@ -719,10 +778,35 @@ export function BattleGame({ onBack }: BattleGameProps) {
                 );
               })}
 
-              <Button onClick={handleResetGame} className="w-full" variant="outline" size="lg">
-                <RotateCcw className="w-5 h-5 mr-2" />
-                새 게임
-              </Button>
+              <div className="flex gap-2">
+                {!isSaved && (
+                  <Button
+                    onClick={handleSaveBattleResults}
+                    disabled={isSaving}
+                    className="flex-1 bg-green-500 hover:bg-green-600"
+                    size="lg"
+                  >
+                    {isSaving ? (
+                      <>저장 중...</>
+                    ) : (
+                      <>
+                        <Save className="w-5 h-5 mr-2" />
+                        결과 저장
+                      </>
+                    )}
+                  </Button>
+                )}
+                {isSaved && (
+                  <div className="flex-1 flex items-center justify-center p-3 bg-green-100 text-green-700 rounded-lg">
+                    <Check className="w-5 h-5 mr-2" />
+                    저장 완료!
+                  </div>
+                )}
+                <Button onClick={handleResetGame} className="flex-1" variant="outline" size="lg">
+                  <RotateCcw className="w-5 h-5 mr-2" />
+                  새 게임
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
