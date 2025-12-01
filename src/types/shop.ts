@@ -1,7 +1,7 @@
 // 상점 아이템 타입 정의
 
 // 아이템 카테고리
-export type ItemCategory = 'emoji' | 'border' | 'nameEffect' | 'background' | 'titleColor' | 'buttonBorder' | 'buttonFill' | 'animation' | 'titlePermit';
+export type ItemCategory = 'emoji' | 'nameEffect' | 'titleColor' | 'animation' | 'titlePermit' | 'buttonBorder' | 'buttonFill';
 
 // 상점 아이템
 export interface ShopItem {
@@ -24,10 +24,8 @@ export interface PurchaseRecord {
 // 기본 상점 아이템 목록
 // ========================================
 
-// 이모지 아이템
+// 이모지 아이템 (모두 유료)
 export const EMOJI_ITEMS: ShopItem[] = [
-  // 기본 (무료)
-  { code: 'emoji_00', category: 'emoji', name: '😀 기본', price: 0, value: '😀' },
   // 유료 - 표정
   { code: 'emoji_01', category: 'emoji', name: '😎 쿨한', price: 5, value: '😎' },
   { code: 'emoji_02', category: 'emoji', name: '🤩 스타', price: 5, value: '🤩' },
@@ -68,28 +66,8 @@ export const EMOJI_ITEMS: ShopItem[] = [
   { code: 'emoji_35', category: 'emoji', name: '🎪 서커스', price: 25, value: '🎪' },
 ];
 
-// 테두리 아이템
-export const BORDER_ITEMS: ShopItem[] = [
-  // 기본 (무료)
-  { code: 'border_00', category: 'border', name: '없음', price: 0, value: 'none' },
-  { code: 'border_01', category: 'border', name: '기본', price: 0, value: 'solid' },
-  // 유료
-  { code: 'border_02', category: 'border', name: '🌈 무지개', price: 20, value: 'gradient-rainbow', description: '화려한 무지개 테두리' },
-  { code: 'border_03', category: 'border', name: '🥇 골드', price: 25, value: 'gradient-gold', description: '빛나는 금색 테두리' },
-  { code: 'border_04', category: 'border', name: '🌌 오로라', price: 25, value: 'gradient-aurora', description: '신비로운 오로라' },
-  { code: 'border_05', category: 'border', name: '🔥 불꽃', price: 20, value: 'gradient-fire', description: '타오르는 불꽃' },
-  { code: 'border_06', category: 'border', name: '🌊 바다', price: 20, value: 'gradient-ocean', description: '시원한 바다' },
-  { code: 'border_07', category: 'border', name: '💙 네온블루', price: 30, value: 'neon-blue', description: '빛나는 네온 블루' },
-  { code: 'border_08', category: 'border', name: '💗 네온핑크', price: 30, value: 'neon-pink', description: '빛나는 네온 핑크' },
-  { code: 'border_09', category: 'border', name: '💚 네온그린', price: 30, value: 'neon-green', description: '빛나는 네온 그린' },
-  { code: 'border_10', category: 'border', name: '💜 펄스', price: 35, value: 'pulse', description: '두근두근 펄스' },
-  { code: 'border_11', category: 'border', name: '✨ 반짝임', price: 35, value: 'sparkle', description: '반짝반짝' },
-];
-
-// 이름 효과 아이템
+// 이름 효과 아이템 (모두 유료)
 export const NAME_EFFECT_ITEMS: ShopItem[] = [
-  // 기본 (무료)
-  { code: 'name_00', category: 'nameEffect', name: '기본', price: 0, value: 'none' },
   // 유료
   { code: 'name_01', category: 'nameEffect', name: '🌈 무지개', price: 15, value: 'gradient-rainbow' },
   { code: 'name_02', category: 'nameEffect', name: '🔥 불꽃', price: 15, value: 'gradient-fire' },
@@ -101,29 +79,14 @@ export const NAME_EFFECT_ITEMS: ShopItem[] = [
   { code: 'name_08', category: 'nameEffect', name: '🖤 그림자', price: 10, value: 'shadow' },
 ];
 
-// 배경 아이템
-export const BACKGROUND_ITEMS: ShopItem[] = [
-  // 기본 (무료)
-  { code: 'bg_00', category: 'background', name: '없음', price: 0, value: 'none' },
-  // 유료
-  { code: 'bg_01', category: 'background', name: '점무늬', price: 10, value: 'dots' },
-  { code: 'bg_02', category: 'background', name: '줄무늬', price: 10, value: 'stripes' },
-  { code: 'bg_03', category: 'background', name: '🌊 물결', price: 15, value: 'waves' },
-  { code: 'bg_04', category: 'background', name: '💕 하트', price: 15, value: 'hearts' },
-  { code: 'bg_05', category: 'background', name: '⭐ 별', price: 15, value: 'stars' },
-  { code: 'bg_06', category: 'background', name: '부드러운', price: 20, value: 'gradient-soft' },
-  { code: 'bg_07', category: 'background', name: '선명한', price: 20, value: 'gradient-vivid' },
-];
-
-// 칭호 색상 아이템
+// 칭호 색상 아이템 (모두 유료)
 export const TITLE_COLOR_ITEMS: ShopItem[] = [
-  // 기본 (무료)
-  { code: 'title_00', category: 'titleColor', name: '빨강', price: 0, value: '0' },
-  { code: 'title_01', category: 'titleColor', name: '주황', price: 0, value: '1' },
-  { code: 'title_02', category: 'titleColor', name: '노랑', price: 0, value: '2' },
-  { code: 'title_03', category: 'titleColor', name: '초록', price: 0, value: '3' },
-  { code: 'title_04', category: 'titleColor', name: '파랑', price: 0, value: '4' },
   // 유료
+  { code: 'title_00', category: 'titleColor', name: '빨강', price: 5, value: '0' },
+  { code: 'title_01', category: 'titleColor', name: '주황', price: 5, value: '1' },
+  { code: 'title_02', category: 'titleColor', name: '노랑', price: 5, value: '2' },
+  { code: 'title_03', category: 'titleColor', name: '초록', price: 5, value: '3' },
+  { code: 'title_04', category: 'titleColor', name: '파랑', price: 5, value: '4' },
   { code: 'title_05', category: 'titleColor', name: '💜 보라', price: 10, value: '5' },
   { code: 'title_06', category: 'titleColor', name: '💗 핑크', price: 10, value: '6' },
   { code: 'title_07', category: 'titleColor', name: '🖤 검정', price: 10, value: '7' },
@@ -131,42 +94,8 @@ export const TITLE_COLOR_ITEMS: ShopItem[] = [
   { code: 'title_09', category: 'titleColor', name: '🌈 무지개', price: 25, value: '9' },
 ];
 
-// 버튼 테두리 색상 아이템
-export const BUTTON_BORDER_ITEMS: ShopItem[] = [
-  // 기본 (무료)
-  { code: 'btn_border_00', category: 'buttonBorder', name: '기본', price: 0, value: 'gray-300' },
-  { code: 'btn_border_01', category: 'buttonBorder', name: '빨강', price: 0, value: 'red-400' },
-  { code: 'btn_border_02', category: 'buttonBorder', name: '주황', price: 0, value: 'orange-400' },
-  { code: 'btn_border_03', category: 'buttonBorder', name: '노랑', price: 0, value: 'yellow-400' },
-  { code: 'btn_border_04', category: 'buttonBorder', name: '초록', price: 0, value: 'green-400' },
-  { code: 'btn_border_05', category: 'buttonBorder', name: '파랑', price: 0, value: 'blue-400' },
-  // 유료
-  { code: 'btn_border_06', category: 'buttonBorder', name: '💜 보라', price: 10, value: 'purple-500' },
-  { code: 'btn_border_07', category: 'buttonBorder', name: '💗 핑크', price: 10, value: 'pink-500' },
-  { code: 'btn_border_08', category: 'buttonBorder', name: '🥇 골드', price: 20, value: 'yellow-500' },
-  { code: 'btn_border_09', category: 'buttonBorder', name: '🌈 무지개', price: 30, value: 'gradient' },
-];
-
-// 버튼 채우기 색상 아이템
-export const BUTTON_FILL_ITEMS: ShopItem[] = [
-  // 기본 (무료)
-  { code: 'btn_fill_00', category: 'buttonFill', name: '흰색', price: 0, value: 'white' },
-  { code: 'btn_fill_01', category: 'buttonFill', name: '연한 빨강', price: 0, value: 'red-50' },
-  { code: 'btn_fill_02', category: 'buttonFill', name: '연한 주황', price: 0, value: 'orange-50' },
-  { code: 'btn_fill_03', category: 'buttonFill', name: '연한 노랑', price: 0, value: 'yellow-50' },
-  { code: 'btn_fill_04', category: 'buttonFill', name: '연한 초록', price: 0, value: 'green-50' },
-  { code: 'btn_fill_05', category: 'buttonFill', name: '연한 파랑', price: 0, value: 'blue-50' },
-  // 유료
-  { code: 'btn_fill_06', category: 'buttonFill', name: '💜 연한 보라', price: 10, value: 'purple-100' },
-  { code: 'btn_fill_07', category: 'buttonFill', name: '💗 연한 핑크', price: 10, value: 'pink-100' },
-  { code: 'btn_fill_08', category: 'buttonFill', name: '🥇 연한 골드', price: 15, value: 'amber-100' },
-  { code: 'btn_fill_09', category: 'buttonFill', name: '🌈 그라디언트', price: 25, value: 'gradient' },
-];
-
-// 애니메이션 효과 아이템
+// 애니메이션 효과 아이템 (모두 유료)
 export const ANIMATION_ITEMS: ShopItem[] = [
-  // 기본 (무료)
-  { code: 'anim_00', category: 'animation', name: '없음', price: 0, value: 'none', description: '애니메이션 없음' },
   // 유료
   { code: 'anim_01', category: 'animation', name: '💓 두근두근', price: 15, value: 'pulse', description: '심장처럼 두근두근' },
   { code: 'anim_02', category: 'animation', name: '🔄 회전', price: 15, value: 'spin', description: '빙글빙글 돌아요' },
@@ -180,29 +109,55 @@ export const ANIMATION_ITEMS: ShopItem[] = [
   { code: 'anim_10', category: 'animation', name: '❄️ 눈송이', price: 25, value: 'snow', description: '눈이 내려요' },
 ];
 
-// 칭호권 아이템 (칭호 글자 수 확장)
+// 칭호권 아이템 (5글자 칭호권 하나만)
 export const TITLE_PERMIT_ITEMS: ShopItem[] = [
-  // 기본 (무료 - 3글자)
-  { code: 'permit_00', category: 'titlePermit', name: '기본 (3글자)', price: 0, value: '3', description: '칭호 최대 3글자' },
-  // 유료
-  { code: 'permit_01', category: 'titlePermit', name: '4글자 칭호', price: 10, value: '4', description: '칭호를 4글자까지!' },
-  { code: 'permit_02', category: 'titlePermit', name: '5글자 칭호', price: 20, value: '5', description: '칭호를 5글자까지!' },
-  { code: 'permit_03', category: 'titlePermit', name: '6글자 칭호', price: 30, value: '6', description: '칭호를 6글자까지!' },
-  { code: 'permit_04', category: 'titlePermit', name: '7글자 칭호', price: 40, value: '7', description: '칭호를 7글자까지!' },
-  { code: 'permit_05', category: 'titlePermit', name: '🌟 무제한', price: 50, value: '99', description: '칭호 글자 무제한!' },
+  // 유료 - 5글자 칭호권만
+  { code: 'title_permit_5', category: 'titlePermit', name: '🏷️ 5글자 칭호권', price: 20, value: '5', description: '칭호를 5글자까지 설정할 수 있어요!' },
+];
+
+// 버튼 테두리 아이템
+export const BUTTON_BORDER_ITEMS: ShopItem[] = [
+  { code: 'btn_border_01', category: 'buttonBorder', name: '🔵 파란 테두리', price: 10, value: 'border-blue-500' },
+  { code: 'btn_border_02', category: 'buttonBorder', name: '🔴 빨간 테두리', price: 10, value: 'border-red-500' },
+  { code: 'btn_border_03', category: 'buttonBorder', name: '🟢 초록 테두리', price: 10, value: 'border-green-500' },
+  { code: 'btn_border_04', category: 'buttonBorder', name: '🟡 노란 테두리', price: 10, value: 'border-yellow-500' },
+  { code: 'btn_border_05', category: 'buttonBorder', name: '🟣 보라 테두리', price: 15, value: 'border-purple-500' },
+  { code: 'btn_border_06', category: 'buttonBorder', name: '💗 핑크 테두리', price: 15, value: 'border-pink-500' },
+  { code: 'btn_border_07', category: 'buttonBorder', name: '🥇 골드 테두리', price: 20, value: 'border-amber-400' },
+  { code: 'btn_border_08', category: 'buttonBorder', name: '⬛ 검정 테두리', price: 10, value: 'border-gray-800' },
+];
+
+// 버튼 채우기 아이템
+export const BUTTON_FILL_ITEMS: ShopItem[] = [
+  // 단색 배경
+  { code: 'btn_fill_01', category: 'buttonFill', name: '🔵 파란 배경', price: 15, value: 'bg-blue-500' },
+  { code: 'btn_fill_02', category: 'buttonFill', name: '🔴 빨간 배경', price: 15, value: 'bg-red-500' },
+  { code: 'btn_fill_03', category: 'buttonFill', name: '🟢 초록 배경', price: 15, value: 'bg-green-500' },
+  { code: 'btn_fill_04', category: 'buttonFill', name: '🟡 노란 배경', price: 15, value: 'bg-yellow-500' },
+  { code: 'btn_fill_05', category: 'buttonFill', name: '🟣 보라 배경', price: 20, value: 'bg-purple-500' },
+  { code: 'btn_fill_06', category: 'buttonFill', name: '💗 핑크 배경', price: 20, value: 'bg-pink-500' },
+  { code: 'btn_fill_07', category: 'buttonFill', name: '🥇 골드 배경', price: 25, value: 'bg-amber-400' },
+  { code: 'btn_fill_08', category: 'buttonFill', name: '⬛ 검정 배경', price: 15, value: 'bg-gray-800' },
+  // 그라데이션 배경
+  { code: 'btn_fill_09', category: 'buttonFill', name: '🌈 무지개', price: 30, value: 'gradient-rainbow' },
+  { code: 'btn_fill_10', category: 'buttonFill', name: '🔥 불꽃', price: 25, value: 'gradient-fire' },
+  { code: 'btn_fill_11', category: 'buttonFill', name: '🌊 바다', price: 25, value: 'gradient-ocean' },
+  { code: 'btn_fill_12', category: 'buttonFill', name: '🌅 일몰', price: 25, value: 'gradient-sunset' },
+  { code: 'btn_fill_13', category: 'buttonFill', name: '🌌 오로라', price: 30, value: 'gradient-aurora' },
+  { code: 'btn_fill_14', category: 'buttonFill', name: '💜 핑크보라', price: 20, value: 'gradient-pink-purple' },
+  { code: 'btn_fill_15', category: 'buttonFill', name: '💎 민트', price: 20, value: 'gradient-mint' },
+  { code: 'btn_fill_16', category: 'buttonFill', name: '🍊 오렌지', price: 20, value: 'gradient-orange' },
 ];
 
 // 모든 아이템
 export const ALL_SHOP_ITEMS: ShopItem[] = [
   ...EMOJI_ITEMS,
-  ...BORDER_ITEMS,
   ...NAME_EFFECT_ITEMS,
-  ...BACKGROUND_ITEMS,
   ...TITLE_COLOR_ITEMS,
-  ...BUTTON_BORDER_ITEMS,
-  ...BUTTON_FILL_ITEMS,
   ...ANIMATION_ITEMS,
   ...TITLE_PERMIT_ITEMS,
+  ...BUTTON_BORDER_ITEMS,
+  ...BUTTON_FILL_ITEMS,
 ];
 
 // 코드로 아이템 찾기

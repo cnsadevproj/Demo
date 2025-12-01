@@ -17,7 +17,7 @@ import {
   Tag,
 } from 'lucide-react';
 import {
-  getShopItems,
+  getTeacherShopItems,
   getStudent,
   purchaseItem,
   ShopItem,
@@ -60,19 +60,27 @@ export function Shop({ onBack }: ShopProps) {
   // 데이터 로드
   useEffect(() => {
     const loadData = async () => {
-      if (!authStudent?.code || !studentTeacherId) return;
+      // 로그인 정보가 없으면 기본 상품만 표시
+      if (!authStudent?.code || !studentTeacherId) {
+        setShopItems(ALL_SHOP_ITEMS);
+        setLoading(false);
+        return;
+      }
 
       setLoading(true);
       try {
         const [studentData, items] = await Promise.all([
           getStudent(studentTeacherId, authStudent.code),
-          getShopItems(),
+          getTeacherShopItems(studentTeacherId),
         ]);
 
         setStudent(studentData);
+        // Firebase에 상품이 없으면 기본 상품 목록 사용
         setShopItems(items.length > 0 ? items : ALL_SHOP_ITEMS);
       } catch (error) {
         console.error('데이터 로드 오류:', error);
+        // 에러 시에도 기본 상품 표시
+        setShopItems(ALL_SHOP_ITEMS);
       } finally {
         setLoading(false);
       }

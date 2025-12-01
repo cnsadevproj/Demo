@@ -5,6 +5,7 @@ import {
   NAME_EFFECTS,
   TITLE_COLORS,
   BACKGROUND_PATTERNS,
+  ANIMATION_EFFECTS,
 } from '../types/student';
 
 interface StudentProfileCardProps {
@@ -31,16 +32,17 @@ export function StudentProfileCard({
   const nameEffectInfo = NAME_EFFECTS[profile.nameEffect];
   const bgInfo = BACKGROUND_PATTERNS[profile.backgroundPattern];
   const titleColor = TITLE_COLORS[profile.titleColorIndex];
+  const animationInfo = ANIMATION_EFFECTS[profile.animation || 'none'];
 
   if (mini) {
     // 미니 버전 (랭킹 테이블용)
     return (
       <div
-        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${bgInfo.css} ${borderInfo.css} ${borderInfo.animation || ''} cursor-pointer hover:scale-105 transition-transform`}
+        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${bgInfo.css} ${borderInfo.css} ${borderInfo.animation || ''} ${profile.buttonBorder || ''} ${profile.buttonFill || ''} cursor-pointer hover:scale-105 transition-transform`}
         style={profile.borderStyle === 'solid' ? { borderColor: profile.borderColor } : undefined}
         onClick={onClick}
       >
-        <span className="text-lg">{profile.emoji}</span>
+        <span className={`text-lg ${animationInfo.css}`}>{profile.emoji}</span>
         <div className="flex items-center gap-1">
           {profile.title && (
             <span className={`text-[10px] px-1 py-0.5 rounded ${titleColor.bg} ${titleColor.text}`}>
@@ -58,7 +60,7 @@ export function StudentProfileCard({
   // 전체 버전
   return (
     <div
-      className={`relative p-4 rounded-xl ${bgInfo.css} ${borderInfo.css} ${borderInfo.animation || ''} cursor-pointer hover:scale-[1.02] transition-transform`}
+      className={`relative p-4 rounded-xl ${bgInfo.css} ${borderInfo.css} ${borderInfo.animation || ''} ${profile.buttonBorder || ''} ${profile.buttonFill || ''} cursor-pointer hover:scale-[1.02] transition-transform`}
       style={profile.borderStyle === 'solid' ? { borderColor: profile.borderColor } : undefined}
       onClick={onClick}
     >
@@ -76,7 +78,7 @@ export function StudentProfileCard({
 
       <div className="text-center">
         {/* 이모지 */}
-        <div className="text-4xl mb-2">{profile.emoji}</div>
+        <div className={`text-4xl mb-2 ${animationInfo.css}`}>{profile.emoji}</div>
 
         {/* 칭호 + 이름 */}
         <div className="flex flex-col items-center gap-1">
@@ -115,10 +117,11 @@ export function StudentProfileName({
 
   const nameEffectInfo = NAME_EFFECTS[profile.nameEffect];
   const titleColor = TITLE_COLORS[profile.titleColorIndex];
+  const animationInfo = ANIMATION_EFFECTS[profile.animation || 'none'];
 
   return (
     <span className="inline-flex items-center gap-1">
-      <span>{profile.emoji}</span>
+      <span className={animationInfo.css}>{profile.emoji}</span>
       {profile.title && (
         <span className={`text-[10px] px-1 py-0.5 rounded ${titleColor.bg} ${titleColor.text}`}>
           {profile.title}

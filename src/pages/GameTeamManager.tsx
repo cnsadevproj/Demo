@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { useGame } from '../contexts/GameContext';
 import { useAuth } from '../contexts/AuthContext';
-import { TEAM_FLAGS, GameTeam } from '../types/game';
+import { TEAM_FLAGS, GameTeam, generateRandomTeamNameWithEmoji } from '../types/game';
 import { getClassStudents, Student } from '../services/firestoreApi';
 import {
   Users,
@@ -23,31 +23,9 @@ import {
   Loader2,
 } from 'lucide-react';
 
-// 랜덤 팀 이름 생성용 단어
-const TEAM_ADJECTIVES = [
-  // 색깔
-  '붉은', '푸른', '노란', '초록', '보라', '하얀', '검은', '금빛', '은빛', '무지개',
-  // 자연
-  '불꽃', '번개', '천둥', '폭풍', '태양', '달빛', '별빛', '은하', '우주', '바람의',
-  // 성격
-  '용감한', '지혜로운', '웃고있는', '화난', '춤추는', '노래하는', '달리는', '날아가는',
-  // 특성
-  '강철', '황금', '다이아', '전설의', '무적의', '최강', '빠른', '멋진', '빛나는', '신비한',
-];
-
-const TEAM_NOUNS = [
-  // 동물
-  '드래곤', '피닉스', '유니콘', '타이거', '라이온', '이글', '울프', '베어', '폭스', '팬더',
-  '염소', '토끼', '독수리', '매', '사슴', '고래', '돌고래', '상어', '펭귄', '부엉이',
-  // 그룹
-  '기사단', '탐험대', '전사들', '영웅들', '챔피언', '스타즈', '레전드', '히어로즈', '파이터', '윈너즈',
-  '어벤저스', '가디언즈', '레인저스', '워리어즈', '킹덤',
-];
-
+// 랜덤 팀 이름 생성 (로컬 헬퍼 - types/game.ts의 함수 사용)
 function generateRandomTeamName(): string {
-  const adj = TEAM_ADJECTIVES[Math.floor(Math.random() * TEAM_ADJECTIVES.length)];
-  const noun = TEAM_NOUNS[Math.floor(Math.random() * TEAM_NOUNS.length)];
-  return `${adj} ${noun}`;
+  return generateRandomTeamNameWithEmoji().name;
 }
 
 interface GameTeamManagerProps {
@@ -141,12 +119,13 @@ export function GameTeamManager({ onNavigate }: GameTeamManagerProps) {
       teamStudents[teamIndex].push(student);
     });
 
-    // 팀 생성
-    teamStudents.forEach((members, index) => {
+    // 팀 생성 (이름과 이모지 일치)
+    teamStudents.forEach((members) => {
       if (members.length > 0) {
+        const { name, emoji } = generateRandomTeamNameWithEmoji();
         createTeam(
-          generateRandomTeamName(),
-          TEAM_FLAGS[index % TEAM_FLAGS.length],
+          name,
+          emoji,
           members.map(m => m.code),
           members.map(m => m.name)
         );

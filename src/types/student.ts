@@ -191,6 +191,68 @@ export const BACKGROUND_PATTERNS: Record<BackgroundPattern, { name: string; css:
   },
 };
 
+// 애니메이션 효과 종류
+export type AnimationEffect =
+  | 'none'
+  | 'pulse'
+  | 'spin'
+  | 'bounce'
+  | 'shake'
+  | 'sparkle'
+  | 'wave'
+  | 'float'
+  | 'confetti'
+  | 'flame'
+  | 'snow';
+
+// 애니메이션 효과 정보
+export const ANIMATION_EFFECTS: Record<AnimationEffect, { name: string; css: string }> = {
+  none: {
+    name: '없음',
+    css: '',
+  },
+  pulse: {
+    name: '두근두근',
+    css: 'animate-pulse',
+  },
+  spin: {
+    name: '회전',
+    css: 'animate-spin',
+  },
+  bounce: {
+    name: '통통',
+    css: 'animate-bounce',
+  },
+  shake: {
+    name: '흔들흔들',
+    css: 'animate-[shake_0.5s_ease-in-out_infinite]',
+  },
+  sparkle: {
+    name: '반짝반짝',
+    css: 'animate-[sparkle_1s_ease-in-out_infinite]',
+  },
+  wave: {
+    name: '물결',
+    css: 'animate-[wave_2s_ease-in-out_infinite]',
+  },
+  float: {
+    name: '떠오르기',
+    css: 'animate-[float_3s_ease-in-out_infinite]',
+  },
+  confetti: {
+    name: '폭죽',
+    css: 'animate-[confetti_1s_ease-in-out_infinite]',
+  },
+  flame: {
+    name: '불타오르기',
+    css: 'animate-[flame_0.5s_ease-in-out_infinite]',
+  },
+  snow: {
+    name: '눈송이',
+    css: 'animate-[snow_3s_linear_infinite]',
+  },
+};
+
 // 학생 프로필 설정
 export interface StudentProfile {
   studentCode: string;
@@ -201,6 +263,9 @@ export interface StudentProfile {
   borderColor: string;              // 테두리 색상 (solid일 때)
   nameEffect: NameEffect;           // 이름 효과
   backgroundPattern: BackgroundPattern;  // 배경 패턴
+  animation: AnimationEffect;       // 애니메이션 효과
+  buttonBorder: string;             // 버튼 테두리 (Tailwind 클래스)
+  buttonFill: string;               // 버튼 채우기 (Tailwind 클래스)
   updatedAt: string;
 }
 
@@ -213,6 +278,9 @@ export const DEFAULT_PROFILE: Omit<StudentProfile, 'studentCode'> = {
   borderColor: '#6366f1',
   nameEffect: 'none',
   backgroundPattern: 'none',
+  animation: 'none',
+  buttonBorder: '',
+  buttonFill: '',
   updatedAt: '',
 };
 
@@ -226,7 +294,7 @@ export interface Wish {
   createdAt: string;
   likes: string[];              // 좋아요 누른 학생 코드들
   isGranted: boolean;           // 교사가 선정했는지
-  grantedReward?: number;       // 선정 시 보상 쿠키
+  grantedMessage?: string;      // 선정 시 교사 코멘트
 }
 
 // 출석 기록
