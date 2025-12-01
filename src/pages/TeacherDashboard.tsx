@@ -1200,7 +1200,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       👨‍🎓 학생 목록 - {classes.find(c => c.id === selectedClass)?.name}
                     </CardTitle>
                     <CardDescription>
-                      {students.length}명의 학생 · 더블클릭하여 상세 정보 보기
+                      {students.length}명의 학생 · 클릭하여 상세 정보 보기
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -1227,7 +1227,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                               <tr
                                 key={student.code}
                                 className="border-b hover:bg-amber-50 cursor-pointer transition-colors"
-                                onDoubleClick={() => handleStudentDoubleClick(student)}
+                                onClick={() => handleStudentDoubleClick(student)}
                               >
                                 <td className="py-2 px-2">{student.number}</td>
                                 <td className="py-2 px-2 font-medium">{student.name}</td>
@@ -2517,6 +2517,58 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 </Button>
               </div>
               <p className="text-xs text-gray-500 mt-1">버튼 클릭: 즉시 적용 / 직접 입력 후 적용 버튼</p>
+            </div>
+
+            {/* 프로필 꾸미기 미리보기 */}
+            <div className="px-4 py-3 bg-purple-50 border-b">
+              <p className="text-sm font-medium text-purple-700 mb-2">🎨 프로필 꾸미기</p>
+              <div className="bg-white rounded-lg p-3 border border-purple-200">
+                <div className="flex items-center gap-3">
+                  {/* 이모지 + 애니메이션 */}
+                  <div className={`text-4xl ${getAnimationClass(selectedStudent?.profile?.animationCode || 'none')}`}>
+                    {selectedStudent?.profile?.emojiCode
+                      ? (() => {
+                          const emojiItem = ALL_SHOP_ITEMS.find(item => item.code === selectedStudent.profile?.emojiCode);
+                          return emojiItem?.value || '😀';
+                        })()
+                      : '😀'}
+                  </div>
+                  <div className="flex-1">
+                    {/* 칭호 */}
+                    {selectedStudent?.profile?.title && (
+                      <span className={`inline-block text-xs px-2 py-0.5 rounded mb-1 ${
+                        selectedStudent?.profile?.titleColorCode
+                          ? (() => {
+                              const colorItem = ALL_SHOP_ITEMS.find(item => item.code === selectedStudent.profile?.titleColorCode);
+                              const colorIndex = colorItem?.value ? parseInt(colorItem.value) : 0;
+                              const colors = ['bg-red-100 text-red-700', 'bg-orange-100 text-orange-700', 'bg-yellow-100 text-yellow-700', 'bg-green-100 text-green-700', 'bg-blue-100 text-blue-700', 'bg-purple-100 text-purple-700', 'bg-pink-100 text-pink-700', 'bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 text-white'];
+                              return colors[colorIndex] || colors[0];
+                            })()
+                          : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {selectedStudent.profile.title}
+                      </span>
+                    )}
+                    {/* 이름 + 효과 */}
+                    <p className={`font-bold text-lg ${
+                      selectedStudent?.profile?.nameEffectCode === 'name_effect_rainbow'
+                        ? 'bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 bg-clip-text text-transparent'
+                        : selectedStudent?.profile?.nameEffectCode === 'name_effect_glow'
+                        ? 'text-amber-500 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]'
+                        : ''
+                    }`}>
+                      {selectedStudent?.name}
+                    </p>
+                  </div>
+                </div>
+                {/* 설정 요약 */}
+                <div className="mt-2 pt-2 border-t border-purple-100 grid grid-cols-2 gap-1 text-xs text-gray-500">
+                  <div>테두리: {selectedStudent?.profile?.buttonBorderCode ? '✅' : '❌'}</div>
+                  <div>배경: {selectedStudent?.profile?.buttonFillCode ? '✅' : '❌'}</div>
+                  <div>애니메이션: {selectedStudent?.profile?.animationCode && selectedStudent.profile.animationCode !== 'none' ? '✅' : '❌'}</div>
+                  <div>이름효과: {selectedStudent?.profile?.nameEffectCode ? '✅' : '❌'}</div>
+                </div>
+              </div>
             </div>
 
             {/* GitHub 스타일 잔디 */}
