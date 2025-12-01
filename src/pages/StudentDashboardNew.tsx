@@ -24,6 +24,14 @@ import {
   Team,
   Badge
 } from '../services/firestoreApi';
+import { getItemByCode } from '../types/shop';
+
+// 이모지 코드를 실제 이모지로 변환
+const getEmojiFromCode = (code: string | undefined): string => {
+  if (!code) return '😊';
+  const item = getItemByCode(code);
+  return item?.value || '😊';
+};
 
 interface StudentDashboardNewProps {
   onLogout: () => void;
@@ -957,7 +965,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         className="p-3 rounded-xl border-2 border-gray-200 hover:border-amber-400 hover:shadow-md transition-all flex flex-col items-center"
                       >
                         <div className="text-3xl mb-1">
-                          {classmate.profile.emojiCode || '😊'}
+                          {getEmojiFromCode(classmate.profile.emojiCode)}
                         </div>
                         <p className="font-medium text-sm truncate w-full text-center">
                           {classmate.name}
@@ -991,7 +999,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                           <span className="font-bold text-lg w-6">
                             {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}`}
                           </span>
-                          <span className="text-xl">{s.profile.emojiCode || '😊'}</span>
+                          <span className="text-xl">{getEmojiFromCode(s.profile.emojiCode)}</span>
                           <span className={`font-medium ${s.code === currentStudent?.code ? 'text-amber-600' : ''}`}>
                             {s.name}
                             {s.code === currentStudent?.code && ' (나)'}
@@ -1006,121 +1014,95 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
           </div>
         )}
 
-        {/* 친구 프로필 모달 - 컴팩트 직사각형 */}
+        {/* 친구 프로필 모달 - 작은 팝업 */}
         {selectedClassmate && (
           <div
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
             onClick={() => setSelectedClassmate(null)}
           >
             <div
-              className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl shadow-xl border-2 border-amber-300 w-full max-w-xs overflow-hidden"
+              className="bg-white rounded-2xl shadow-2xl border-2 border-amber-300 overflow-hidden"
+              style={{ width: '280px' }}
               onClick={(e) => e.stopPropagation()}
             >
-              {/* 헤더 - 프로필 정보 */}
-              <div className="bg-gradient-to-r from-amber-400 to-orange-400 px-4 py-3 text-white">
-                <div className="flex items-center gap-3">
-                  <div className="text-4xl bg-white/20 rounded-lg p-2">
-                    {selectedClassmate.profile.emojiCode || '😊'}
-                  </div>
+              {/* 헤더 */}
+              <div className="bg-gradient-to-r from-amber-400 to-orange-400 px-3 py-2 text-white">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">{getEmojiFromCode(selectedClassmate.profile.emojiCode)}</span>
                   <div className="flex-1 min-w-0">
-                    <h2 className="font-bold text-lg truncate">{selectedClassmate.name}</h2>
-                    {selectedClassmate.profile.title && (
-                      <p className="text-amber-100 text-sm truncate">{selectedClassmate.profile.title}</p>
-                    )}
+                    <p className="font-bold text-sm truncate">{selectedClassmate.name}</p>
                     <p className="text-amber-100 text-xs">{selectedClassmate.number}번</p>
                   </div>
-                  <button
-                    onClick={() => setSelectedClassmate(null)}
-                    className="text-white/80 hover:text-white p-1"
-                  >
-                    ✕
-                  </button>
+                  <button onClick={() => setSelectedClassmate(null)} className="text-white/80 hover:text-white text-lg">✕</button>
                 </div>
               </div>
 
               {/* 바디 */}
-              <div className="px-4 py-3 space-y-3">
-                {/* 통계 - 가로 배치 */}
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="bg-white rounded-lg p-2 border border-amber-200">
-                    <p className="text-lg font-bold text-amber-600">{selectedClassmate.cookie}</p>
-                    <p className="text-xs text-gray-500">🍪 쿠키</p>
+              <div className="p-3 space-y-2">
+                {/* 통계 */}
+                <div className="grid grid-cols-3 gap-1 text-center text-xs">
+                  <div className="bg-amber-50 rounded p-1.5">
+                    <p className="font-bold text-amber-600">{selectedClassmate.cookie}</p>
+                    <p className="text-gray-500">🍪쿠키</p>
                   </div>
-                  <div className="bg-white rounded-lg p-2 border border-green-200">
-                    <p className="text-lg font-bold text-green-600">{selectedClassmate.totalCookie}</p>
-                    <p className="text-xs text-gray-500">📊 누적</p>
+                  <div className="bg-green-50 rounded p-1.5">
+                    <p className="font-bold text-green-600">{selectedClassmate.totalCookie}</p>
+                    <p className="text-gray-500">📊누적</p>
                   </div>
-                  <div className="bg-white rounded-lg p-2 border border-purple-200">
-                    <p className="text-lg font-bold text-purple-600">{selectedClassmate.wishStreak || 0}</p>
-                    <p className="text-xs text-gray-500">🔥 연속</p>
+                  <div className="bg-purple-50 rounded p-1.5">
+                    <p className="font-bold text-purple-600">{selectedClassmate.wishStreak || 0}</p>
+                    <p className="text-gray-500">🔥연속</p>
                   </div>
                 </div>
 
-                {/* 뱃지 - 한 줄 */}
+                {/* 뱃지 - 작게 */}
                 {selectedClassmate.badges && Object.values(selectedClassmate.badges).some(b => b.hasBadge) && (
-                  <div className="bg-white rounded-lg p-2 border border-gray-200">
-                    <p className="text-xs text-gray-500 mb-1">🏆 뱃지</p>
-                    <div className="flex gap-1 overflow-x-auto">
+                  <div className="flex items-center gap-1 p-1.5 bg-gray-50 rounded">
+                    <span className="text-xs text-gray-500">🏆</span>
+                    <div className="flex gap-0.5 overflow-x-auto">
                       {(Object.entries(selectedClassmate.badges) as [string, Badge][])
                         .filter(([, badge]) => badge.hasBadge)
                         .map(([key, badge]) => (
-                          <img
-                            key={key}
-                            src={badge.imgUrl}
-                            alt={badge.title}
-                            className="w-7 h-7 rounded flex-shrink-0"
-                            title={badge.title}
-                          />
+                          <img key={key} src={badge.imgUrl} alt={badge.title} className="w-5 h-5 rounded" title={badge.title} />
                         ))}
                     </div>
                   </div>
                 )}
 
-                {/* 잔디 - 미니 버전 */}
-                <div className="bg-white rounded-lg p-2 border border-green-200">
-                  <p className="text-xs text-gray-500 mb-2">🌱 최근 활동</p>
+                {/* 잔디 - 미니 */}
+                <div className="p-1.5 bg-green-50 rounded">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-gray-500">🌱 활동</span>
+                    <div className="flex items-center gap-0.5 text-[8px] text-gray-400">
+                      <div className="w-1.5 h-1.5 rounded-sm bg-gray-200" />
+                      <div className="w-1.5 h-1.5 rounded-sm bg-green-300" />
+                      <div className="w-1.5 h-1.5 rounded-sm bg-green-500" />
+                    </div>
+                  </div>
                   {isLoadingClassmateGrass ? (
-                    <p className="text-center text-xs text-gray-400 py-2">로딩 중...</p>
+                    <p className="text-center text-[10px] text-gray-400">로딩...</p>
                   ) : (
-                    <>
-                      {/* 잔디 그리드 - 최근 8주 */}
-                      <div className="flex gap-[2px] justify-center">
-                        {Array.from({ length: 8 }).map((_, weekIndex) => (
-                          <div key={weekIndex} className="flex flex-col gap-[2px]">
-                            {Array.from({ length: 7 }).map((_, dayIndex) => {
-                              const totalDays = weekIndex * 7 + dayIndex;
-                              const date = new Date();
-                              date.setDate(date.getDate() - (8 * 7 - totalDays));
-                              const dateStr = date.toISOString().split('T')[0];
-                              const isFuture = date > new Date();
-                              const grassRecord = selectedClassmateGrass.find((g) => g.date === dateStr);
-                              const cookieChange = grassRecord?.cookieChange || 0;
-
-                              return (
-                                <div
-                                  key={dayIndex}
-                                  className={`w-2.5 h-2.5 rounded-sm ${
-                                    isFuture
-                                      ? 'bg-gray-50'
-                                      : getGrassColor(cookieChange)
-                                  }`}
-                                  title={isFuture ? '' : `${dateStr}: +${cookieChange}`}
-                                />
-                              );
-                            })}
-                          </div>
-                        ))}
-                      </div>
-                      {/* 범례 */}
-                      <div className="flex items-center justify-center gap-1 mt-2 text-[10px] text-gray-400">
-                        <span>적음</span>
-                        <div className="w-2 h-2 rounded-sm bg-gray-200" />
-                        <div className="w-2 h-2 rounded-sm bg-green-200" />
-                        <div className="w-2 h-2 rounded-sm bg-green-400" />
-                        <div className="w-2 h-2 rounded-sm bg-green-600" />
-                        <span>많음</span>
-                      </div>
-                    </>
+                    <div className="flex gap-[1px] justify-center">
+                      {Array.from({ length: 8 }).map((_, weekIndex) => (
+                        <div key={weekIndex} className="flex flex-col gap-[1px]">
+                          {Array.from({ length: 7 }).map((_, dayIndex) => {
+                            const totalDays = weekIndex * 7 + dayIndex;
+                            const date = new Date();
+                            date.setDate(date.getDate() - (8 * 7 - totalDays));
+                            const dateStr = date.toISOString().split('T')[0];
+                            const isFuture = date > new Date();
+                            const grassRecord = selectedClassmateGrass.find((g) => g.date === dateStr);
+                            const cookieChange = grassRecord?.cookieChange || 0;
+                            return (
+                              <div
+                                key={dayIndex}
+                                className={`w-2 h-2 rounded-sm ${isFuture ? 'bg-gray-100' : getGrassColor(cookieChange)}`}
+                              />
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
