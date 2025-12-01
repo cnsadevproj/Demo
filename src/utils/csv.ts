@@ -1,4 +1,4 @@
-import { StoredStudent } from '../services/api';
+import { StoredStudent } from '../services/firestoreApi';
 
 // UTF-8 BOM (한글 깨짐 방지)
 const UTF8_BOM = '\uFEFF';

@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 교사 데이터
+    match /teachers/{teacherId} {
+      allow read, write: if request.auth != null && request.auth.uid == teacherId;
+
+      // 학급 데이터
+      match /classes/{classId} {
+        allow read, write: if request.auth != null && request.auth.uid == teacherId;
+
+        // 잔디 데이터
+        match /grass/{date} {
+          allow read, write: if request.auth != null && request.auth.uid == teacherId;
+        }
+      }
+
+      // 학생 데이터
+      match /students/{studentCode} {
+        allow read: if true; // 학생 코드로 로그인 시 필요
+        allow write: if request.auth != null && request.auth.uid == teacherId;
+      }
+    }
+
+    // 상점 아이템 (공개)
+    match /shop/{itemId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // 시스템 로그 (Cloud Functions만 쓰기 가능)
+    match /system/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if false; // Cloud Functions만 가능
+    }
+  }
+}
