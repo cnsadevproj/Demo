@@ -82,7 +82,11 @@ export interface ClassInfo {
   active: boolean;
   teacherId: string;
   createdAt: Timestamp;
+  lastCookieRefresh?: Timestamp | null;
 }
+
+// 새로고침 간격 (4시간 = 4 * 60 * 60 * 1000 밀리초)
+const REFRESH_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
 // 팀 정보
 export interface Team {
@@ -871,12 +875,56 @@ export async function fetchStudentFromDahandin(
   throw new Error(data.message || '학생 정보를 가져올 수 없습니다.');
 }
 
+// 마지막 새로고침 시간 확인
+export async function getLastRefreshTime(
+  teacherId: string,
+  classId: string
+): Promise<Date | null> {
+  const classRef = doc(db, 'teachers', teacherId, 'classes', classId);
+  const classSnap = await getDoc(classRef);
+
+  if (classSnap.exists()) {
+    const data = classSnap.data();
+    return data.lastCookieRefresh?.toDate?.() || null;
+  }
+  return null;
+}
+
+// 새로고침 가능 여부 확인 (4시간 경과 여부)
+export async function canRefreshCookies(
+  teacherId: string,
+  classId: string
+): Promise<{ canRefresh: boolean; remainingMinutes: number }> {
+  const lastRefresh = await getLastRefreshTime(teacherId, classId);
+
+  if (!lastRefresh) {
+    return { canRefresh: true, remainingMinutes: 0 };
+  }
+
+  const now = new Date();
+  const timeSinceRefresh = now.getTime() - lastRefresh.getTime();
+  const remainingMs = REFRESH_INTERVAL_MS - timeSinceRefresh;
+
+  if (remainingMs <= 0) {
+    return { canRefresh: true, remainingMinutes: 0 };
+  }
+
+  return {
+    canRefresh: false,
+    remainingMinutes: Math.ceil(remainingMs / (60 * 1000))
+  };
+}
+
 // 쿠키 새로고침 (다했니 API에서 가져와서 Firestore에 저장)
+// 수동 새로고침은 언제든 가능, 잔디 기록은 4시간마다만 추가
 export async function refreshStudentCookies(
   teacherId: string,
   classId: string,
   apiKey: string
-): Promise<number> {
+): Promise<{ success: boolean; count: number; error?: string }> {
+  // 4시간 경과 여부 확인 (잔디 기록 추가 여부 결정용)
+  const { canRefresh: canRecordGrass } = await canRefreshCookies(teacherId, classId);
+
   const students = await getClassStudents(teacherId, classId);
   let updatedCount = 0;
 
@@ -898,8 +946,8 @@ export async function refreshStudentCookies(
         badges: dahandinData.badges
       });
 
-      // 잔디 기록 (쿠키가 증가했을 때만, 첫 로드는 제외)
-      if (cookieChange > 0 && !isFirstLoad) {
+      // 잔디 기록 (4시간 경과 시에만, 쿠키가 증가했을 때만, 첫 로드는 제외)
+      if (canRecordGrass && cookieChange > 0 && !isFirstLoad) {
         await addGrassRecord(teacherId, classId, student.code, cookieChange);
       }
 
@@ -909,7 +957,15 @@ export async function refreshStudentCookies(
     }
   }
 
-  return updatedCount;
+  // 잔디 기록이 추가된 경우에만 새로고침 시간 업데이트
+  if (canRecordGrass) {
+    const classRef = doc(db, 'teachers', teacherId, 'classes', classId);
+    await updateDoc(classRef, {
+      lastCookieRefresh: serverTimestamp()
+    });
+  }
+
+  return { success: true, count: updatedCount };
 }
 
 // ========================================
