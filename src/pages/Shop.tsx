@@ -20,9 +20,9 @@ import {
   getShopItems,
   getStudent,
   purchaseItem,
-  SheetShopItem,
-  SheetStudent,
-} from '../services/sheetsApi';
+  ShopItem,
+  Student,
+} from '../services/firestoreApi';
 import {
   ItemCategory,
   ALL_SHOP_ITEMS,
@@ -36,30 +36,36 @@ interface ShopProps {
 // 카테고리 정보
 const CATEGORIES: { key: ItemCategory; label: string; icon: React.ReactNode }[] = [
   { key: 'emoji', label: '이모지', icon: <Sparkles className="w-4 h-4" /> },
-  { key: 'border', label: '테두리', icon: <Square className="w-4 h-4" /> },
+  { key: 'titlePermit', label: '칭호권', icon: <Tag className="w-4 h-4" /> },
+  { key: 'titleColor', label: '칭호색상', icon: <Palette className="w-4 h-4" /> },
+  { key: 'animation', label: '애니메이션', icon: <Sparkles className="w-4 h-4" /> },
+  { key: 'buttonBorder', label: '테두리색', icon: <Square className="w-4 h-4" /> },
+  { key: 'buttonFill', label: '채우기', icon: <Palette className="w-4 h-4" /> },
+  { key: 'border', label: '프로필테두리', icon: <Square className="w-4 h-4" /> },
   { key: 'nameEffect', label: '이름효과', icon: <Type className="w-4 h-4" /> },
   { key: 'background', label: '배경', icon: <Image className="w-4 h-4" /> },
-  { key: 'titleColor', label: '칭호색상', icon: <Tag className="w-4 h-4" /> },
 ];
 
 export function Shop({ onBack }: ShopProps) {
-  const { user, selectedClass, isTeacher } = useAuth();
+  const { student: authStudent, studentTeacherId, role } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState<ItemCategory>('emoji');
-  const [student, setStudent] = useState<SheetStudent | null>(null);
-  const [shopItems, setShopItems] = useState<SheetShopItem[]>([]);
+  const [student, setStudent] = useState<Student | null>(null);
+  const [shopItems, setShopItems] = useState<ShopItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  const isTeacher = role === 'teacher';
+
   // 데이터 로드
   useEffect(() => {
     const loadData = async () => {
-      if (!user?.code || !selectedClass) return;
+      if (!authStudent?.code || !studentTeacherId) return;
 
       setLoading(true);
       try {
         const [studentData, items] = await Promise.all([
-          getStudent(user.code, selectedClass),
+          getStudent(studentTeacherId, authStudent.code),
           getShopItems(),
         ]);
 
@@ -73,29 +79,27 @@ export function Shop({ onBack }: ShopProps) {
     };
 
     loadData();
-  }, [user?.code, selectedClass]);
+  }, [authStudent?.code, studentTeacherId]);
 
   // 카테고리별 아이템 필터링
   const categoryItems = shopItems.filter(item => item.category === selectedCategory);
 
   // 아이템 구매
   const handlePurchase = async (itemCode: string) => {
-    if (!user?.code || !selectedClass || !student) return;
+    if (!authStudent?.code || !studentTeacherId || !student) return;
+
+    const item = shopItems.find(i => i.code === itemCode);
+    if (!item) return;
 
     setPurchasing(itemCode);
     setMessage(null);
 
     try {
-      const result = await purchaseItem(selectedClass, user.code, itemCode);
-
-      if (result.success) {
-        setMessage({ type: 'success', text: '구매 완료!' });
-        // 학생 정보 다시 로드
-        const updatedStudent = await getStudent(user.code, selectedClass);
-        setStudent(updatedStudent);
-      } else {
-        setMessage({ type: 'error', text: result.message || '구매에 실패했습니다.' });
-      }
+      await purchaseItem(studentTeacherId, authStudent.code, itemCode, item.price);
+      setMessage({ type: 'success', text: '구매 완료!' });
+      // 학생 정보 다시 로드
+      const updatedStudent = await getStudent(studentTeacherId, authStudent.code);
+      setStudent(updatedStudent);
     } catch (error) {
       setMessage({ type: 'error', text: '오류가 발생했습니다.' });
     } finally {
@@ -106,7 +110,7 @@ export function Shop({ onBack }: ShopProps) {
   };
 
   // 아이템 상태 확인
-  const getItemStatus = (item: SheetShopItem) => {
+  const getItemStatus = (item: ShopItem) => {
     if (!student) return { owned: false, canBuy: false };
 
     const owned = student.ownedItems.includes(item.code);
@@ -307,6 +311,45 @@ export function Shop({ onBack }: ShopProps) {
                           >
                             칭호
                           </Badge>
+                        )}
+                        {selectedCategory === 'buttonBorder' && (
+                          <div
+                            className="w-16 h-16 mx-auto rounded-lg border-4 bg-white"
+                            style={{
+                              borderColor: displayValue === 'gradient'
+                                ? undefined
+                                : displayValue.includes('red') ? '#f87171'
+                                : displayValue.includes('orange') ? '#fb923c'
+                                : displayValue.includes('yellow') ? '#facc15'
+                                : displayValue.includes('green') ? '#4ade80'
+                                : displayValue.includes('blue') ? '#60a5fa'
+                                : displayValue.includes('purple') ? '#a855f7'
+                                : displayValue.includes('pink') ? '#f472b6'
+                                : '#d1d5db',
+                              background: displayValue === 'gradient'
+                                ? 'linear-gradient(45deg, #8b5cf6, #ec4899, #ef4444)'
+                                : undefined
+                            }}
+                          />
+                        )}
+                        {selectedCategory === 'buttonFill' && (
+                          <div
+                            className={`w-16 h-16 mx-auto rounded-lg border-2 border-gray-300 ${
+                              displayValue === 'gradient'
+                                ? 'bg-gradient-to-r from-amber-100 via-pink-100 to-purple-100'
+                                : displayValue === 'white'
+                                ? 'bg-white'
+                                : displayValue.includes('red') ? 'bg-red-50'
+                                : displayValue.includes('orange') ? 'bg-orange-50'
+                                : displayValue.includes('yellow') ? 'bg-yellow-50'
+                                : displayValue.includes('green') ? 'bg-green-50'
+                                : displayValue.includes('blue') ? 'bg-blue-50'
+                                : displayValue.includes('purple') ? 'bg-purple-100'
+                                : displayValue.includes('pink') ? 'bg-pink-100'
+                                : displayValue.includes('amber') ? 'bg-amber-100'
+                                : 'bg-gray-50'
+                            }`}
+                          />
                         )}
                       </div>
 

@@ -1,0 +1,17 @@
+# Compiled JavaScript
+lib/
+
+# Node modules
+node_modules/
+
+# Firebase debug files
+firebase-debug.log
+firebase-debug.*.log
+
+# IDE
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db

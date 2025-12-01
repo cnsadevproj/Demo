@@ -20,8 +20,8 @@ import {
 import {
   getStudent,
   saveProfile,
-  SheetStudent,
-} from '../services/sheetsApi';
+  Student,
+} from '../services/firestoreApi';
 import {
   EMOJI_ITEMS,
   BORDER_ITEMS,
@@ -37,13 +37,13 @@ interface StudentProfilePageProps {
 }
 
 export function StudentProfilePage({ onBack, onNavigate }: StudentProfilePageProps) {
-  const { studentCode: authStudentCode, studentClassName } = useAuth();
+  const { student: authStudent, studentTeacherId } = useAuth();
 
-  const studentCode = authStudentCode || '';
-  const className = studentClassName || '';
+  const studentCode = authStudent?.code || '';
+  const teacherId = studentTeacherId || '';
 
   // 학생 데이터
-  const [student, setStudent] = useState<SheetStudent | null>(null);
+  const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
 
   // 편집 상태
@@ -61,19 +61,19 @@ export function StudentProfilePage({ onBack, onNavigate }: StudentProfilePagePro
   // 데이터 로드
   useEffect(() => {
     const loadData = async () => {
-      if (!studentCode || !className) return;
+      if (!studentCode || !teacherId) return;
 
       setLoading(true);
       try {
-        const data = await getStudent(studentCode, className);
+        const data = await getStudent(teacherId, studentCode);
         if (data) {
           setStudent(data);
-          setTitle(data.title || '');
-          setTitleColorCode(data.titleColorCode || 'title_00');
-          setEmojiCode(data.emojiCode || 'emoji_00');
-          setBorderCode(data.borderCode || 'border_00');
-          setNameEffectCode(data.nameEffectCode || 'name_00');
-          setBackgroundCode(data.backgroundCode || 'bg_00');
+          setTitle(data.profile?.title || '');
+          setTitleColorCode(data.profile?.titleColorCode || 'title_00');
+          setEmojiCode(data.profile?.emojiCode || 'emoji_00');
+          setBorderCode(data.profile?.borderCode || 'border_00');
+          setNameEffectCode(data.profile?.nameEffectCode || 'name_00');
+          setBackgroundCode(data.profile?.backgroundCode || 'bg_00');
         }
       } catch (error) {
         console.error('데이터 로드 오류:', error);
@@ -83,7 +83,7 @@ export function StudentProfilePage({ onBack, onNavigate }: StudentProfilePagePro
     };
 
     loadData();
-  }, [studentCode, className]);
+  }, [studentCode, teacherId]);
 
   // 보유한 아이템인지 확인
   const isOwned = (code: string): boolean => {
@@ -96,13 +96,13 @@ export function StudentProfilePage({ onBack, onNavigate }: StudentProfilePagePro
 
   // 저장
   const handleSave = async () => {
-    if (!studentCode || !className) return;
+    if (!studentCode || !teacherId) return;
 
     setSaving(true);
     setMessage(null);
 
     try {
-      const success = await saveProfile(className, studentCode, {
+      await saveProfile(teacherId, studentCode, {
         emojiCode,
         title: title.slice(0, 5),
         titleColorCode,
@@ -111,11 +111,7 @@ export function StudentProfilePage({ onBack, onNavigate }: StudentProfilePagePro
         backgroundCode,
       });
 
-      if (success) {
-        setMessage({ type: 'success', text: '저장되었습니다!' });
-      } else {
-        setMessage({ type: 'error', text: '저장에 실패했습니다.' });
-      }
+      setMessage({ type: 'success', text: '저장되었습니다!' });
     } catch (error) {
       setMessage({ type: 'error', text: '오류가 발생했습니다.' });
     } finally {
