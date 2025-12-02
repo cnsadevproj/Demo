@@ -7,6 +7,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Checkbox } from '../components/ui/checkbox';
 import { toast } from 'sonner';
 import {
   createClass,
@@ -15,6 +16,7 @@ import {
   createStudent,
   refreshStudentCookies,
   fetchClassroomsFromDahandin,
+  fetchStudentFromDahandin,
   getGrassData,
   deleteAllStudents,
   getStudent,
@@ -45,7 +47,8 @@ import {
   Wish,
   updateShopItem,
   resetGrassData,
-  updateTeamCookie
+  updateTeamCookie,
+  updateTeam
 } from '../services/firestoreApi';
 import { parseXlsxFile, downloadCsvTemplate, exportStudentsToCsv } from '../utils/csv';
 import { TEAM_FLAGS, generateRandomTeamNameWithEmoji } from '../types/game';
@@ -86,6 +89,37 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     }
   }, [selectedClass, user]);
 
+  // 로그인 시 모든 학급 자동 새로고침 (최초 1회)
+  const [hasAutoRefreshed, setHasAutoRefreshed] = useState(false);
+  useEffect(() => {
+    const autoRefreshAllClasses = async () => {
+      if (!user || !teacher || !classes || classes.length === 0 || hasAutoRefreshed) return;
+
+      setHasAutoRefreshed(true);
+      console.log('🔄 자동 새로고침 시작...');
+
+      let totalRefreshed = 0;
+      for (const classInfo of classes) {
+        try {
+          const result = await refreshStudentCookies(user.uid, classInfo.id, teacher.dahandinApiKey);
+          totalRefreshed += result.count;
+        } catch (error) {
+          console.error(`Failed to auto-refresh class ${classInfo.name}:`, error);
+        }
+      }
+
+      if (totalRefreshed > 0) {
+        console.log(`✅ ${totalRefreshed}명의 학생 정보 자동 새로고침 완료`);
+        // 현재 선택된 학급이 있으면 학생 목록도 새로고침
+        if (selectedClass) {
+          await loadStudents();
+        }
+      }
+    };
+
+    autoRefreshAllClasses();
+  }, [user, teacher, classes, hasAutoRefreshed]);
+
   // 학생 목록 로드
   const loadStudents = async () => {
     if (!user || !selectedClass) return;
@@ -117,6 +151,192 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       'snow': 'animate-snow',
     };
     return animMap[value] || '';
+  };
+
+  // 이모지 코드에서 이모지 가져오기
+  const getEmojiFromCode = (code: string | undefined): string => {
+    if (!code) return '';
+    // 코드 형식(emoji_XX)인 경우 아이템에서 조회
+    if (code.startsWith('emoji_')) {
+      const item = ALL_SHOP_ITEMS.find(i => i.code === code);
+      return item?.value || '';
+    }
+    // 이미 이모지 값인 경우 그대로 반환
+    return code;
+  };
+
+  // 테두리 색상값 (inline style용) - 파스텔톤
+  const getBorderColor = (value: string | undefined): string => {
+    if (!value) return 'rgb(209 213 219)'; // gray-300
+    const colorMap: Record<string, string> = {
+      'gray-300': 'rgb(209 213 219)',
+      'gray-800': 'rgb(31 41 55)',
+      'border-blue-500': 'rgb(147 197 253)',      // 파스텔 블루
+      'border-red-500': 'rgb(252 165 165)',       // 파스텔 레드
+      'border-green-500': 'rgb(134 239 172)',     // 파스텔 그린
+      'border-yellow-500': 'rgb(253 224 71)',     // 파스텔 옐로우
+      'border-purple-500': 'rgb(196 181 253)',    // 파스텔 퍼플
+      'border-pink-500': 'rgb(249 168 212)',      // 파스텔 핑크
+      'border-amber-400': 'rgb(252 211 77)',      // 파스텔 앰버
+      'border-gray-800': 'rgb(31 41 55)',
+      'border-orange-500': 'rgb(253 186 116)',    // 파스텔 오렌지
+      'border-cyan-500': 'rgb(103 232 249)',      // 파스텔 시안
+      'border-teal-500': 'rgb(94 234 212)',       // 파스텔 틸
+      'border-indigo-500': 'rgb(165 180 252)',    // 파스텔 인디고
+      // 색상 이름 직접 지원
+      'blue': 'rgb(147 197 253)',
+      'red': 'rgb(252 165 165)',
+      'green': 'rgb(134 239 172)',
+      'yellow': 'rgb(253 224 71)',
+      'purple': 'rgb(196 181 253)',
+      'pink': 'rgb(249 168 212)',
+      'amber': 'rgb(252 211 77)',
+      'orange': 'rgb(253 186 116)',
+    };
+    return colorMap[value] || 'rgb(209 213 219)';
+  };
+
+  // 배경 색상값 (inline style용) - 파스텔톤
+  const getFillColor = (value: string | undefined): string => {
+    if (!value || value === 'none') return 'transparent';
+    const colorMap: Record<string, string> = {
+      'none': 'transparent',
+      'transparent': 'transparent',
+      'white': 'rgb(255 255 255)',
+      'bg-blue-500': 'rgb(191 219 254)',          // 파스텔 블루
+      'bg-red-500': 'rgb(254 202 202)',           // 파스텔 레드
+      'bg-green-500': 'rgb(187 247 208)',         // 파스텔 그린
+      'bg-green-200': 'rgb(187 247 208)',
+      'bg-green-300': 'rgb(134 239 172)',
+      'bg-yellow-500': 'rgb(254 240 138)',        // 파스텔 옐로우
+      'bg-purple-500': 'rgb(221 214 254)',        // 파스텔 퍼플
+      'bg-pink-500': 'rgb(251 207 232)',          // 파스텔 핑크
+      'bg-amber-400': 'rgb(253 230 138)',         // 파스텔 앰버
+      'bg-gray-800': 'rgb(31 41 55)',
+      'bg-orange-500': 'rgb(254 215 170)',        // 파스텔 오렌지
+      'bg-cyan-500': 'rgb(165 243 252)',          // 파스텔 시안
+      'bg-teal-500': 'rgb(153 246 228)',          // 파스텔 틸
+      'bg-indigo-500': 'rgb(199 210 254)',        // 파스텔 인디고
+      // 색상 이름 직접 지원
+      'blue': 'rgb(191 219 254)',
+      'red': 'rgb(254 202 202)',
+      'green': 'rgb(187 247 208)',
+      'light-green': 'rgb(220 252 231)',
+      'yellow': 'rgb(254 240 138)',
+      'purple': 'rgb(221 214 254)',
+      'pink': 'rgb(251 207 232)',
+      'amber': 'rgb(253 230 138)',
+      'orange': 'rgb(254 215 170)',
+    };
+    return colorMap[value] || 'transparent';
+  };
+
+  // 그라데이션 여부 확인
+  const isGradientFill = (value: string | undefined): boolean => {
+    if (!value) return false;
+    return value.startsWith('gradient-') || value === 'bg-gradient-to-r from-pink-500 to-purple-500';
+  };
+
+  // 그라데이션 CSS 값 가져오기 - 파스텔톤
+  const getGradientStyle = (value: string | undefined): string => {
+    const gradientMap: Record<string, string> = {
+      // 부드러운 파스텔 그라데이션
+      'gradient-rainbow': 'linear-gradient(to right, rgb(254 202 202), rgb(254 240 138), rgb(187 247 208), rgb(191 219 254), rgb(221 214 254))',
+      'gradient-fire': 'linear-gradient(to right, rgb(254 202 202), rgb(254 215 170), rgb(254 240 138))',
+      'gradient-ocean': 'linear-gradient(to right, rgb(165 243 252), rgb(191 219 254), rgb(199 210 254))',
+      'gradient-sunset': 'linear-gradient(to right, rgb(254 215 170), rgb(251 207 232), rgb(221 214 254))',
+      'gradient-aurora': 'linear-gradient(to right, rgb(187 247 208), rgb(165 243 252), rgb(221 214 254))',
+      'gradient-pink-purple': 'linear-gradient(to right, rgb(251 207 232), rgb(221 214 254))',
+      'gradient-mint': 'linear-gradient(to right, rgb(165 243 252), rgb(153 246 228))',
+      'gradient-orange': 'linear-gradient(to right, rgb(254 240 138), rgb(254 215 170))',
+      // 추가 파스텔 그라데이션
+      'gradient-cotton-candy': 'linear-gradient(to right, rgb(251 207 232), rgb(191 219 254))',
+      'gradient-peach': 'linear-gradient(to right, rgb(254 215 170), rgb(251 207 232))',
+      'gradient-lavender': 'linear-gradient(to right, rgb(221 214 254), rgb(251 207 232))',
+      'gradient-spring': 'linear-gradient(to right, rgb(187 247 208), rgb(254 240 138))',
+      'gradient-sky': 'linear-gradient(to right, rgb(191 219 254), rgb(165 243 252))',
+      'bg-gradient-to-r from-pink-500 to-purple-500': 'linear-gradient(to right, rgb(251 207 232), rgb(221 214 254))',
+    };
+    return gradientMap[value || ''] || '';
+  };
+
+  // 이름 효과 스타일 클래스
+  const getNameEffectClass = (value: string | undefined) => {
+    if (!value) return '';
+    const effectMap: Record<string, string> = {
+      'none': '',
+      'gradient-rainbow': 'block bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 bg-clip-text text-transparent',
+      'gradient-fire': 'block bg-gradient-to-r from-orange-500 via-red-500 to-yellow-500 bg-clip-text text-transparent',
+      'gradient-ocean': 'block bg-gradient-to-r from-blue-400 via-cyan-500 to-teal-500 bg-clip-text text-transparent',
+      'gradient-gold': 'block bg-gradient-to-r from-yellow-400 via-amber-500 to-yellow-600 bg-clip-text text-transparent',
+      'glow-blue': 'text-blue-500 drop-shadow-lg',
+      'glow-pink': 'text-pink-500 drop-shadow-lg',
+      'glow-gold': 'text-amber-500 drop-shadow-lg',
+      'shadow': 'text-gray-800 drop-shadow-md',
+    };
+    return effectMap[value] || '';
+  };
+
+  // 칭호 색상 스타일
+  const getTitleColorClass = (value: string | undefined) => {
+    if (!value) return 'text-gray-600';
+    const colorMap: Record<string, string> = {
+      '0': 'text-red-500',
+      '1': 'text-orange-500',
+      '2': 'text-yellow-500',
+      '3': 'text-green-500',
+      '4': 'text-blue-500',
+      '5': 'text-purple-500',
+      '6': 'text-pink-500',
+      '7': 'text-gray-800',
+      '8': 'text-amber-600',
+      '9': 'block bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 bg-clip-text text-transparent',
+    };
+    return colorMap[value] || 'text-gray-600';
+  };
+
+  // 배경 스타일 클래스
+  const getBackgroundClass = (value: string | undefined) => {
+    if (!value) return 'bg-transparent';
+    const bgMap: Record<string, string> = {
+      'none': 'bg-transparent',
+      'dots': 'bg-pattern-dots',
+      'stripes': 'bg-pattern-stripes',
+      'waves': 'bg-pattern-waves',
+      'hearts': 'bg-pattern-hearts',
+      'stars': 'bg-pattern-stars',
+      'gradient-soft': 'bg-gradient-to-br from-pink-50 to-blue-50',
+      'gradient-vivid': 'bg-gradient-to-br from-purple-100 to-pink-100',
+      'gradient-mint': 'bg-gradient-to-br from-green-50 to-cyan-50',
+      'gradient-sunset': 'bg-gradient-to-br from-orange-50 to-pink-50',
+      'gradient-lavender': 'bg-gradient-to-br from-purple-50 to-indigo-50',
+    };
+    return bgMap[value] || 'bg-transparent';
+  };
+
+  // 잔디 색상
+  const getGrassColor = (cookieChange: number) => {
+    if (cookieChange === 0) return 'bg-gray-200';
+    if (cookieChange === 1) return 'bg-green-300';
+    if (cookieChange === 2) return 'bg-green-500';
+    return 'bg-green-700';
+  };
+
+  // 프로필 학생 선택 및 잔디 데이터 로드
+  const handleSelectProfileStudent = async (student: Student) => {
+    setSelectedProfileStudent(student);
+    setProfileStudentGrass([]);
+
+    if (!user || !selectedClass) return;
+
+    setIsLoadingProfileGrass(true);
+    try {
+      const grass = await getGrassData(user.uid, selectedClass, student.code);
+      setProfileStudentGrass(grass.map(g => ({ date: g.date, cookieChange: g.cookieChange, count: g.count || 1 })));
+    } catch (error) {
+      console.error('Failed to load profile student grass:', error);
+    }
+    setIsLoadingProfileGrass(false);
   };
 
   // 다했니 API에서 학급 가져오기
@@ -237,9 +457,20 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [studentGrassData, setStudentGrassData] = useState<Array<{ date: string; cookieChange: number; count: number }>>([]);
 
-  // 쿠키 부여
+  // 프로필 확인 모달
+  const [selectedProfileStudent, setSelectedProfileStudent] = useState<Student | null>(null);
+  const [profileStudentGrass, setProfileStudentGrass] = useState<Array<{ date: string; cookieChange: number; count: number }>>([]);
+  const [isLoadingProfileGrass, setIsLoadingProfileGrass] = useState(false);
+
+  // 캔디 부여
   const [cookieAmount, setCookieAmount] = useState('');
   const [isAddingCookie, setIsAddingCookie] = useState(false);
+
+  // 전체 캔디 부여
+  const [selectedForCookie, setSelectedForCookie] = useState<string[]>([]);
+  const [bulkCookieAmount, setBulkCookieAmount] = useState('');
+  const [isAddingBulkCookie, setIsAddingBulkCookie] = useState(false);
+  const [showBulkCookieMode, setShowBulkCookieMode] = useState(false);
 
   // 상점 상태
   const [shopItems, setShopItems] = useState<ShopItem[]>([]);
@@ -259,6 +490,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamFlag, setNewTeamFlag] = useState(TEAM_FLAGS[0]);
   const [selectedTeamForMember, setSelectedTeamForMember] = useState<string | null>(null);
+  const [showTeamMemberModal, setShowTeamMemberModal] = useState(false);
+  const [teamForMemberModal, setTeamForMemberModal] = useState<string | null>(null);
+  const [membersToAdd, setMembersToAdd] = useState<string[]>([]);
+  const [membersToRemove, setMembersToRemove] = useState<string[]>([]);
+  const [editingTeamName, setEditingTeamName] = useState('');
+  const [editingTeamFlag, setEditingTeamFlag] = useState('');
   const [swapStudent1, setSwapStudent1] = useState<{ code: string; teamId: string } | null>(null);
   const [swapStudent2, setSwapStudent2] = useState<{ code: string; teamId: string } | null>(null);
 
@@ -282,27 +519,36 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [isLoadingTeamStatus, setIsLoadingTeamStatus] = useState(false);
 
   const handleAddStudent = async () => {
-    if (!user || !selectedClass) {
+    if (!user || !selectedClass || !teacher) {
       toast.error('학급을 먼저 선택해주세요.');
       return;
     }
-    
+
     if (!newStudentNumber || !newStudentName || !newStudentCode) {
       toast.error('모든 항목을 입력해주세요.');
       return;
     }
-    
+
     setIsAddingStudent(true);
     try {
+      // 다했니 API에서 현재 쿠키 정보 가져오기
+      let initialData = { cookie: 0, usedCookie: 0, totalCookie: 0, chocoChips: 0, badges: {} as Record<string, Badge> };
+      try {
+        initialData = await fetchStudentFromDahandin(teacher.dahandinApiKey, newStudentCode.trim());
+      } catch (apiError) {
+        console.log('다했니 API 조회 실패 - 기본값 사용:', apiError);
+      }
+
       await createStudent(user.uid, selectedClass, {
         code: newStudentCode.trim(),
         number: parseInt(newStudentNumber),
         name: newStudentName.trim(),
-        cookie: 0,
-        usedCookie: 0,
-        totalCookie: 0,
-        chocoChips: 0,
-        previousCookie: 0,
+        cookie: initialData.cookie,
+        usedCookie: initialData.usedCookie,
+        totalCookie: initialData.totalCookie,
+        chocoChips: initialData.chocoChips,
+        previousCookie: initialData.cookie, // 등록 시점의 쿠키
+        initialCookie: initialData.cookie,  // 등록 시점의 쿠키 (잔디 계산용)
         profile: {
           emojiCode: 'emoji_00',
           title: '',
@@ -311,9 +557,10 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           nameEffectCode: 'name_00',
           backgroundCode: 'bg_00'
         },
-        ownedItems: []
+        ownedItems: [],
+        badges: initialData.badges
       });
-      
+
       await loadStudents();
       setNewStudentNumber('');
       setNewStudentName('');
@@ -364,6 +611,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             totalCookie: 0,
             chocoChips: 0,
             previousCookie: 0,
+            initialCookie: 0, // 이후 refreshStudentCookies에서 설정됨
             profile: {
               emojiCode: 'emoji_00',
               title: '',
@@ -479,13 +727,13 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     setCookieAmount('');
   };
 
-  // 쿠키 부여 (직접 금액 지정 또는 입력값 사용)
+  // 캔디 부여 (직접 금액 지정 또는 입력값 사용)
   const handleAddCookie = async (directAmount?: number) => {
     if (!user || !selectedStudent) return;
 
     const amount = directAmount !== undefined ? directAmount : parseInt(cookieAmount);
     if (isNaN(amount) || amount === 0) {
-      toast.error('부여할 쿠키 수를 입력해주세요.');
+      toast.error('부여할 캔디 수를 입력해주세요.');
       return;
     }
 
@@ -501,12 +749,62 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       await loadStudents();
 
       setCookieAmount('');
-      toast.success(`${selectedStudent.name}에게 ${amount > 0 ? '+' : ''}${amount}🍪 ${amount > 0 ? '부여' : '차감'}!`);
+      toast.success(`${selectedStudent.name}에게 ${amount > 0 ? '+' : ''}${amount}🍭 ${amount > 0 ? '부여' : '차감'}!`);
     } catch (error) {
       console.error('Failed to add cookie:', error);
-      toast.error('쿠키 부여에 실패했습니다.');
+      toast.error('캔디 부여에 실패했습니다.');
     }
     setIsAddingCookie(false);
+  };
+
+  // 선택된 학생들에게 캔디 전체 부여
+  const handleBulkAddCookie = async () => {
+    if (!user || selectedForCookie.length === 0) {
+      toast.error('캔디를 부여할 학생을 선택해주세요.');
+      return;
+    }
+
+    const amount = parseInt(bulkCookieAmount);
+    if (isNaN(amount) || amount === 0) {
+      toast.error('부여할 캔디 수를 입력해주세요.');
+      return;
+    }
+
+    setIsAddingBulkCookie(true);
+    let successCount = 0;
+    try {
+      for (const studentCode of selectedForCookie) {
+        await addCookiesToStudent(user.uid, studentCode, amount);
+        successCount++;
+      }
+      await loadStudents();
+      setBulkCookieAmount('');
+      setSelectedForCookie([]);
+      setShowBulkCookieMode(false);
+      toast.success(`${successCount}명에게 ${amount > 0 ? '+' : ''}${amount}🍭 ${amount > 0 ? '부여' : '차감'}!`);
+    } catch (error) {
+      console.error('Failed to add bulk cookie:', error);
+      toast.error(`캔디 부여 중 오류 (${successCount}명 완료)`);
+    }
+    setIsAddingBulkCookie(false);
+  };
+
+  // 전체 선택/해제
+  const handleSelectAllForCookie = (checked: boolean) => {
+    if (checked) {
+      setSelectedForCookie(students.map(s => s.code));
+    } else {
+      setSelectedForCookie([]);
+    }
+  };
+
+  // 개별 학생 선택/해제
+  const handleSelectStudentForCookie = (code: string, checked: boolean) => {
+    if (checked) {
+      setSelectedForCookie(prev => [...prev, code]);
+    } else {
+      setSelectedForCookie(prev => prev.filter(c => c !== code));
+    }
   };
 
   // 잔디 색상 (3단계: 1개, 2개, 3개 이상)
@@ -592,14 +890,6 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       dates.push(date.toISOString().split('T')[0]);
     }
     return dates;
-  };
-
-  // 잔디 색상 (3단계: 1개, 2개, 3개 이상)
-  const getGrassColor = (change: number) => {
-    if (change === 0) return 'bg-gray-200'; // 없음
-    if (change === 1) return 'bg-green-300'; // 1개
-    if (change === 2) return 'bg-green-500'; // 2개
-    return 'bg-green-700'; // 3개 이상
   };
 
   // ========== 상점 핸들러 ==========
@@ -1001,8 +1291,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             <TabsTrigger value="shop" onClick={loadShopItems}>🏪 상점</TabsTrigger>
             <TabsTrigger value="teams" onClick={loadTeams}>👥 팀</TabsTrigger>
             <TabsTrigger value="teamStatus" onClick={loadTeamStatus}>📊 팀 현황</TabsTrigger>
-            <TabsTrigger value="battles" onClick={() => { loadTeams(); loadBattles(); }}>⚔️ 배틀</TabsTrigger>
+            <TabsTrigger value="gameCenter">🎮 게임센터</TabsTrigger>
             <TabsTrigger value="wishes" onClick={loadWishes}>⭐ 소원</TabsTrigger>
+            <TabsTrigger value="profiles">👤 프로필 확인</TabsTrigger>
             <TabsTrigger value="settings">⚙️ 설정</TabsTrigger>
           </TabsList>
 
@@ -1174,22 +1465,62 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               </Card>
             ) : (
               <>
-                {/* 쿠키 새로고침 */}
+                {/* 쿠키 새로고침 & 전체 지급 */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>🔄 쿠키 새로고침</CardTitle>
+                    <CardTitle>🍪 쿠키 관리</CardTitle>
                     <CardDescription>
-                      다했니 API에서 최신 쿠키 정보를 가져옵니다.
+                      쿠키 새로고침 및 학생들에게 쿠키 지급
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <Button
-                      onClick={handleRefreshCookies}
-                      disabled={isRefreshing}
-                      className="bg-amber-500 hover:bg-amber-600"
-                    >
-                      {isRefreshing ? '새로고침 중...' : '🍪 쿠키 새로고침'}
-                    </Button>
+                  <CardContent className="space-y-4">
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={handleRefreshCookies}
+                        disabled={isRefreshing}
+                        className="bg-amber-500 hover:bg-amber-600"
+                      >
+                        {isRefreshing ? '새로고침 중...' : '🔄 쿠키 새로고침'}
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setShowBulkCookieMode(!showBulkCookieMode);
+                          setSelectedForCookie([]);
+                          setBulkCookieAmount('');
+                        }}
+                        className={showBulkCookieMode ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}
+                      >
+                        {showBulkCookieMode ? '✕ 취소' : '🎁 전체 지급'}
+                      </Button>
+                    </div>
+
+                    {/* 전체 지급 모드 */}
+                    {showBulkCookieMode && (
+                      <div className="p-4 bg-green-50 rounded-lg border border-green-200 space-y-3">
+                        <p className="text-sm text-green-700 font-medium">
+                          📋 아래 학생 목록에서 체크박스로 학생을 선택한 후 쿠키 수를 입력하세요.
+                        </p>
+                        <div className="flex gap-2 items-center">
+                          <Input
+                            type="number"
+                            placeholder="쿠키 수 (음수도 가능)"
+                            value={bulkCookieAmount}
+                            onChange={(e) => setBulkCookieAmount(e.target.value)}
+                            className="w-40"
+                          />
+                          <Button
+                            onClick={handleBulkAddCookie}
+                            disabled={isAddingBulkCookie || selectedForCookie.length === 0}
+                            className="bg-green-500 hover:bg-green-600"
+                          >
+                            {isAddingBulkCookie ? '처리 중...' : `${selectedForCookie.length}명에게 지급`}
+                          </Button>
+                        </div>
+                        <p className="text-xs text-green-600">
+                          선택된 학생: {selectedForCookie.length}명
+                        </p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -1215,20 +1546,44 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b">
+                              {showBulkCookieMode && (
+                                <th className="text-center py-2 px-2 w-10">
+                                  <Checkbox
+                                    checked={selectedForCookie.length === students.length && students.length > 0}
+                                    onCheckedChange={(checked) => handleSelectAllForCookie(!!checked)}
+                                  />
+                                </th>
+                              )}
                               <th className="text-left py-2 px-2">번호</th>
                               <th className="text-left py-2 px-2">이름</th>
                               <th className="text-center py-2 px-2">뱃지</th>
                               <th className="text-right py-2 px-2">🍪 쿠키</th>
-                              <th className="text-right py-2 px-2">총 쿠키</th>
+                              <th className="text-right py-2 px-2">🍭 캔디</th>
                             </tr>
                           </thead>
                           <tbody>
                             {students.map((student) => (
                               <tr
                                 key={student.code}
-                                className="border-b hover:bg-amber-50 cursor-pointer transition-colors"
-                                onClick={() => handleStudentDoubleClick(student)}
+                                className={`border-b hover:bg-amber-50 cursor-pointer transition-colors ${
+                                  showBulkCookieMode && selectedForCookie.includes(student.code) ? 'bg-green-50' : ''
+                                }`}
+                                onClick={() => {
+                                  if (showBulkCookieMode) {
+                                    handleSelectStudentForCookie(student.code, !selectedForCookie.includes(student.code));
+                                  } else {
+                                    handleStudentDoubleClick(student);
+                                  }
+                                }}
                               >
+                                {showBulkCookieMode && (
+                                  <td className="py-2 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                                    <Checkbox
+                                      checked={selectedForCookie.includes(student.code)}
+                                      onCheckedChange={(checked) => handleSelectStudentForCookie(student.code, !!checked)}
+                                    />
+                                  </td>
+                                )}
                                 <td className="py-2 px-2">{student.number}</td>
                                 <td className="py-2 px-2 font-medium">{student.name}</td>
                                 <td className="py-2 px-2">
@@ -1250,11 +1605,11 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                                     )}
                                   </div>
                                 </td>
-                                <td className="py-2 px-2 text-right font-bold text-amber-600">
+                                <td className="py-2 px-2 text-right text-amber-600">
                                   {student.cookie}
                                 </td>
-                                <td className="py-2 px-2 text-right text-gray-500">
-                                  {student.totalCookie}
+                                <td className="py-2 px-2 text-right font-bold text-pink-600">
+                                  {student.jelly ?? student.cookie}
                                 </td>
                               </tr>
                             ))}
@@ -1270,15 +1625,15 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   <CardHeader>
                     <CardTitle>➕ 학생 추가</CardTitle>
                     <CardDescription>
-                      다했니 XLSX 파일로 학생을 일괄 추가할 수 있습니다.
+                      다했니에서 다운로드한 학생코드 파일로 일괄 추가할 수 있습니다.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {/* XLSX 일괄 추가 */}
                     <div>
-                      <h4 className="text-sm font-medium mb-2">📁 다했니 XLSX 파일로 일괄 추가</h4>
+                      <h4 className="text-sm font-medium mb-2">📁 학생코드 파일 업로드</h4>
                       <p className="text-sm text-gray-500 mb-3">
-                        다했니 웹에서 다운로드한 XLSX 파일을 업로드하세요 (D열에서 학생코드 추출)
+                        다했니 &gt; 학생 관리 &gt; 학생코드 다운로드를 한 파일을 올려주세요!
                       </p>
                       <div className="flex flex-wrap gap-2">
                         <label className="cursor-pointer">
@@ -1913,35 +2268,18 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                                   </span>
                                 );
                               })}
-                              {/* 멤버 추가 버튼 */}
-                              {selectedTeamForMember === team.teamId ? (
-                                <select
-                                  className="px-1 py-0.5 text-xs border rounded"
-                                  onChange={(e) => {
-                                    if (e.target.value) {
-                                      handleAddMemberToTeam(team.teamId, e.target.value);
-                                      setSelectedTeamForMember(null);
-                                    }
-                                  }}
-                                  defaultValue=""
-                                  autoFocus
-                                  onBlur={() => setSelectedTeamForMember(null)}
-                                >
-                                  <option value="">선택</option>
-                                  {students
-                                    .filter(s => !team.members.includes(s.code))
-                                    .map(s => (
-                                      <option key={s.code} value={s.code}>{s.name}</option>
-                                    ))}
-                                </select>
-                              ) : (
-                                <button
-                                  onClick={() => setSelectedTeamForMember(team.teamId)}
-                                  className="px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-600 hover:bg-green-200"
-                                >
-                                  +
-                                </button>
-                              )}
+                              {/* 멤버 추가/관리 버튼 */}
+                              <button
+                                onClick={() => {
+                                  setTeamForMemberModal(team.teamId);
+                                  setEditingTeamName(team.teamName);
+                                  setEditingTeamFlag(team.flag);
+                                  setShowTeamMemberModal(true);
+                                }}
+                                className="px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-600 hover:bg-green-200"
+                              >
+                                +
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -2108,185 +2446,132 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             )}
           </TabsContent>
 
-          {/* 배틀 탭 */}
-          <TabsContent value="battles" className="space-y-6">
-            {!selectedClass ? (
-              <Card>
-                <CardContent className="py-12 text-center text-gray-500">
-                  👆 먼저 학급 관리 탭에서 학급을 선택해주세요.
-                </CardContent>
-              </Card>
-            ) : teams.length < 2 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-gray-500">
-                  ⚠️ 배틀을 시작하려면 최소 2개의 팀이 필요합니다. 팀 탭에서 팀을 먼저 생성해주세요.
-                </CardContent>
-              </Card>
-            ) : (
-              <>
-                {/* 배틀 생성 */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>⚔️ 배틀 관리</CardTitle>
-                    <CardDescription>팀 간 배틀을 생성하고 점수를 관리하세요</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-                      <Input
-                        placeholder="배틀 제목"
-                        value={newBattleTitle}
-                        onChange={(e) => setNewBattleTitle(e.target.value)}
-                      />
-                      <select
-                        value={newBattleTeam1}
-                        onChange={(e) => setNewBattleTeam1(e.target.value)}
-                        className="px-3 py-2 border rounded-md"
-                      >
-                        <option value="">팀1 선택</option>
-                        {teams.map((t) => (
-                          <option key={t.teamId} value={t.teamId}>{t.flag} {t.teamName}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={newBattleTeam2}
-                        onChange={(e) => setNewBattleTeam2(e.target.value)}
-                        className="px-3 py-2 border rounded-md"
-                      >
-                        <option value="">팀2 선택</option>
-                        {teams.map((t) => (
-                          <option key={t.teamId} value={t.teamId}>{t.flag} {t.teamName}</option>
-                        ))}
-                      </select>
-                      <Input
-                        type="number"
-                        placeholder="보상"
-                        value={newBattleReward}
-                        onChange={(e) => setNewBattleReward(e.target.value)}
-                      />
-                      <Button onClick={handleCreateBattle} className="bg-red-500 hover:bg-red-600">
-                        배틀 시작
-                      </Button>
+          {/* 게임센터 탭 */}
+          <TabsContent value="gameCenter" className="space-y-6">
+            {/* 준비중 안내 배너 */}
+            <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl p-6 text-center border-2 border-purple-200">
+              <div className="text-5xl mb-3">🎮</div>
+              <h2 className="text-xl font-bold text-purple-800 mb-2">게임센터 관리</h2>
+              <p className="text-purple-600 text-sm">
+                학생들이 쿠키를 사용해서 즐길 수 있는 다양한 게임을 관리하세요
+              </p>
+              <div className="mt-3 inline-block bg-amber-100 text-amber-700 px-4 py-1.5 rounded-full text-sm font-medium">
+                🚧 현재 준비 중인 기능입니다
+              </div>
+            </div>
+
+            {/* 게임 활성화 관리 */}
+            <Card>
+              <CardHeader>
+                <CardTitle>🎯 게임 활성화 관리</CardTitle>
+                <CardDescription>학생들에게 공개할 게임을 선택하세요. 비활성화된 게임은 학생 화면에서 숨겨집니다.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* 쿠키 배틀 */}
+                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-red-50 to-orange-50 border border-red-200">
+                  <div className="flex items-center gap-4">
+                    <span className="text-3xl">⚔️</span>
+                    <div>
+                      <h3 className="font-bold text-red-800">쿠키 배틀</h3>
+                      <p className="text-xs text-red-600">팀끼리 쿠키를 걸고 전략 대결!</p>
+                      <span className="inline-block mt-1 bg-blue-100 text-blue-600 px-2 py-0.5 rounded text-xs">팀 대결</span>
                     </div>
-                  </CardContent>
-                </Card>
-
-                {/* 배틀 목록 */}
-                {isLoadingBattles ? (
-                  <Card>
-                    <CardContent className="py-8 text-center text-gray-500">로딩 중...</CardContent>
-                  </Card>
-                ) : battles.length === 0 ? (
-                  <Card>
-                    <CardContent className="py-8 text-center text-gray-500">진행 중인 배틀이 없습니다.</CardContent>
-                  </Card>
-                ) : (
-                  <div className="space-y-4">
-                    {battles.map((battle) => {
-                      const team1 = teams.find(t => t.teamId === battle.team1Id);
-                      const team2 = teams.find(t => t.teamId === battle.team2Id);
-                      const isOngoing = battle.status === 'ongoing';
-
-                      return (
-                        <Card key={battle.id} className={!isOngoing ? 'opacity-70' : ''}>
-                          <CardContent className="py-4">
-                            <div className="flex items-center justify-between mb-4">
-                              <h3 className="font-bold text-lg">{battle.title}</h3>
-                              <div className="flex items-center gap-2">
-                                {isOngoing ? (
-                                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-sm">진행중</span>
-                                ) : (
-                                  <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-sm">종료</span>
-                                )}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-red-500"
-                                  onClick={() => handleDeleteBattle(battle.id)}
-                                >
-                                  삭제
-                                </Button>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-center gap-4">
-                              {/* 팀1 */}
-                              <div className="text-center flex-1">
-                                <p className="text-3xl">{team1?.flag}</p>
-                                <p className="font-medium">{team1?.teamName}</p>
-                                {isOngoing ? (
-                                  <div className="flex items-center justify-center gap-2 mt-2">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleUpdateBattleScore(battle.id, Math.max(0, battle.team1Score - 1), battle.team2Score)}
-                                    >
-                                      -
-                                    </Button>
-                                    <span className="text-3xl font-bold w-12">{battle.team1Score}</span>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleUpdateBattleScore(battle.id, battle.team1Score + 1, battle.team2Score)}
-                                    >
-                                      +
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <p className="text-3xl font-bold mt-2">{battle.team1Score}</p>
-                                )}
-                              </div>
-
-                              <div className="text-2xl font-bold text-gray-400">VS</div>
-
-                              {/* 팀2 */}
-                              <div className="text-center flex-1">
-                                <p className="text-3xl">{team2?.flag}</p>
-                                <p className="font-medium">{team2?.teamName}</p>
-                                {isOngoing ? (
-                                  <div className="flex items-center justify-center gap-2 mt-2">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleUpdateBattleScore(battle.id, battle.team1Score, Math.max(0, battle.team2Score - 1))}
-                                    >
-                                      -
-                                    </Button>
-                                    <span className="text-3xl font-bold w-12">{battle.team2Score}</span>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleUpdateBattleScore(battle.id, battle.team1Score, battle.team2Score + 1)}
-                                    >
-                                      +
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <p className="text-3xl font-bold mt-2">{battle.team2Score}</p>
-                                )}
-                              </div>
-                            </div>
-
-                            {isOngoing && (
-                              <div className="text-center mt-4">
-                                <Button onClick={() => handleEndBattle(battle)} className="bg-amber-500 hover:bg-amber-600">
-                                  배틀 종료 (보상: {battle.reward}🍪)
-                                </Button>
-                              </div>
-                            )}
-
-                            {!isOngoing && battle.winnerId && (
-                              <p className="text-center mt-4 text-green-600 font-medium">
-                                🏆 승리: {battle.winnerId === team1?.teamId ? team1?.teamName : team2?.teamName}
-                              </p>
-                            )}
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
                   </div>
-                )}
-              </>
-            )}
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">준비중</span>
+                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
+                  </div>
+                </div>
+
+                {/* 스피드 퀴즈 */}
+                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200">
+                  <div className="flex items-center gap-4">
+                    <span className="text-3xl">⚡</span>
+                    <div>
+                      <h3 className="font-bold text-yellow-800">스피드 퀴즈</h3>
+                      <p className="text-xs text-yellow-600">빠르게 정답을 맞춰라!</p>
+                      <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">준비중</span>
+                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
+                  </div>
+                </div>
+
+                {/* 홀짝 게임 */}
+                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
+                  <div className="flex items-center gap-4">
+                    <span className="text-3xl">🎲</span>
+                    <div>
+                      <h3 className="font-bold text-blue-800">홀짝 게임</h3>
+                      <p className="text-xs text-blue-600">운을 시험해보세요!</p>
+                      <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">준비중</span>
+                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
+                  </div>
+                </div>
+
+                {/* 가위바위보 */}
+                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200">
+                  <div className="flex items-center gap-4">
+                    <span className="text-3xl">✊</span>
+                    <div>
+                      <h3 className="font-bold text-green-800">가위바위보</h3>
+                      <p className="text-xs text-green-600">쿠키를 걸고 승부!</p>
+                      <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">준비중</span>
+                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
+                  </div>
+                </div>
+
+                {/* 끝말잇기 */}
+                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-pink-50 to-rose-50 border border-pink-200">
+                  <div className="flex items-center gap-4">
+                    <span className="text-3xl">💬</span>
+                    <div>
+                      <h3 className="font-bold text-pink-800">끝말잇기</h3>
+                      <p className="text-xs text-pink-600">단어 대결!</p>
+                      <span className="inline-block mt-1 bg-purple-100 text-purple-600 px-2 py-0.5 rounded text-xs">실시간</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">준비중</span>
+                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
+                  </div>
+                </div>
+
+                {/* 숫자야구 */}
+                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-purple-50 to-violet-50 border border-purple-200">
+                  <div className="flex items-center gap-4">
+                    <span className="text-3xl">⚾</span>
+                    <div>
+                      <h3 className="font-bold text-purple-800">숫자야구</h3>
+                      <p className="text-xs text-purple-600">숫자를 맞춰라!</p>
+                      <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">준비중</span>
+                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 안내 */}
+            <Card className="bg-gray-50 border-dashed">
+              <CardContent className="py-4 text-center text-gray-500 text-sm">
+                <p>🔜 다양한 게임이 곧 추가될 예정이에요!</p>
+                <p className="text-xs mt-1">게임이 완성되면 활성화 스위치가 작동합니다</p>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* 소원 탭 - 모든 클래스룸에서 공유 */}
@@ -2392,6 +2677,62 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             </Card>
           </TabsContent>
 
+          {/* 프로필 확인 탭 */}
+          <TabsContent value="profiles" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>👤 학생 프로필 확인</CardTitle>
+                <CardDescription>학생들의 프로필을 구경해보세요!</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!selectedClass ? (
+                  <p className="text-center text-gray-500 py-8">학급을 먼저 선택해주세요</p>
+                ) : students.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">학생이 없습니다</p>
+                ) : (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                    {students.map((student) => (
+                      <button
+                        key={student.code}
+                        onClick={() => handleSelectProfileStudent(student)}
+                        className="p-3 rounded-xl hover:shadow-md transition-all flex flex-col items-center"
+                        style={{
+                          border: `2px solid ${getBorderColor(student.profile.buttonBorderCode)}`,
+                          ...(isGradientFill(student.profile.buttonFillCode)
+                            ? { backgroundImage: getGradientStyle(student.profile.buttonFillCode) }
+                            : { backgroundColor: getFillColor(student.profile.buttonFillCode) }
+                          ),
+                        }}
+                      >
+                        <div className={`text-3xl mb-1 ${getAnimationClass(student.profile.animationCode || 'none')}`}>
+                          {student.profile.profileBadgeKey && student.badges?.[student.profile.profileBadgeKey]?.hasBadge ? (
+                            <img
+                              src={student.badges[student.profile.profileBadgeKey].imgUrl}
+                              alt={student.badges[student.profile.profileBadgeKey].title}
+                              className="w-10 h-10 mx-auto rounded"
+                            />
+                          ) : getEmojiFromCode(student.profile.emojiCode) || (
+                            <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                              <span className="text-gray-400 text-xs">👤</span>
+                            </div>
+                          )}
+                        </div>
+                        <p className={`font-medium text-sm truncate w-full text-center ${getNameEffectClass(student.profile.nameEffectCode)}`}>
+                          {student.name}
+                        </p>
+                        {student.profile.title && (
+                          <p className={`text-xs truncate w-full text-center ${getTitleColorClass(student.profile.titleColorCode)}`}>
+                            {student.profile.title}
+                          </p>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* 설정 탭 */}
           <TabsContent value="settings">
             <Card>
@@ -2443,25 +2784,21 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               <button onClick={handleCloseStudentModal} className="text-gray-400 hover:text-gray-600 text-2xl p-1">×</button>
             </div>
 
-            {/* 쿠키 현황 */}
-            <div className="px-4 py-4 bg-amber-50 grid grid-cols-4 gap-2 text-center">
-              <div className="bg-white rounded-lg p-2">
-                <p className="text-amber-600 font-bold text-xl">{selectedStudent.cookie}</p>
-                <p className="text-xs text-amber-700">🍪 쿠키</p>
+            {/* 쿠키 & 캔디 현황 */}
+            <div className="px-4 py-4 bg-gradient-to-r from-amber-50 to-pink-50 grid grid-cols-2 gap-3 text-center">
+              <div className="bg-white rounded-lg p-3 border border-amber-200">
+                <p className="text-amber-600 font-bold text-2xl">{selectedStudent.cookie}</p>
+                <p className="text-xs text-amber-700">🍪 다했니 쿠키</p>
               </div>
-              <div className="bg-white rounded-lg p-2">
-                <p className="text-green-600 font-bold text-xl">{selectedStudent.totalCookie}</p>
-                <p className="text-xs text-gray-500">📊 누적</p>
-              </div>
-              <div className="bg-white rounded-lg p-2">
-                <p className="text-gray-600 font-bold text-xl">{selectedStudent.usedCookie}</p>
-                <p className="text-xs text-gray-500">💸 사용</p>
+              <div className="bg-white rounded-lg p-3 border border-pink-200">
+                <p className="text-pink-600 font-bold text-2xl">{selectedStudent.jelly ?? selectedStudent.cookie}</p>
+                <p className="text-xs text-pink-700">🍭 캔디 (게임용)</p>
               </div>
             </div>
 
-            {/* 쿠키 부여 */}
-            <div className="px-4 py-3 bg-blue-50 border-y">
-              <p className="text-sm font-medium text-blue-700 mb-2">🎁 쿠키 부여/차감</p>
+            {/* 캔디 부여 */}
+            <div className="px-4 py-3 bg-pink-50 border-y">
+              <p className="text-sm font-medium text-pink-700 mb-2">🍭 캔디 부여/차감</p>
               <div className="flex gap-2">
                 <div className="flex-1 flex gap-1">
                   <Button
@@ -2676,6 +3013,408 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 ✨ 선정하기
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 프로필 확인 모달 */}
+      {selectedProfileStudent && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedProfileStudent(null)}
+        >
+          <div
+            className="bg-white shadow-2xl border-4 border-amber-300 overflow-hidden"
+            style={{ width: '420px', maxWidth: '95vw', borderRadius: '24px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 헤더 */}
+            <div className="bg-gradient-to-r from-amber-400 to-orange-400 px-6 py-4 flex items-center justify-between">
+              <span className="text-white font-bold text-lg">👤 학생 프로필</span>
+              <button onClick={() => setSelectedProfileStudent(null)} className="text-white/80 hover:text-white text-2xl p-1">✕</button>
+            </div>
+
+            {/* 바디 */}
+            <div className="p-6 space-y-5">
+              {/* 중앙 프로필 카드 */}
+              <div className={`text-center p-6 rounded-2xl ${getBackgroundClass(selectedProfileStudent.profile.backgroundCode) || 'bg-gradient-to-b from-amber-50 to-orange-50'}`}>
+                <div
+                  className={`inline-block p-4 rounded-2xl ${getAnimationClass(selectedProfileStudent.profile.animationCode || 'none')}`}
+                  style={{
+                    border: `2px solid ${getBorderColor(selectedProfileStudent.profile.buttonBorderCode)}`,
+                    ...(isGradientFill(selectedProfileStudent.profile.buttonFillCode)
+                      ? { backgroundImage: getGradientStyle(selectedProfileStudent.profile.buttonFillCode) }
+                      : { backgroundColor: getFillColor(selectedProfileStudent.profile.buttonFillCode) }
+                    ),
+                  }}
+                >
+                  {/* 뱃지가 설정되어 있으면 뱃지, 없으면 이모지 표시 */}
+                  {selectedProfileStudent.profile.profileBadgeKey && selectedProfileStudent.badges?.[selectedProfileStudent.profile.profileBadgeKey]?.hasBadge ? (
+                    <div className={`mb-3 ${getAnimationClass(selectedProfileStudent.profile.animationCode || 'none')}`}>
+                      <img
+                        src={selectedProfileStudent.badges[selectedProfileStudent.profile.profileBadgeKey].imgUrl}
+                        alt={selectedProfileStudent.badges[selectedProfileStudent.profile.profileBadgeKey].title}
+                        className="w-24 h-24 mx-auto rounded-lg"
+                      />
+                    </div>
+                  ) : getEmojiFromCode(selectedProfileStudent.profile.emojiCode) ? (
+                    <div className={`text-6xl mb-3 ${getAnimationClass(selectedProfileStudent.profile.animationCode || 'none')}`}>
+                      {getEmojiFromCode(selectedProfileStudent.profile.emojiCode)}
+                    </div>
+                  ) : (
+                    <div className="w-20 h-20 mx-auto mb-3 bg-gray-200 rounded-full flex items-center justify-center">
+                      <span className="text-gray-400 text-3xl">👤</span>
+                    </div>
+                  )}
+                  <p className={`font-bold text-xl ${getNameEffectClass(selectedProfileStudent.profile.nameEffectCode)}`}>
+                    {selectedProfileStudent.name}
+                  </p>
+                  {selectedProfileStudent.profile.title && (
+                    <p className={`text-sm mt-1 font-medium ${getTitleColorClass(selectedProfileStudent.profile.titleColorCode)}`}>
+                      {selectedProfileStudent.profile.title}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* 통계 */}
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="bg-amber-50 rounded-xl p-3">
+                  <p className="font-bold text-2xl text-amber-600">{selectedProfileStudent.cookie}</p>
+                  <p className="text-gray-500 text-sm">🍪 쿠키</p>
+                </div>
+                <div className="bg-green-50 rounded-xl p-3">
+                  <p className="font-bold text-2xl text-green-600">{selectedProfileStudent.totalCookie}</p>
+                  <p className="text-gray-500 text-sm">📊 누적</p>
+                </div>
+                <div className="bg-purple-50 rounded-xl p-3">
+                  <p className="font-bold text-2xl text-purple-600">{selectedProfileStudent.wishStreak || 0}</p>
+                  <p className="text-gray-500 text-sm">🔥 연속</p>
+                </div>
+              </div>
+
+              {/* 뱃지 */}
+              {selectedProfileStudent.badges && Object.values(selectedProfileStudent.badges).some(b => b.hasBadge) && (
+                <div className="p-3 bg-gray-50 rounded-xl">
+                  <p className="text-sm text-gray-500 mb-2">🏆 획득 뱃지</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {(Object.entries(selectedProfileStudent.badges) as [string, Badge][])
+                      .filter(([, badge]) => badge.hasBadge)
+                      .map(([key, badge]) => (
+                        <img key={key} src={badge.imgUrl} alt={badge.title} className="w-8 h-8 rounded" title={badge.title} />
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 장착 아이템 */}
+              <div className="p-3 bg-blue-50 rounded-xl">
+                <p className="text-sm text-gray-500 mb-2">🎨 장착 아이템</p>
+                <div className="flex flex-wrap gap-2">
+                  {/* 이모지 */}
+                  <span className="px-2 py-1 bg-white rounded-lg text-sm flex items-center gap-1">
+                    <span className="text-lg">{getEmojiFromCode(selectedProfileStudent.profile.emojiCode) || '👤'}</span>
+                    <span className="text-gray-600">이모지</span>
+                  </span>
+                  {/* 칭호 */}
+                  {selectedProfileStudent.profile.title && (
+                    <span className={`px-2 py-1 bg-white rounded-lg text-sm flex items-center gap-1 ${getTitleColorClass(selectedProfileStudent.profile.titleColorCode)}`}>
+                      <span>🏷️</span>
+                      <span>{selectedProfileStudent.profile.title}</span>
+                    </span>
+                  )}
+                  {/* 버튼 테두리 */}
+                  {selectedProfileStudent.profile.buttonBorderCode && selectedProfileStudent.profile.buttonBorderCode !== 'gray-300' && (
+                    <span
+                      className="px-2 py-1 bg-white rounded-lg text-sm flex items-center gap-1"
+                      style={{ border: `2px solid ${getBorderColor(selectedProfileStudent.profile.buttonBorderCode)}` }}
+                    >
+                      <span>🖼️</span>
+                      <span className="text-gray-600">테두리</span>
+                    </span>
+                  )}
+                  {/* 버튼 색상 */}
+                  {selectedProfileStudent.profile.buttonFillCode && selectedProfileStudent.profile.buttonFillCode !== 'none' && (
+                    <span
+                      className="px-2 py-1 rounded-lg text-sm flex items-center gap-1"
+                      style={{
+                        ...(isGradientFill(selectedProfileStudent.profile.buttonFillCode)
+                          ? { backgroundImage: getGradientStyle(selectedProfileStudent.profile.buttonFillCode) }
+                          : { backgroundColor: getFillColor(selectedProfileStudent.profile.buttonFillCode) }
+                        ),
+                      }}
+                    >
+                      <span>🎨</span>
+                      <span>버튼색</span>
+                    </span>
+                  )}
+                  {/* 애니메이션 */}
+                  {selectedProfileStudent.profile.animationCode && selectedProfileStudent.profile.animationCode !== 'none' && (
+                    <span className={`px-2 py-1 bg-white rounded-lg text-sm flex items-center gap-1 ${getAnimationClass(selectedProfileStudent.profile.animationCode)}`}>
+                      <span>✨</span>
+                      <span className="text-gray-600">애니메이션</span>
+                    </span>
+                  )}
+                  {/* 이름 효과 */}
+                  {selectedProfileStudent.profile.nameEffectCode && selectedProfileStudent.profile.nameEffectCode !== 'none' && (
+                    <span className="px-2 py-1 bg-white rounded-lg text-sm flex items-center gap-1">
+                      <span>💫</span>
+                      <span className={getNameEffectClass(selectedProfileStudent.profile.nameEffectCode)}>이름효과</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* 잔디 */}
+              <div className="p-3 bg-green-50 rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-600">🌱 최근 활동</span>
+                  <div className="flex items-center gap-1 text-xs text-gray-400">
+                    <span>적음</span>
+                    <div className="w-3 h-3 rounded-sm bg-gray-200" />
+                    <div className="w-3 h-3 rounded-sm bg-green-300" />
+                    <div className="w-3 h-3 rounded-sm bg-green-500" />
+                    <span>많음</span>
+                  </div>
+                </div>
+                {isLoadingProfileGrass ? (
+                  <p className="text-center text-sm text-gray-400 py-4">로딩 중...</p>
+                ) : (
+                  <div className="flex gap-[2px] justify-center">
+                    {(() => {
+                      const WEEKS = 12;
+                      const today = new Date();
+                      // 시작일을 12주 전 월요일로 설정
+                      const startDate = new Date(today);
+                      startDate.setDate(startDate.getDate() - (WEEKS * 7));
+                      const startDayOfWeek = startDate.getDay();
+                      if (startDayOfWeek === 0) {
+                        startDate.setDate(startDate.getDate() + 1);
+                      } else if (startDayOfWeek !== 1) {
+                        startDate.setDate(startDate.getDate() - (startDayOfWeek - 1));
+                      }
+                      return Array.from({ length: WEEKS }).map((_, weekIndex) => (
+                        <div key={weekIndex} className="flex flex-col gap-[2px]">
+                          {Array.from({ length: 5 }).map((_, dayIndex) => {
+                            const date = new Date(startDate);
+                            date.setDate(date.getDate() + weekIndex * 7 + dayIndex);
+                            const dateStr = date.toISOString().split('T')[0];
+                            const isFuture = date > today;
+                            const grassRecord = profileStudentGrass.find((g) => g.date === dateStr);
+                            const cookieChange = grassRecord?.cookieChange || 0;
+                            return (
+                              <div
+                                key={dayIndex}
+                                className={`w-3 h-3 rounded-sm ${isFuture ? 'bg-gray-100' : getGrassColor(cookieChange)}`}
+                                title={`${dateStr}: +${cookieChange}쿠키`}
+                              />
+                            );
+                          })}
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 팀원 선택 모달 */}
+      {showTeamMemberModal && teamForMemberModal && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setShowTeamMemberModal(false);
+            setTeamForMemberModal(null);
+            setMembersToAdd([]);
+            setMembersToRemove([]);
+          }}
+        >
+          <div
+            className="bg-white shadow-2xl border-2 border-green-300 overflow-hidden flex flex-col"
+            style={{ width: '380px', maxWidth: '95vw', maxHeight: '70vh', borderRadius: '16px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 헤더 */}
+            <div className="bg-gradient-to-r from-green-400 to-emerald-400 px-4 py-3 flex items-center justify-between">
+              <span className="text-white font-bold">👥 팀 관리</span>
+              <button
+                onClick={() => {
+                  setShowTeamMemberModal(false);
+                  setTeamForMemberModal(null);
+                  setMembersToAdd([]);
+                  setMembersToRemove([]);
+                  setEditingTeamName('');
+                  setEditingTeamFlag('');
+                }}
+                className="text-white/80 hover:text-white text-xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 바디 */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              {/* 팀 이름/이모지 수정 */}
+              <div className="p-2 bg-blue-50 rounded-lg">
+                <p className="text-xs font-medium text-blue-600 mb-2">✏️ 팀 정보 수정</p>
+                <div className="flex gap-2">
+                  <select
+                    value={editingTeamFlag}
+                    onChange={(e) => setEditingTeamFlag(e.target.value)}
+                    className="px-2 py-1 border rounded text-xl w-14"
+                  >
+                    {TEAM_FLAGS.slice(0, 20).map((flag) => (
+                      <option key={flag} value={flag}>{flag}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={editingTeamName}
+                    onChange={(e) => setEditingTeamName(e.target.value)}
+                    className="flex-1 px-2 py-1 border rounded text-sm"
+                    placeholder="팀 이름"
+                  />
+                </div>
+              </div>
+
+              {/* 현재 팀원 */}
+              {(() => {
+                const currentTeam = teams.find(t => t.teamId === teamForMemberModal);
+                const currentMembers = currentTeam?.members || [];
+                if (currentMembers.length === 0) return null;
+
+                return (
+                  <div className="p-2 bg-red-50 rounded-lg">
+                    <p className="text-xs font-medium text-red-600 mb-2">🗑️ 현재 팀원 (클릭하여 제거)</p>
+                    <div className="flex flex-wrap gap-1">
+                      {currentMembers.map(code => {
+                        const student = students.find(s => s.code === code);
+                        const isMarkedForRemove = membersToRemove.includes(code);
+                        return (
+                          <button
+                            key={code}
+                            onClick={() => {
+                              if (isMarkedForRemove) {
+                                setMembersToRemove(prev => prev.filter(c => c !== code));
+                              } else {
+                                setMembersToRemove(prev => [...prev, code]);
+                              }
+                            }}
+                            className={`px-2 py-1 rounded text-xs flex items-center gap-1 transition-all ${
+                              isMarkedForRemove
+                                ? 'bg-red-500 text-white line-through'
+                                : 'bg-white border border-red-200 hover:bg-red-100'
+                            }`}
+                          >
+                            <span>{getEmojiFromCode(student?.profile.emojiCode || '') || '👤'}</span>
+                            <span>{student?.name || code}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 추가할 학생 선택 */}
+              <div className="p-2 bg-green-50 rounded-lg">
+                <p className="text-xs font-medium text-green-600 mb-2">➕ 학생 선택 (클릭하여 추가)</p>
+                <div className="flex flex-wrap gap-1 max-h-[200px] overflow-y-auto">
+                  {students.map((student) => {
+                    const currentTeam = teams.find(t => t.teamId === teamForMemberModal);
+                    const isInCurrentTeam = currentTeam?.members.includes(student.code);
+                    const otherTeam = teams.find(t => t.teamId !== teamForMemberModal && t.members.includes(student.code));
+                    const isInOtherTeam = !!otherTeam;
+                    const isMarkedForAdd = membersToAdd.includes(student.code);
+
+                    // 현재 팀에 있으면 표시 안함
+                    if (isInCurrentTeam) return null;
+
+                    return (
+                      <button
+                        key={student.code}
+                        onClick={() => {
+                          if (isInOtherTeam) return;
+                          if (isMarkedForAdd) {
+                            setMembersToAdd(prev => prev.filter(c => c !== student.code));
+                          } else {
+                            setMembersToAdd(prev => [...prev, student.code]);
+                          }
+                        }}
+                        disabled={isInOtherTeam}
+                        className={`px-2 py-1 rounded text-xs flex items-center gap-1 transition-all ${
+                          isInOtherTeam
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : isMarkedForAdd
+                            ? 'bg-green-500 text-white'
+                            : 'bg-white border border-green-200 hover:bg-green-100'
+                        }`}
+                        title={isInOtherTeam ? `${otherTeam?.flag} ${otherTeam?.teamName} 소속` : ''}
+                      >
+                        <span>{getEmojiFromCode(student.profile.emojiCode) || '👤'}</span>
+                        <span>{student.name}</span>
+                        {isInOtherTeam && <span className="text-[10px]">({otherTeam?.flag})</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* 푸터 - 적용 버튼 */}
+            {(() => {
+              const currentTeam = teams.find(t => t.teamId === teamForMemberModal);
+              const hasNameChange = editingTeamName !== currentTeam?.teamName;
+              const hasFlagChange = editingTeamFlag !== currentTeam?.flag;
+              const hasChanges = membersToAdd.length > 0 || membersToRemove.length > 0 || hasNameChange || hasFlagChange;
+
+              if (!hasChanges) return null;
+
+              return (
+                <div className="p-3 border-t bg-gray-50 flex items-center justify-between">
+                  <div className="text-xs text-gray-500 space-x-1">
+                    {(hasNameChange || hasFlagChange) && <span className="text-blue-600">팀정보 수정</span>}
+                    {membersToAdd.length > 0 && <span className="text-green-600">+{membersToAdd.length}명</span>}
+                    {membersToRemove.length > 0 && <span className="text-red-600">-{membersToRemove.length}명</span>}
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      if (!user || !selectedClass || !teamForMemberModal) return;
+                      // 팀 이름/이모지 수정
+                      if (hasNameChange || hasFlagChange) {
+                        await updateTeam(user.uid, selectedClass, teamForMemberModal, {
+                          teamName: editingTeamName,
+                          flag: editingTeamFlag
+                        });
+                      }
+                      // 멤버 제거
+                      for (const code of membersToRemove) {
+                        await removeTeamMember(user.uid, selectedClass, teamForMemberModal, code);
+                      }
+                      // 멤버 추가
+                      for (const code of membersToAdd) {
+                        await addTeamMember(user.uid, selectedClass, teamForMemberModal, code);
+                      }
+                      await loadTeams();
+                      toast.success('팀이 수정되었습니다!');
+                      setShowTeamMemberModal(false);
+                      setTeamForMemberModal(null);
+                      setMembersToAdd([]);
+                      setMembersToRemove([]);
+                      setEditingTeamName('');
+                      setEditingTeamFlag('');
+                    }}
+                    className="bg-green-500 hover:bg-green-600"
+                  >
+                    적용하기
+                  </Button>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

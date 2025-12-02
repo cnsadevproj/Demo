@@ -51,27 +51,36 @@ export function ReflectionGrass({
     return data;
   }, [reflectionKings, studentCode]);
 
-  // 최근 N일 데이터 생성
+  // 최근 N일 데이터 생성 (평일만)
   const generateRecentDays = (days: number): DayData[] => {
     const result: DayData[] = [];
     const today = new Date();
+    let daysAdded = 0;
+    let daysBack = 0;
 
-    for (let i = days - 1; i >= 0; i--) {
+    // 평일만 추가 (주말 제외)
+    while (daysAdded < days) {
       const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
+      date.setDate(date.getDate() - daysBack);
+      const dayOfWeek = date.getDay();
 
-      result.push(dateData.get(dateStr) || {
-        date: dateStr,
-        count: 0,
-        students: [],
-      });
+      // 평일만 (월~금)
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        const dateStr = date.toISOString().split('T')[0];
+        result.unshift(dateData.get(dateStr) || {
+          date: dateStr,
+          count: 0,
+          students: [],
+        });
+        daysAdded++;
+      }
+      daysBack++;
     }
 
     return result;
   };
 
-  // 주차별로 그룹화
+  // 주차별로 그룹화 (금요일 기준으로 주 종료)
   const groupByWeeks = (days: DayData[]): DayData[][] => {
     const weeks: DayData[][] = [];
     let currentWeek: DayData[] = [];
@@ -81,7 +90,8 @@ export function ReflectionGrass({
       const date = new Date(day.date);
       const dayOfWeek = date.getDay();
 
-      if (dayOfWeek === 0 || index === days.length - 1) {
+      // 금요일이거나 마지막 항목이면 주 종료
+      if (dayOfWeek === 5 || index === days.length - 1) {
         weeks.push([...currentWeek]);
         currentWeek = [];
       }

@@ -45,21 +45,32 @@ async function fetchStudentFromDahandin(
   }
 }
 
-// 잔디 기록 추가
+// 잔디 기록 추가 (주말은 금요일로 반영)
 async function addGrassRecord(
   teacherId: string,
   classId: string,
   studentCode: string,
   cookieChange: number
 ): Promise<void> {
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // 0=일, 1=월, ..., 5=금, 6=토
+
+  // 주말이면 금요일로 조정
+  let targetDate = new Date(today);
+  if (dayOfWeek === 0) { // 일요일 -> 금요일 (-2일)
+    targetDate.setDate(targetDate.getDate() - 2);
+  } else if (dayOfWeek === 6) { // 토요일 -> 금요일 (-1일)
+    targetDate.setDate(targetDate.getDate() - 1);
+  }
+
+  const dateStr = targetDate.toISOString().split('T')[0];
   const grassRef = db
     .collection('teachers')
     .doc(teacherId)
     .collection('classes')
     .doc(classId)
     .collection('grass')
-    .doc(today);
+    .doc(dateStr);
 
   const grassSnap = await grassRef.get();
 
@@ -128,7 +139,16 @@ async function refreshTeacherCookies(teacherId: string): Promise<{
 
         if (dahandinData) {
           const previousCookie = student.previousCookie || 0;
+          const lastSyncedCookie = student.lastSyncedCookie ?? student.cookie ?? 0;
+          const currentJelly = student.jelly ?? student.cookie ?? 0;
           const cookieChange = dahandinData.cookie - previousCookie;
+
+          // 캔디 동기화: 쿠키가 증가했을 때만 캔디도 증가
+          const cookieDiff = dahandinData.cookie - lastSyncedCookie;
+          let newJelly = currentJelly;
+          if (cookieDiff > 0) {
+            newJelly = currentJelly + cookieDiff;
+          }
 
           // 학생 정보 업데이트
           await studentDoc.ref.update({
@@ -137,6 +157,8 @@ async function refreshTeacherCookies(teacherId: string): Promise<{
             totalCookie: dahandinData.totalCookie,
             chocoChips: dahandinData.chocoChips,
             previousCookie: dahandinData.cookie,
+            lastSyncedCookie: dahandinData.cookie,
+            jelly: newJelly,
             lastAutoRefresh: admin.firestore.FieldValue.serverTimestamp()
           });
 
@@ -159,20 +181,17 @@ async function refreshTeacherCookies(teacherId: string): Promise<{
   return { classesProcessed, studentsUpdated };
 }
 
-/**
- * 매일 오전 2시(KST)에 실행되는 스케줄 함수
- * KST 02:00 = UTC 17:00 (전날)
- * Cron: "0 17 * * *" (매일 UTC 17:00)
- */
-export const dailyCookieRefresh = functions
+// 6시간마다 실행되는 스케줄 함수
+// Cron: "0 *\/6 * * *" (매 6시간: 0시, 6시, 12시, 18시)
+export const scheduledCookieRefresh = functions
   .runWith({
     timeoutSeconds: 540, // 9분 (최대 허용 시간)
     memory: '512MB'
   })
-  .pubsub.schedule('0 17 * * *')
+  .pubsub.schedule('0 */6 * * *')
   .timeZone('Asia/Seoul')
   .onRun(async (context) => {
-    console.log('Starting daily cookie refresh at', new Date().toISOString());
+    console.log('Starting scheduled cookie refresh at', new Date().toISOString());
 
     const startTime = Date.now();
     let totalTeachers = 0;
@@ -196,7 +215,7 @@ export const dailyCookieRefresh = functions
 
       const duration = (Date.now() - startTime) / 1000;
 
-      console.log('Daily cookie refresh completed:', {
+      console.log('Scheduled cookie refresh completed:', {
         duration: `${duration.toFixed(2)}s`,
         teachers: totalTeachers,
         classes: totalClasses,
@@ -214,7 +233,7 @@ export const dailyCookieRefresh = functions
       });
 
     } catch (error) {
-      console.error('Daily cookie refresh failed:', error);
+      console.error('Scheduled cookie refresh failed:', error);
 
       // 에러 로그 저장
       await db.collection('system').doc('logs').collection('cookieRefresh').add({
