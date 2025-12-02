@@ -51,10 +51,13 @@ export interface Student {
   classId: string;
   teacherId: string;
   cookie: number;
+  jelly: number;                // 캔디 (게임/상점용 재화)
+  lastSyncedCookie: number;     // 마지막 동기화 시점의 쿠키 값
   usedCookie: number;
   totalCookie: number;
   chocoChips: number;
   previousCookie: number;
+  initialCookie: number; // 등록 시점의 쿠키 수 (잔디 계산용)
   profile: {
     emojiCode: string;
     title: string;
@@ -302,18 +305,26 @@ export async function updateStudent(
   });
 }
 
-// 학생에게 쿠키 부여 (교사용)
-export async function addCookiesToStudent(
+// 학생에게 캔디 부여 (교사용)
+export async function addJellyToStudent(
   teacherId: string,
   studentCode: string,
   amount: number
 ): Promise<void> {
   const studentRef = doc(db, 'teachers', teacherId, 'students', studentCode);
   await updateDoc(studentRef, {
-    cookie: increment(amount),
-    totalCookie: increment(amount),
+    jelly: increment(amount),
     lastUpdate: serverTimestamp()
   });
+}
+
+// 학생에게 쿠키 부여 (교사용) - deprecated, 호환성 위해 유지 (캔디로 동작)
+export async function addCookiesToStudent(
+  teacherId: string,
+  studentCode: string,
+  amount: number
+): Promise<void> {
+  await addJellyToStudent(teacherId, studentCode, amount);
 }
 
 // 학생 삭제
@@ -681,7 +692,7 @@ export async function getShopItems(): Promise<ShopItem[]> {
   })) as ShopItem[];
 }
 
-// 아이템 구매
+// 아이템 구매 (캔디 사용)
 export async function purchaseItem(
   teacherId: string,
   studentCode: string,
@@ -691,8 +702,7 @@ export async function purchaseItem(
   const studentRef = doc(db, 'teachers', teacherId, 'students', studentCode);
 
   await updateDoc(studentRef, {
-    cookie: increment(-price),
-    usedCookie: increment(price),
+    jelly: increment(-price),  // 캔디로 구매
     ownedItems: arrayUnion(itemCode),
     lastUpdate: serverTimestamp()
   });
@@ -800,15 +810,26 @@ export async function saveProfile(
 // 잔디(Grass) API
 // ========================================
 
-// 잔디 기록 추가
+// 잔디 기록 추가 (주말은 금요일로 반영)
 export async function addGrassRecord(
   teacherId: string,
   classId: string,
   studentCode: string,
   cookieChange: number
 ): Promise<void> {
-  const today = new Date().toISOString().split('T')[0];
-  const grassRef = doc(db, 'teachers', teacherId, 'classes', classId, 'grass', today);
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // 0=일, 1=월, ..., 5=금, 6=토
+
+  // 주말이면 금요일로 조정
+  let targetDate = new Date(today);
+  if (dayOfWeek === 0) { // 일요일 -> 금요일 (-2일)
+    targetDate.setDate(targetDate.getDate() - 2);
+  } else if (dayOfWeek === 6) { // 토요일 -> 금요일 (-1일)
+    targetDate.setDate(targetDate.getDate() - 1);
+  }
+
+  const dateStr = targetDate.toISOString().split('T')[0];
+  const grassRef = doc(db, 'teachers', teacherId, 'classes', classId, 'grass', dateStr);
   
   const grassSnap = await getDoc(grassRef);
   
@@ -981,15 +1002,13 @@ export async function canRefreshCookies(
 }
 
 // 쿠키 새로고침 (다했니 API에서 가져와서 Firestore에 저장)
-// 수동 새로고침은 언제든 가능, 잔디 기록은 4시간마다만 추가
+// 잔디는 쿠키가 증가할 때마다 바로 기록 (첫 등록 제외)
+// 캔디는 쿠키 증가분만큼 추가 (감소는 무시)
 export async function refreshStudentCookies(
   teacherId: string,
   classId: string,
   apiKey: string
 ): Promise<{ success: boolean; count: number; error?: string }> {
-  // 4시간 경과 여부 확인 (잔디 기록 추가 여부 결정용)
-  const { canRefresh: canRecordGrass } = await canRefreshCookies(teacherId, classId);
-
   const students = await getClassStudents(teacherId, classId);
   let updatedCount = 0;
 
@@ -997,22 +1016,44 @@ export async function refreshStudentCookies(
     try {
       const dahandinData = await fetchStudentFromDahandin(apiKey, student.code);
 
-      // 첫 로드인지 확인 (previousCookie가 0이면 첫 등록 후 첫 동기화)
-      const isFirstLoad = student.previousCookie === 0;
+      // 첫 로드인지 확인:
+      // 1. initialCookie가 없거나 0이면 첫 등록 후 첫 동기화
+      // 2. previousCookie가 0이면 이전 버전 데이터
+      const hasInitialCookie = student.initialCookie !== undefined && student.initialCookie > 0;
+      const isFirstLoad = !hasInitialCookie && student.previousCookie === 0;
+
+      // 쿠키 변화량 계산 (previousCookie 기준)
       const cookieChange = dahandinData.cookie - student.previousCookie;
 
+      // 캔디 마이그레이션: jelly가 없으면 현재 cookie 값으로 초기화
+      const currentJelly = student.jelly ?? student.cookie ?? 0;
+      const currentLastSyncedCookie = student.lastSyncedCookie ?? student.cookie ?? 0;
+
+      // 캔디 증가량 계산 (lastSyncedCookie 기준, 증가분만)
+      const jellyIncrease = Math.max(0, dahandinData.cookie - currentLastSyncedCookie);
+
       // 학생 정보 업데이트 (뱃지 포함)
-      await updateStudent(teacherId, student.code, {
+      const updateData: Partial<Student> = {
         cookie: dahandinData.cookie,
+        jelly: currentJelly + jellyIncrease,  // 증가분만 캔디에 추가
+        lastSyncedCookie: dahandinData.cookie, // 동기화 시점 기록
         usedCookie: dahandinData.usedCookie,
         totalCookie: dahandinData.totalCookie,
         chocoChips: dahandinData.chocoChips,
         previousCookie: dahandinData.cookie,
         badges: dahandinData.badges
-      });
+      };
 
-      // 잔디 기록 (4시간 경과 시에만, 쿠키가 증가했을 때만, 첫 로드는 제외)
-      if (canRecordGrass && cookieChange > 0 && !isFirstLoad) {
+      // 첫 로드면 initialCookie 설정
+      if (isFirstLoad) {
+        updateData.initialCookie = dahandinData.cookie;
+      }
+
+      await updateStudent(teacherId, student.code, updateData);
+
+      // 잔디 기록 (쿠키가 증가했을 때만, 첫 로드는 제외)
+      // 4시간 제한 제거 - 쿠키가 증가하면 바로 기록
+      if (cookieChange > 0 && !isFirstLoad) {
         await addGrassRecord(teacherId, classId, student.code, cookieChange);
       }
 
@@ -1022,13 +1063,11 @@ export async function refreshStudentCookies(
     }
   }
 
-  // 잔디 기록이 추가된 경우에만 새로고침 시간 업데이트
-  if (canRecordGrass) {
-    const classRef = doc(db, 'teachers', teacherId, 'classes', classId);
-    await updateDoc(classRef, {
-      lastCookieRefresh: serverTimestamp()
-    });
-  }
+  // 새로고침 시간 항상 업데이트
+  const classRef = doc(db, 'teachers', teacherId, 'classes', classId);
+  await updateDoc(classRef, {
+    lastCookieRefresh: serverTimestamp()
+  });
 
   return { success: true, count: updatedCount };
 }

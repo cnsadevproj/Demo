@@ -8,19 +8,26 @@ interface GrassCalendarProps {
 }
 
 export function GrassCalendar({ data, mini = false, onDateClick }: GrassCalendarProps) {
-  // 주차별로 데이터 그룹화
+  // 주말 제외하고 주차별로 데이터 그룹화 (월~금만)
   const groupByWeeks = (grassData: GrassData[]) => {
     const weeks: GrassData[][] = [];
     let currentWeek: GrassData[] = [];
 
-    grassData.forEach((item, index) => {
-      currentWeek.push(item);
-      
+    // 주말 데이터 필터링
+    const weekdayData = grassData.filter(item => {
       const date = new Date(item.date);
       const dayOfWeek = date.getDay();
-      
-      // 일요일이거나 마지막 항목이면 주 종료
-      if (dayOfWeek === 0 || index === grassData.length - 1) {
+      return dayOfWeek >= 1 && dayOfWeek <= 5; // 월(1)~금(5)만
+    });
+
+    weekdayData.forEach((item, index) => {
+      currentWeek.push(item);
+
+      const date = new Date(item.date);
+      const dayOfWeek = date.getDay();
+
+      // 금요일이거나 마지막 항목이면 주 종료
+      if (dayOfWeek === 5 || index === weekdayData.length - 1) {
         weeks.push([...currentWeek]);
         currentWeek = [];
       }
