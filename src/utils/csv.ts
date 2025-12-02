@@ -199,6 +199,88 @@ function parseLine(line: string): StoredStudent | null {
   };
 }
 
+// 과거 잔디 데이터 파싱 결과
+export interface PastGrassData {
+  name: string;
+  date: string; // YYYY-MM-DD 형식
+  cookies: number;
+  sheetName: string; // 어떤 시트에서 왔는지 (디버깅용)
+}
+
+// 과거 잔디 XLSX 파일 파싱 (n회차 시트들에서 A열=이름, B열=제출시각, D열=쿠키)
+export function parsePastGrassXlsx(file: File, year?: number): Promise<PastGrassData[]> {
+  const targetYear = year || new Date().getFullYear();
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'array' });
+
+        const results: PastGrassData[] = [];
+
+        // "n회차" 패턴의 시트들만 처리
+        const roundSheetPattern = /^(\d+)회차$/;
+
+        for (const sheetName of workbook.SheetNames) {
+          if (!roundSheetPattern.test(sheetName)) continue;
+
+          const worksheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
+
+          // 첫 번째 행은 헤더이므로 스킵
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length < 4) continue;
+
+            const name = String(row[0] || '').trim(); // A열 (인덱스 0)
+            const timeStr = String(row[1] || '').trim(); // B열 (인덱스 1)
+            const cookieStr = String(row[3] || '').trim(); // D열 (인덱스 3)
+
+            if (!name || !timeStr) continue;
+
+            // 쿠키 파싱
+            const cookies = parseInt(cookieStr, 10);
+            if (isNaN(cookies) || cookies <= 0) continue;
+
+            // 날짜 파싱: "08-25 (월) 21:53" -> "YYYY-08-25"
+            const dateMatch = timeStr.match(/^(\d{2})-(\d{2})/);
+            if (!dateMatch) continue;
+
+            const month = dateMatch[1];
+            const day = dateMatch[2];
+            const dateStr = `${targetYear}-${month}-${day}`;
+
+            results.push({
+              name,
+              date: dateStr,
+              cookies,
+              sheetName
+            });
+          }
+        }
+
+        if (results.length === 0) {
+          reject(new Error('유효한 잔디 데이터가 없습니다. "n회차" 시트에 A열(이름), B열(제출시각), D열(쿠키)이 있는지 확인해주세요.'));
+          return;
+        }
+
+        resolve(results);
+      } catch (error) {
+        reject(new Error('XLSX 파일 파싱 중 오류가 발생했습니다.'));
+      }
+    };
+
+    reader.onerror = () => {
+      reject(new Error('파일을 읽는 중 오류가 발생했습니다.'));
+    };
+
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 // 학생 목록을 CSV로 내보내기
 export function exportStudentsToCsv(students: StoredStudent[], className: string) {
   const header = '번호,이름,학생코드';

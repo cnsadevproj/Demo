@@ -194,6 +194,13 @@ export function NumberBaseball() {
     setError('');
   };
 
+  // 자릿수가 채워지면 자동 제출
+  useEffect(() => {
+    if (gameData && currentGuess.length === gameData.digits && !isSubmitting && !isSolved) {
+      handleSubmit();
+    }
+  }, [currentGuess, gameData?.digits, isSubmitting, isSolved]);
+
   // 유효하지 않은 접근
   if (!gameId || !studentCode || !studentName) {
     return (
@@ -333,14 +340,14 @@ export function NumberBaseball() {
             <p className="text-red-500 text-sm text-center mb-2">{error}</p>
           )}
 
-          {/* 숫자 키패드 */}
-          <div className="grid grid-cols-5 gap-2 mb-4">
-            {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((num) => (
+          {/* 숫자 키패드 - 다이얼 방식 */}
+          <div className="grid grid-cols-3 gap-2 mb-4 max-w-[200px] mx-auto">
+            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
               <button
                 key={num}
                 onClick={() => handleNumberClick(num)}
                 disabled={currentGuess.includes(num) || currentGuess.length >= gameData.digits}
-                className={`h-12 rounded-xl font-bold text-xl transition-all
+                className={`h-11 rounded-xl font-bold text-lg transition-all
                   ${currentGuess.includes(num)
                     ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                     : 'bg-purple-100 text-purple-700 hover:bg-purple-200 active:scale-95'}`}
@@ -348,6 +355,19 @@ export function NumberBaseball() {
                 {num}
               </button>
             ))}
+            {/* 0 버튼 - 가운데 정렬 */}
+            <div></div>
+            <button
+              onClick={() => handleNumberClick('0')}
+              disabled={currentGuess.includes('0') || currentGuess.length >= gameData.digits}
+              className={`h-11 rounded-xl font-bold text-lg transition-all
+                ${currentGuess.includes('0')
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-purple-100 text-purple-700 hover:bg-purple-200 active:scale-95'}`}
+            >
+              0
+            </button>
+            <div></div>
           </div>
 
           {/* 액션 버튼 */}

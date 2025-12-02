@@ -39,6 +39,7 @@ import {
   getWishes,
   grantWish,
   deleteWish,
+  cleanupExpiredGrantedWishes,
   addCookiesToStudent,
   ClassInfo,
   Student,
@@ -50,9 +51,10 @@ import {
   updateShopItem,
   resetGrassData,
   updateTeamCookie,
-  updateTeam
+  updateTeam,
+  addGrassRecordForDate
 } from '../services/firestoreApi';
-import { parseXlsxFile, downloadCsvTemplate, exportStudentsToCsv } from '../utils/csv';
+import { parseXlsxFile, downloadCsvTemplate, exportStudentsToCsv, parsePastGrassXlsx, PastGrassData } from '../utils/csv';
 import { TEAM_FLAGS, generateRandomTeamNameWithEmoji } from '../types/game';
 import { ALL_SHOP_ITEMS } from '../types/shop';
 
@@ -454,6 +456,8 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [grassData, setGrassData] = useState<Array<{ date: string; studentCode: string; cookieChange: number; count: number }>>([]);
   const [isLoadingGrass, setIsLoadingGrass] = useState(false);
   const [isResettingGrass, setIsResettingGrass] = useState(false);
+  const [isUploadingPastGrass, setIsUploadingPastGrass] = useState(false);
+  const [pastGrassYear, setPastGrassYear] = useState(new Date().getFullYear());
 
   // 학생 상세 모달
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -515,6 +519,8 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [wishSortOrder, setWishSortOrder] = useState<'latest' | 'likes'>('latest');
   const [grantingWish, setGrantingWish] = useState<Wish | null>(null);
   const [grantMessage, setGrantMessage] = useState('');
+  const [wishPage, setWishPage] = useState(1);
+  const WISHES_PER_PAGE = 20;
 
   // 팀 현황 상태
   const [teamStatusData, setTeamStatusData] = useState<Map<string, Array<{ date: string; cookieChange: number; count: number }>>>(new Map());
@@ -546,6 +552,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [baseballPlayers, setBaseballPlayers] = useState<BaseballPlayer[]>([]);
   const [baseballDigits, setBaseballDigits] = useState<4 | 5>(4);
   const [isCreatingGame, setIsCreatingGame] = useState(false);
+  const [showBaseballAnswer, setShowBaseballAnswer] = useState(false); // 정답 표시 토글
 
   // 숫자야구 게임 생성
   const generateNonRepeatingNumber = (digits: number): string => {
@@ -1065,6 +1072,62 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     setIsResettingGrass(false);
   };
 
+  // 과거 잔디 엑셀 업로드
+  const handlePastGrassUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !user || !selectedClass) return;
+
+    setIsUploadingPastGrass(true);
+    let totalAdded = 0;
+    let totalSkipped = 0;
+    const notFoundNames: string[] = [];
+
+    try {
+      for (const file of Array.from(files)) {
+        const grassDataList = await parsePastGrassXlsx(file, pastGrassYear);
+
+        for (const item of grassDataList) {
+          // 이름으로 학생 찾기
+          const student = students.find(s => s.name === item.name);
+          if (!student) {
+            if (!notFoundNames.includes(item.name)) {
+              notFoundNames.push(item.name);
+            }
+            totalSkipped++;
+            continue;
+          }
+
+          // 잔디 데이터 추가
+          await addGrassRecordForDate(
+            user.uid,
+            selectedClass,
+            student.code,
+            item.date,
+            item.cookies
+          );
+          totalAdded++;
+        }
+      }
+
+      // 결과 메시지
+      let message = `✅ ${totalAdded}개의 잔디 기록이 추가되었습니다.`;
+      if (totalSkipped > 0) {
+        message += `\n⚠️ ${totalSkipped}개 스킵됨`;
+        if (notFoundNames.length > 0) {
+          message += ` (찾을 수 없는 학생: ${notFoundNames.slice(0, 5).join(', ')}${notFoundNames.length > 5 ? '...' : ''})`;
+        }
+      }
+      toast.success(message);
+
+      // 잔디 데이터 새로고침
+      await loadGrassData();
+    } catch (error) {
+      console.error('Failed to upload past grass:', error);
+      toast.error(error instanceof Error ? error.message : '과거 잔디 업로드에 실패했습니다.');
+    }
+
+    setIsUploadingPastGrass(false);
+  };
+
   // 잔디 데이터를 날짜별로 그룹화
   const getGrassByDate = () => {
     const grouped: Record<string, Record<string, { change: number; count: number }>> = {};
@@ -1416,9 +1479,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     if (!user) return;
     setIsLoadingWishes(true);
     try {
+      // 24시간 지난 선정 소원 자동 삭제
+      await cleanupExpiredGrantedWishes(user.uid);
       // 소원은 모든 클래스룸에서 공유되므로 classId는 사용되지 않음
       const wishesData = await getWishes(user.uid, '');
       setWishes(wishesData);
+      setWishPage(1); // 페이지 리셋
     } catch (error) {
       console.error('Failed to load wishes:', error);
     }
@@ -1493,7 +1559,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       {/* 메인 콘텐츠 */}
       <main className="max-w-4xl mx-auto px-4 py-6">
         <Tabs defaultValue="classes" className="space-y-6">
-          <TabsList className="flex flex-wrap">
+          <TabsList className="w-full flex justify-evenly">
             <TabsTrigger value="classes">📚 학급</TabsTrigger>
             <TabsTrigger value="students">👨‍🎓 학생</TabsTrigger>
             <TabsTrigger value="grass" onClick={loadGrassData}>🌱 잔디</TabsTrigger>
@@ -1502,7 +1568,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             <TabsTrigger value="teamStatus" onClick={loadTeamStatus}>📊 팀 현황</TabsTrigger>
             <TabsTrigger value="gameCenter">🎮 게임센터</TabsTrigger>
             <TabsTrigger value="wishes" onClick={loadWishes}>⭐ 소원</TabsTrigger>
-            <TabsTrigger value="profiles">👤 프로필 확인</TabsTrigger>
+            <TabsTrigger value="profiles">👤 프로필</TabsTrigger>
             <TabsTrigger value="settings">⚙️ 설정</TabsTrigger>
           </TabsList>
 
@@ -1938,7 +2004,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex gap-2 mb-4">
+                    <div className="flex flex-wrap gap-2 mb-4">
                       <Button
                         onClick={loadGrassData}
                         disabled={isLoadingGrass}
@@ -1954,6 +2020,36 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       >
                         {isResettingGrass ? '초기화 중...' : '🗑️ 잔디 초기화'}
                       </Button>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          value={pastGrassYear}
+                          onChange={(e) => setPastGrassYear(parseInt(e.target.value) || new Date().getFullYear())}
+                          className="w-20 text-sm"
+                          min={2020}
+                          max={2030}
+                        />
+                        <label className="relative cursor-pointer">
+                          <input
+                            type="file"
+                            accept=".xlsx"
+                            multiple
+                            onChange={(e) => handlePastGrassUpload(e.target.files)}
+                            className="hidden"
+                            disabled={isUploadingPastGrass}
+                          />
+                          <Button
+                            variant="outline"
+                            className="text-green-600 hover:bg-green-50"
+                            disabled={isUploadingPastGrass}
+                            asChild
+                          >
+                            <span>
+                              {isUploadingPastGrass ? '업로드 중...' : '📂 과거 잔디 추가'}
+                            </span>
+                          </Button>
+                        </label>
+                      </div>
                     </div>
 
                     {isLoadingGrass ? (
@@ -2829,8 +2925,18 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                              baseballGame.status === 'playing' ? '🎮 진행중' : '🏁 종료'}
                           </span>
                         </div>
-                        <div className="text-sm text-gray-500">
-                          {baseballGame.digits}자리 | 정답: <span className="font-mono font-bold text-purple-600">{baseballGame.answer}</span>
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                          <span>{baseballGame.digits}자리</span>
+                          <button
+                            onClick={() => setShowBaseballAnswer(!showBaseballAnswer)}
+                            className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                              showBaseballAnswer
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'bg-gray-100 text-gray-500'
+                            }`}
+                          >
+                            {showBaseballAnswer ? `🔓 ${baseballGame.answer}` : '🔒 정답 보기'}
+                          </button>
                         </div>
                       </div>
 
@@ -2852,32 +2958,38 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                           </p>
                         ) : (
                           <div className="max-h-40 overflow-y-auto space-y-1">
-                            {baseballPlayers.map((player, index) => (
-                              <div
-                                key={player.code}
-                                className={`flex items-center justify-between px-2 py-1 rounded ${
-                                  player.rank ? 'bg-green-50' : 'bg-gray-50'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2">
-                                  {player.rank ? (
-                                    <span className={`text-lg ${
-                                      player.rank === 1 ? '' : player.rank === 2 ? '' : player.rank === 3 ? '' : ''
-                                    }`}>
-                                      {player.rank === 1 ? '🥇' : player.rank === 2 ? '🥈' : player.rank === 3 ? '🥉' : `${player.rank}등`}
-                                    </span>
-                                  ) : (
-                                    <span className="text-gray-400 text-sm">⏳</span>
+                            {baseballPlayers.map((player, index) => {
+                              const playerStudent = students.find(s => s.code === player.code);
+                              return (
+                                <div
+                                  key={player.code}
+                                  className={`flex items-center justify-between px-2 py-1 rounded ${
+                                    player.rank ? 'bg-green-50' : 'bg-gray-50'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {player.rank ? (
+                                      <span className={`text-lg ${
+                                        player.rank === 1 ? '' : player.rank === 2 ? '' : player.rank === 3 ? '' : ''
+                                      }`}>
+                                        {player.rank === 1 ? '🥇' : player.rank === 2 ? '🥈' : player.rank === 3 ? '🥉' : `${player.rank}등`}
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-400 text-sm">⏳</span>
+                                    )}
+                                    <button
+                                      onClick={() => playerStudent && handleStudentDoubleClick(playerStudent)}
+                                      className={`text-sm ${player.rank ? 'font-medium text-green-700' : 'text-gray-600'} hover:underline cursor-pointer`}
+                                    >
+                                      {player.name}
+                                    </button>
+                                  </div>
+                                  {player.rank && (
+                                    <span className="text-xs text-gray-500">{player.attempts}회</span>
                                   )}
-                                  <span className={`text-sm ${player.rank ? 'font-medium text-green-700' : 'text-gray-600'}`}>
-                                    {player.name}
-                                  </span>
                                 </div>
-                                {player.rank && (
-                                  <span className="text-xs text-gray-500">{player.attempts}회</span>
-                                )}
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -2968,71 +3080,100 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   ) : wishes.length === 0 ? (
                     <p className="text-center py-8 text-gray-500">등록된 소원이 없습니다.</p>
                   ) : (
-                    <div className="space-y-3">
-                      {[...wishes]
-                        .sort((a, b) => wishSortOrder === 'likes'
-                          ? b.likes.length - a.likes.length
-                          : (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)
-                        )
-                        .map((wish) => (
-                        <div
-                          key={wish.id}
-                          className={`p-4 rounded-lg ${wish.isGranted ? '' : 'bg-white'}`}
-                          style={{
-                            border: wish.isGranted
-                              ? '3px solid transparent'
-                              : '1px solid rgb(229 231 235)',
-                            backgroundImage: wish.isGranted
-                              ? 'linear-gradient(to right, rgb(254 243 199), rgb(253 230 138), rgb(254 243 199)), linear-gradient(to right, rgb(239 68 68), rgb(234 179 8), rgb(34 197 94), rgb(59 130 246), rgb(168 85 247))'
-                              : undefined,
-                            backgroundOrigin: 'border-box',
-                            backgroundClip: wish.isGranted ? 'padding-box, border-box' : undefined,
-                          }}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-medium">{wish.studentName}</span>
-                                {wish.isGranted && (
-                                  <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-orange-400 text-white rounded text-xs">
-                                    ✨ 선정됨
-                                  </span>
-                                )}
+                    <>
+                      <div className="space-y-3">
+                        {(() => {
+                          const sortedWishes = [...wishes].sort((a, b) => wishSortOrder === 'likes'
+                            ? b.likes.length - a.likes.length
+                            : (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)
+                          );
+                          const startIndex = (wishPage - 1) * WISHES_PER_PAGE;
+                          const paginatedWishes = sortedWishes.slice(startIndex, startIndex + WISHES_PER_PAGE);
+                          return paginatedWishes.map((wish) => (
+                            <div
+                              key={wish.id}
+                              className={`p-4 rounded-lg ${wish.isGranted ? '' : 'bg-white'}`}
+                              style={{
+                                border: wish.isGranted
+                                  ? '3px solid transparent'
+                                  : '1px solid rgb(229 231 235)',
+                                backgroundImage: wish.isGranted
+                                  ? 'linear-gradient(to right, rgb(254 243 199), rgb(253 230 138), rgb(254 243 199)), linear-gradient(to right, rgb(239 68 68), rgb(234 179 8), rgb(34 197 94), rgb(59 130 246), rgb(168 85 247))'
+                                  : undefined,
+                                backgroundOrigin: 'border-box',
+                                backgroundClip: wish.isGranted ? 'padding-box, border-box' : undefined,
+                              }}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="font-medium">{wish.studentName}</span>
+                                    {wish.isGranted && (
+                                      <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-orange-400 text-white rounded text-xs">
+                                        ✨ 선정됨
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-gray-700">{wish.content}</p>
+                                  {wish.isGranted && wish.grantedMessage && (
+                                    <p className="text-sm text-purple-600 mt-2 italic">
+                                      💬 어디선가 들려오는 목소리: "{wish.grantedMessage}"
+                                    </p>
+                                  )}
+                                  <p className="text-xs text-gray-400 mt-1">❤️ {wish.likes.length}</p>
+                                </div>
+                                <div className="flex gap-2">
+                                  {!wish.isGranted && (
+                                    <Button
+                                      size="sm"
+                                      className="bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-500 hover:to-orange-500"
+                                      onClick={() => {
+                                        setGrantingWish(wish);
+                                        setGrantMessage('');
+                                      }}
+                                    >
+                                      ✨ 선정
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-500"
+                                    onClick={() => handleDeleteWish(wish.id)}
+                                  >
+                                    삭제
+                                  </Button>
+                                </div>
                               </div>
-                              <p className="text-gray-700">{wish.content}</p>
-                              {wish.isGranted && wish.grantedMessage && (
-                                <p className="text-sm text-purple-600 mt-2 italic">
-                                  💬 어디선가 들려오는 목소리: "{wish.grantedMessage}"
-                                </p>
-                              )}
-                              <p className="text-xs text-gray-400 mt-1">❤️ {wish.likes.length}</p>
                             </div>
-                            <div className="flex gap-2">
-                              {!wish.isGranted && (
-                                <Button
-                                  size="sm"
-                                  className="bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-500 hover:to-orange-500"
-                                  onClick={() => {
-                                    setGrantingWish(wish);
-                                    setGrantMessage('');
-                                  }}
-                                >
-                                  ✨ 선정
-                                </Button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-red-500"
-                                onClick={() => handleDeleteWish(wish.id)}
-                              >
-                                삭제
-                              </Button>
-                            </div>
-                          </div>
+                          ));
+                        })()}
+                      </div>
+                      {/* 페이지네이션 */}
+                      {wishes.length > WISHES_PER_PAGE && (
+                        <div className="flex justify-center items-center gap-2 mt-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setWishPage(p => Math.max(1, p - 1))}
+                            disabled={wishPage === 1}
+                          >
+                            ◀ 이전
+                          </Button>
+                          <span className="text-sm text-gray-600">
+                            {wishPage} / {Math.ceil(wishes.length / WISHES_PER_PAGE)} 페이지
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setWishPage(p => Math.min(Math.ceil(wishes.length / WISHES_PER_PAGE), p + 1))}
+                            disabled={wishPage >= Math.ceil(wishes.length / WISHES_PER_PAGE)}
+                          >
+                            다음 ▶
+                          </Button>
                         </div>
-                      ))}
-                    </div>
+                      )}
+                    </>
                   )}
                 </CardContent>
             </Card>
