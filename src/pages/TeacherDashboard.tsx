@@ -9,6 +9,8 @@ import { Input } from '../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Checkbox } from '../components/ui/checkbox';
 import { toast } from 'sonner';
+import { db } from '../services/firebase';
+import { doc, setDoc, onSnapshot, updateDoc, deleteDoc, collection, serverTimestamp, getDocs } from 'firebase/firestore';
 import {
   createClass,
   getClasses,
@@ -517,6 +519,193 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   // 팀 현황 상태
   const [teamStatusData, setTeamStatusData] = useState<Map<string, Array<{ date: string; cookieChange: number; count: number }>>>(new Map());
   const [isLoadingTeamStatus, setIsLoadingTeamStatus] = useState(false);
+
+  // 숫자야구 게임 상태
+  interface BaseballGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    digits: 4 | 5;
+    answer: string;
+    status: 'waiting' | 'playing' | 'finished';
+    createdAt: any;
+    completedCount: number;
+    className?: string;
+  }
+
+  interface BaseballPlayer {
+    code: string;
+    name: string;
+    joinedAt: any;
+    solvedAt: any | null;
+    rank: number | null;
+    attempts: number;
+  }
+
+  const [baseballGame, setBaseballGame] = useState<BaseballGame | null>(null);
+  const [baseballPlayers, setBaseballPlayers] = useState<BaseballPlayer[]>([]);
+  const [baseballDigits, setBaseballDigits] = useState<4 | 5>(4);
+  const [isCreatingGame, setIsCreatingGame] = useState(false);
+
+  // 숫자야구 게임 생성
+  const generateNonRepeatingNumber = (digits: number): string => {
+    const available = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    let result = '';
+
+    // 첫 자리는 0이 아니어야 함
+    const firstIndex = Math.floor(Math.random() * 9) + 1;
+    result += available[firstIndex];
+    available.splice(firstIndex, 1);
+
+    // 나머지 자리
+    for (let i = 1; i < digits; i++) {
+      const index = Math.floor(Math.random() * available.length);
+      result += available[index];
+      available.splice(index, 1);
+    }
+
+    return result;
+  };
+
+  const createBaseballGame = async () => {
+    if (!user || !selectedClass) {
+      toast.error('학급을 먼저 선택해주세요.');
+      return;
+    }
+
+    setIsCreatingGame(true);
+    try {
+      const gameId = `baseball_${user.uid}_${Date.now()}`;
+      const answer = generateNonRepeatingNumber(baseballDigits);
+      const currentClassName = classes?.find(c => c.id === selectedClass)?.name || '';
+
+      const gameData = {
+        teacherId: user.uid,
+        classId: selectedClass,
+        digits: baseballDigits,
+        answer,
+        status: 'waiting' as const,
+        createdAt: serverTimestamp(),
+        completedCount: 0,
+        className: currentClassName
+      };
+
+      await setDoc(doc(db, 'games', gameId), gameData);
+      toast.success(`${baseballDigits}자리 숫자야구 게임이 생성되었습니다!`);
+    } catch (error) {
+      console.error('Failed to create baseball game:', error);
+      toast.error('게임 생성에 실패했습니다.');
+    }
+    setIsCreatingGame(false);
+  };
+
+  const startBaseballGame = async () => {
+    if (!baseballGame) return;
+
+    try {
+      await updateDoc(doc(db, 'games', baseballGame.id), {
+        status: 'playing'
+      });
+      toast.success('게임이 시작되었습니다!');
+    } catch (error) {
+      console.error('Failed to start game:', error);
+      toast.error('게임 시작에 실패했습니다.');
+    }
+  };
+
+  const endBaseballGame = async () => {
+    if (!baseballGame) return;
+
+    try {
+      await updateDoc(doc(db, 'games', baseballGame.id), {
+        status: 'finished'
+      });
+      toast.success('게임이 종료되었습니다!');
+    } catch (error) {
+      console.error('Failed to end game:', error);
+      toast.error('게임 종료에 실패했습니다.');
+    }
+  };
+
+  const deleteBaseballGame = async () => {
+    if (!baseballGame) return;
+
+    if (!confirm('정말 게임을 삭제하시겠습니까?')) return;
+
+    try {
+      // 플레이어 데이터 삭제
+      const playersRef = collection(db, 'games', baseballGame.id, 'players');
+      const playersSnap = await getDocs(playersRef);
+      for (const playerDoc of playersSnap.docs) {
+        await deleteDoc(playerDoc.ref);
+      }
+
+      // 게임 삭제
+      await deleteDoc(doc(db, 'games', baseballGame.id));
+      setBaseballGame(null);
+      setBaseballPlayers([]);
+      toast.success('게임이 삭제되었습니다.');
+    } catch (error) {
+      console.error('Failed to delete game:', error);
+      toast.error('게임 삭제에 실패했습니다.');
+    }
+  };
+
+  // 숫자야구 게임 구독 (활성 게임 찾기)
+  useEffect(() => {
+    if (!user || !selectedClass) {
+      setBaseballGame(null);
+      setBaseballPlayers([]);
+      return;
+    }
+
+    // 현재 선택된 학급의 활성 게임 찾기
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: BaseballGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.teacherId === user.uid &&
+            data.classId === selectedClass &&
+            data.status !== 'finished') {
+          activeGame = { id: docSnap.id, ...data } as BaseballGame;
+        }
+      });
+
+      setBaseballGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [user, selectedClass]);
+
+  // 숫자야구 플레이어 구독
+  useEffect(() => {
+    if (!baseballGame) {
+      setBaseballPlayers([]);
+      return;
+    }
+
+    const playersRef = collection(db, 'games', baseballGame.id, 'players');
+    const unsubscribe = onSnapshot(playersRef, (snapshot) => {
+      const players: BaseballPlayer[] = [];
+      snapshot.docs.forEach(docSnap => {
+        players.push({ code: docSnap.id, ...docSnap.data() } as BaseballPlayer);
+      });
+
+      // 순위 순으로 정렬 (맞춘 사람 우선, 그 다음 참가 순서)
+      players.sort((a, b) => {
+        if (a.rank && b.rank) return a.rank - b.rank;
+        if (a.rank) return -1;
+        if (b.rank) return 1;
+        return 0;
+      });
+
+      setBaseballPlayers(players);
+    });
+
+    return () => unsubscribe();
+  }, [baseballGame]);
 
   const handleAddStudent = async () => {
     if (!user || !selectedClass || !teacher) {
@@ -2344,6 +2533,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     });
                   });
 
+                  // 팀원들의 젤리 합계 계산
+                  const teamTotalJelly = team.members.reduce((sum, code) => {
+                    const student = students.find(s => s.code === code);
+                    return sum + (student?.jelly ?? student?.cookie ?? 0);
+                  }, 0);
+
                   return (
                     <Card key={team.teamId}>
                       <CardHeader>
@@ -2354,12 +2549,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                           </CardTitle>
                           <div className="flex items-center gap-4">
                             <div className="text-center">
-                              <p className="text-xs text-gray-500">현재 쿠키</p>
-                              <p className="text-xl font-bold text-amber-600">{team.teamCookie} 🍪</p>
+                              <p className="text-xs text-gray-500">현재 캔디</p>
+                              <p className="text-xl font-bold text-pink-600">{teamTotalJelly} 🍭</p>
                             </div>
                             <div className="text-center">
                               <p className="text-xs text-gray-500">총 획득량</p>
-                              <p className="text-xl font-bold text-green-600">+{teamTotalCookieGain} 🍪</p>
+                              <p className="text-xl font-bold text-green-600">+{teamTotalCookieGain} 🍭</p>
                             </div>
                             <div className="text-center">
                               <p className="text-xs text-gray-500">멤버</p>
@@ -2412,11 +2607,11 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                                   <div className="flex items-center gap-4 text-sm">
                                     <div className="text-center">
                                       <p className="text-gray-500">보유</p>
-                                      <p className="font-bold text-amber-600">{student?.cookie || 0} 🍪</p>
+                                      <p className="font-bold text-pink-600">{student?.jelly ?? student?.cookie ?? 0} 🍭</p>
                                     </div>
                                     <div className="text-center">
                                       <p className="text-gray-500">총 획득</p>
-                                      <p className="font-bold text-green-600">+{totalGain}</p>
+                                      <p className="font-bold text-green-600">+{totalGain} 🍭</p>
                                     </div>
                                   </div>
                                 </div>
@@ -2567,20 +2762,166 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   </div>
                 </div>
 
-                {/* 숫자야구 */}
-                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-purple-50 to-violet-50 border border-purple-200">
-                  <div className="flex items-center gap-4">
-                    <span className="text-3xl">⚾</span>
-                    <div>
-                      <h3 className="font-bold text-purple-800">숫자야구</h3>
-                      <p className="text-xs text-purple-600">숫자를 맞춰라!</p>
-                      <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전</span>
+                {/* 숫자야구 - 활성화됨! */}
+                <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-violet-50 border-2 border-purple-300">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-4">
+                      <span className="text-3xl">⚾</span>
+                      <div>
+                        <h3 className="font-bold text-purple-800">숫자야구</h3>
+                        <p className="text-xs text-purple-600">숫자를 맞춰라!</p>
+                        <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전 · 실시간</span>
+                      </div>
                     </div>
+                    <span className="px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold">활성화</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400">준비중</span>
-                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
-                  </div>
+
+                  {!selectedClass ? (
+                    <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-center text-sm">
+                      ⚠️ 학급을 먼저 선택해주세요
+                    </div>
+                  ) : !baseballGame ? (
+                    // 게임 생성 UI
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">자릿수:</span>
+                        <button
+                          onClick={() => setBaseballDigits(4)}
+                          className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
+                            baseballDigits === 4
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          4자리
+                        </button>
+                        <button
+                          onClick={() => setBaseballDigits(5)}
+                          className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
+                            baseballDigits === 5
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          5자리
+                        </button>
+                      </div>
+                      <Button
+                        onClick={createBaseballGame}
+                        disabled={isCreatingGame}
+                        className="w-full bg-purple-600 hover:bg-purple-700"
+                      >
+                        {isCreatingGame ? '생성 중...' : '🎮 게임 방 만들기'}
+                      </Button>
+                    </div>
+                  ) : (
+                    // 게임 관리 UI
+                    <div className="space-y-3">
+                      {/* 게임 상태 */}
+                      <div className="flex items-center justify-between bg-white p-3 rounded-lg">
+                        <div>
+                          <span className="text-sm text-gray-600">상태: </span>
+                          <span className={`font-bold ${
+                            baseballGame.status === 'waiting' ? 'text-amber-600' :
+                            baseballGame.status === 'playing' ? 'text-green-600' : 'text-gray-600'
+                          }`}>
+                            {baseballGame.status === 'waiting' ? '⏳ 대기중' :
+                             baseballGame.status === 'playing' ? '🎮 진행중' : '🏁 종료'}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {baseballGame.digits}자리 | 정답: <span className="font-mono font-bold text-purple-600">{baseballGame.answer}</span>
+                        </div>
+                      </div>
+
+                      {/* 참가자 목록 */}
+                      <div className="bg-white p-3 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700">
+                            👥 참가자 ({baseballPlayers.length}명)
+                          </span>
+                          {baseballGame.status === 'playing' && (
+                            <span className="text-xs text-green-600">
+                              🏆 완료: {baseballPlayers.filter(p => p.rank).length}명
+                            </span>
+                          )}
+                        </div>
+                        {baseballPlayers.length === 0 ? (
+                          <p className="text-sm text-gray-400 text-center py-2">
+                            아직 참가한 학생이 없습니다
+                          </p>
+                        ) : (
+                          <div className="max-h-40 overflow-y-auto space-y-1">
+                            {baseballPlayers.map((player, index) => (
+                              <div
+                                key={player.code}
+                                className={`flex items-center justify-between px-2 py-1 rounded ${
+                                  player.rank ? 'bg-green-50' : 'bg-gray-50'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {player.rank ? (
+                                    <span className={`text-lg ${
+                                      player.rank === 1 ? '' : player.rank === 2 ? '' : player.rank === 3 ? '' : ''
+                                    }`}>
+                                      {player.rank === 1 ? '🥇' : player.rank === 2 ? '🥈' : player.rank === 3 ? '🥉' : `${player.rank}등`}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 text-sm">⏳</span>
+                                  )}
+                                  <span className={`text-sm ${player.rank ? 'font-medium text-green-700' : 'text-gray-600'}`}>
+                                    {player.name}
+                                  </span>
+                                </div>
+                                {player.rank && (
+                                  <span className="text-xs text-gray-500">{player.attempts}회</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 컨트롤 버튼 */}
+                      <div className="flex gap-2">
+                        {baseballGame.status === 'waiting' && (
+                          <>
+                            <Button
+                              onClick={startBaseballGame}
+                              disabled={baseballPlayers.length === 0}
+                              className="flex-1 bg-green-600 hover:bg-green-700"
+                            >
+                              🚀 게임 시작
+                            </Button>
+                            <Button
+                              onClick={deleteBaseballGame}
+                              variant="outline"
+                              className="text-red-600 border-red-300 hover:bg-red-50"
+                            >
+                              삭제
+                            </Button>
+                          </>
+                        )}
+                        {baseballGame.status === 'playing' && (
+                          <>
+                            <Button
+                              onClick={endBaseballGame}
+                              className="flex-1 bg-amber-600 hover:bg-amber-700"
+                            >
+                              🏁 게임 종료
+                            </Button>
+                            <Button
+                              onClick={deleteBaseballGame}
+                              variant="outline"
+                              className="text-red-600 border-red-300 hover:bg-red-50"
+                            >
+                              삭제
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -2588,8 +2929,8 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             {/* 안내 */}
             <Card className="bg-gray-50 border-dashed">
               <CardContent className="py-4 text-center text-gray-500 text-sm">
-                <p>🔜 다양한 게임이 곧 추가될 예정이에요!</p>
-                <p className="text-xs mt-1">게임이 완성되면 활성화 스위치가 작동합니다</p>
+                <p>🔜 더 많은 게임이 곧 추가될 예정이에요!</p>
+                <p className="text-xs mt-1">숫자야구는 지금 바로 플레이할 수 있어요!</p>
               </CardContent>
             </Card>
           </TabsContent>

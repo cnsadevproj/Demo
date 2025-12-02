@@ -443,8 +443,17 @@ html {
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(236 72 153 / 0));
 }
 
+.from-pink-400 {
+  --tw-gradient-from: rgb(244 114 182);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(244 114 182 / 0));
+}
+
 .to-purple-500 {
   --tw-gradient-to: rgb(168 85 247);
+}
+
+.to-purple-400 {
+  --tw-gradient-to: rgb(192 132 252);
 }
 
 /* ========================================

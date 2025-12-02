@@ -5,6 +5,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { toast } from 'sonner';
+import { db } from '../services/firebase';
+import { collection, onSnapshot, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import {
   getStudent,
   getWishes,
@@ -90,6 +92,75 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
 
   // 인벤토리 탭
   const [inventoryTab, setInventoryTab] = useState<'all' | 'emoji' | 'nameEffect' | 'titleColor' | 'animation' | 'titlePermit' | 'buttonBorder' | 'buttonFill'>('all');
+
+  // 숫자야구 게임 상태
+  interface BaseballGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    digits: 4 | 5;
+    answer: string;
+    status: 'waiting' | 'playing' | 'finished';
+    createdAt: any;
+    completedCount: number;
+    className?: string;
+  }
+
+  const [activeBaseballGame, setActiveBaseballGame] = useState<BaseballGame | null>(null);
+  const [isJoiningGame, setIsJoiningGame] = useState(false);
+
+  // 숫자야구 활성 게임 구독
+  useEffect(() => {
+    if (!studentTeacherId || !student) {
+      setActiveBaseballGame(null);
+      return;
+    }
+
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: BaseballGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        // 현재 학생의 선생님이 만든 게임 중 waiting 상태인 것 찾기
+        if (data.teacherId === studentTeacherId && data.status === 'waiting') {
+          activeGame = { id: docSnap.id, ...data } as BaseballGame;
+        }
+      });
+
+      setActiveBaseballGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [studentTeacherId, student]);
+
+  // 숫자야구 게임 참가
+  const joinBaseballGame = async () => {
+    if (!activeBaseballGame || !student || !currentStudent) return;
+
+    setIsJoiningGame(true);
+    try {
+      // 플레이어로 등록
+      const playerRef = doc(db, 'games', activeBaseballGame.id, 'players', student.code);
+      await setDoc(playerRef, {
+        name: currentStudent.name,
+        joinedAt: serverTimestamp(),
+        solvedAt: null,
+        rank: null,
+        attempts: 0
+      });
+
+      // 새 탭으로 게임 열기
+      const gameUrl = `${window.location.origin}?game=baseball&gameId=${activeBaseballGame.id}&studentCode=${student.code}&studentName=${encodeURIComponent(currentStudent.name)}`;
+      window.open(gameUrl, '_blank');
+
+      toast.success('게임에 참가했습니다! 새 창을 확인하세요.');
+    } catch (error) {
+      console.error('Failed to join game:', error);
+      toast.error('게임 참가에 실패했습니다.');
+    }
+    setIsJoiningGame(false);
+  };
 
   // 데이터 로드
   useEffect(() => {
@@ -534,10 +605,10 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     return effectMap[value] || '';
   };
 
-  // 배경 스타일 클래스
-  const getBackgroundClass = (value: string) => {
+  // 배경 스타일 클래스 (패턴/그라데이션용, 없으면 빈 문자열 반환)
+  const getBackgroundClass = (value: string | undefined) => {
+    if (!value || value === 'none') return ''; // 빈 문자열 반환 (기본 배경색은 inline style로)
     const bgMap: Record<string, string> = {
-      'none': 'bg-transparent',
       'dots': 'bg-pattern-dots',
       'stripes': 'bg-pattern-stripes',
       'waves': 'bg-pattern-waves',
@@ -549,7 +620,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
       'gradient-sunset': 'bg-gradient-to-br from-orange-50 to-pink-50',
       'gradient-lavender': 'bg-gradient-to-br from-purple-50 to-indigo-50',
     };
-    return bgMap[value] || 'bg-transparent';
+    return bgMap[value] || '';
   };
 
   // 애니메이션 스타일 클래스
@@ -680,25 +751,25 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
       <div className="max-w-4xl mx-auto px-4 py-6">
         <div className="grid grid-cols-2 gap-3">
           {/* 쿠키 (다했니 연동) */}
-          <Card className="bg-gradient-to-r from-amber-400 to-orange-400 text-white border-0">
-            <CardContent className="py-4">
+          <div className="bg-gradient-to-r from-amber-400 to-orange-400 text-white rounded-xl">
+            <div className="py-4 px-6">
               <div className="text-center">
                 <p className="text-amber-100 text-xs mb-1">다했니 쿠키</p>
                 <p className="text-3xl font-bold">{currentStudent.cookie} 🍪</p>
                 <p className="text-amber-100 text-xs mt-1">성찰로 획득</p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
           {/* 캔디 (게임/상점용) */}
-          <Card className="bg-gradient-to-r from-pink-400 to-purple-400 text-white border-0">
-            <CardContent className="py-4">
+          <div className="bg-gradient-to-r from-pink-400 to-purple-400 text-white rounded-xl">
+            <div className="py-4 px-6">
               <div className="text-center">
                 <p className="text-pink-100 text-xs mb-1">내 캔디</p>
                 <p className="text-3xl font-bold">{currentStudent.jelly ?? currentStudent.cookie} 🍭</p>
                 <p className="text-pink-100 text-xs mt-1">게임/상점용</p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
         {/* 새로고침 버튼 */}
         <div className="text-center mt-3">
@@ -1323,7 +1394,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                                 </div>
                               </div>
                               <div className="text-right flex flex-col gap-1">
-                                <p className="font-bold text-amber-600 text-lg">{item.price} 🍪</p>
+                                <p className="font-bold text-pink-600 text-lg">{item.price} 🍭</p>
                                 <div className="flex gap-1">
                                   {/* 미리보기 버튼 */}
                                   <button
@@ -1959,16 +2030,18 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
         {/* 게임센터 탭 */}
         {activeTab === 'gameCenter' && (
           <div className="space-y-6">
-            {/* 준비중 안내 배너 */}
+            {/* 게임센터 헤더 */}
             <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl p-6 text-center border-2 border-purple-200">
               <div className="text-5xl mb-3">🎮</div>
               <h2 className="text-xl font-bold text-purple-800 mb-2">게임센터</h2>
               <p className="text-purple-600 text-sm">
-                쿠키를 사용해서 다양한 게임을 즐겨보세요!
+                선생님이 게임을 열면 참가할 수 있어요!
               </p>
-              <div className="mt-3 inline-block bg-amber-100 text-amber-700 px-4 py-1.5 rounded-full text-sm font-medium">
-                🚧 현재 준비 중인 기능입니다
-              </div>
+              {activeBaseballGame && (
+                <div className="mt-3 inline-block bg-green-100 text-green-700 px-4 py-1.5 rounded-full text-sm font-medium animate-pulse">
+                  🎮 숫자야구 게임 대기중!
+                </div>
+              )}
             </div>
 
             {/* 게임 목록 그리드 */}
@@ -2038,25 +2111,62 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 </span>
               </button>
 
-              {/* 숫자야구 */}
-              <button
-                disabled
-                className="p-5 rounded-2xl bg-gradient-to-br from-purple-50 to-violet-50 border-2 border-purple-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
-              >
-                <div className="text-4xl mb-2">⚾</div>
-                <h3 className="font-bold text-purple-800 text-sm">숫자야구</h3>
-                <p className="text-xs text-purple-600 mt-1">개인전</p>
-                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
-                  준비중
-                </span>
-              </button>
+              {/* 숫자야구 - 활성화! */}
+              {activeBaseballGame ? (
+                <button
+                  onClick={joinBaseballGame}
+                  disabled={isJoiningGame}
+                  className="p-5 rounded-2xl bg-gradient-to-br from-purple-100 to-violet-100 border-2 border-purple-400 transition-all hover:scale-105 hover:shadow-lg animate-pulse"
+                >
+                  <div className="text-4xl mb-2">⚾</div>
+                  <h3 className="font-bold text-purple-800 text-sm">숫자야구</h3>
+                  <p className="text-xs text-purple-600 mt-1">{activeBaseballGame.digits}자리</p>
+                  <span className="inline-block mt-2 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">
+                    {isJoiningGame ? '참가중...' : '🎮 참가하기!'}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  disabled
+                  className="p-5 rounded-2xl bg-gradient-to-br from-purple-50 to-violet-50 border-2 border-purple-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+                >
+                  <div className="text-4xl mb-2">⚾</div>
+                  <h3 className="font-bold text-purple-800 text-sm">숫자야구</h3>
+                  <p className="text-xs text-purple-600 mt-1">개인전</p>
+                  <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                    대기중
+                  </span>
+                </button>
+              )}
             </div>
+
+            {/* 활성 게임 안내 */}
+            {activeBaseballGame && (
+              <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl p-4 border-2 border-purple-300">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl animate-bounce">⚾</span>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-purple-800">숫자야구 게임 대기중!</h3>
+                    <p className="text-sm text-purple-600">
+                      선생님이 {activeBaseballGame.digits}자리 숫자야구 게임을 열었어요. 지금 참가하세요!
+                    </p>
+                  </div>
+                  <button
+                    onClick={joinBaseballGame}
+                    disabled={isJoiningGame}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-all"
+                  >
+                    {isJoiningGame ? '...' : '참가'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* 안내 문구 */}
             <Card className="bg-gray-50 border-dashed">
               <CardContent className="py-4 text-center text-gray-500 text-sm">
-                <p>🔜 다양한 게임이 곧 추가될 예정이에요!</p>
-                <p className="text-xs mt-1">게임에서 쿠키를 걸고 승부를 펼쳐보세요</p>
+                <p>🔜 더 많은 게임이 곧 추가될 예정이에요!</p>
+                <p className="text-xs mt-1">숫자야구는 선생님이 게임을 열면 참가할 수 있어요</p>
               </CardContent>
             </Card>
           </div>
@@ -2460,7 +2570,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600">가격</span>
-                    <span className="font-bold text-amber-600">{previewItem.price} 🍪</span>
+                    <span className="font-bold text-pink-600">{previewItem.price} 🍭</span>
                   </div>
                   {previewItem.description && (
                     <p className="text-xs text-gray-500 mt-2 pt-2 border-t">{previewItem.description}</p>
