@@ -58,6 +58,10 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [isSubmittingWish, setIsSubmittingWish] = useState(false);
   const [hasWrittenTodayWish, setHasWrittenTodayWish] = useState(false);
 
+  // 소원 페이지네이션
+  const [wishPage, setWishPage] = useState(1);
+  const WISHES_PER_PAGE = 20;
+
   // 다른 학생들 (프로필 보기용)
   const [classmates, setClassmates] = useState<Student[]>([]);
   const [selectedClassmate, setSelectedClassmate] = useState<Student | null>(null);
@@ -1090,62 +1094,90 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 {wishes.length === 0 ? (
                   <p className="text-center text-gray-500 py-8">아직 소원이 없어요</p>
                 ) : (
-                  <div className="space-y-3">
-                    {wishes.map((wish) => {
-                      const isLiked = wish.likes.includes(currentStudent.code);
-                      const isMine = wish.studentCode === currentStudent.code;
+                  <>
+                    <div className="space-y-3">
+                      {(() => {
+                        const startIndex = (wishPage - 1) * WISHES_PER_PAGE;
+                        const paginatedWishes = wishes.slice(startIndex, startIndex + WISHES_PER_PAGE);
+                        return paginatedWishes.map((wish) => {
+                          const isLiked = wish.likes.includes(currentStudent.code);
+                          const isMine = wish.studentCode === currentStudent.code;
 
-                      return (
-                        <div
-                          key={wish.id}
-                          className={`p-3 rounded-lg ${
-                            wish.isGranted
-                              ? 'shadow-lg'
-                              : 'bg-white border border-gray-200'
-                          }`}
-                          style={{
-                            border: wish.isGranted
-                              ? '3px solid transparent'
-                              : undefined,
-                            backgroundImage: wish.isGranted
-                              ? 'linear-gradient(to right, rgb(254 243 199), rgb(253 230 138), rgb(254 243 199)), linear-gradient(to right, rgb(239 68 68), rgb(234 179 8), rgb(34 197 94), rgb(59 130 246), rgb(168 85 247))'
-                              : undefined,
-                            backgroundOrigin: 'border-box',
-                            backgroundClip: wish.isGranted ? 'padding-box, border-box' : undefined,
-                          }}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <p className={`font-medium text-sm ${wish.isGranted ? 'text-amber-700' : ''}`}>
-                                {wish.isGranted && <span className="text-xl mr-1">✨</span>}
-                                {wish.studentName}
-                                {isMine && <span className="text-amber-500 ml-1">(나)</span>}
-                                {wish.isGranted && <span className="ml-2 px-2 py-0.5 bg-gray-800 text-white text-xs rounded-full">🌟 이루어질지어다~</span>}
-                              </p>
-                              <p className={`mt-1 ${wish.isGranted ? 'text-amber-800 font-medium' : 'text-gray-700'}`}>
-                                {wish.content}
-                              </p>
-                              {wish.isGranted && wish.grantedMessage && (
-                                <p className="text-sm text-purple-600 mt-2 italic">
-                                  💬 어디선가 들려오는 목소리: "{wish.grantedMessage}"
-                                </p>
-                              )}
-                            </div>
-                            <button
-                              onClick={() => handleLikeWish(wish.id, isLiked)}
-                              className={`flex items-center gap-1 px-2 py-1 rounded-full text-sm ${
-                                isLiked
-                                  ? 'bg-red-100 text-red-500'
-                                  : 'bg-gray-100 text-gray-500'
+                          return (
+                            <div
+                              key={wish.id}
+                              className={`p-3 rounded-lg ${
+                                wish.isGranted
+                                  ? 'shadow-lg'
+                                  : 'bg-white border border-gray-200'
                               }`}
+                              style={{
+                                border: wish.isGranted
+                                  ? '3px solid transparent'
+                                  : undefined,
+                                backgroundImage: wish.isGranted
+                                  ? 'linear-gradient(to right, rgb(254 243 199), rgb(253 230 138), rgb(254 243 199)), linear-gradient(to right, rgb(239 68 68), rgb(234 179 8), rgb(34 197 94), rgb(59 130 246), rgb(168 85 247))'
+                                  : undefined,
+                                backgroundOrigin: 'border-box',
+                                backgroundClip: wish.isGranted ? 'padding-box, border-box' : undefined,
+                              }}
                             >
-                              {isLiked ? '❤️' : '🤍'} {wish.likes.length}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <p className={`font-medium text-sm ${wish.isGranted ? 'text-amber-700' : ''}`}>
+                                    {wish.isGranted && <span className="text-xl mr-1">✨</span>}
+                                    {wish.studentName}
+                                    {isMine && <span className="text-amber-500 ml-1">(나)</span>}
+                                    {wish.isGranted && <span className="ml-2 px-2 py-0.5 bg-gray-800 text-white text-xs rounded-full">🌟 이루어질지어다~</span>}
+                                  </p>
+                                  <p className={`mt-1 ${wish.isGranted ? 'text-amber-800 font-medium' : 'text-gray-700'}`}>
+                                    {wish.content}
+                                  </p>
+                                  {wish.isGranted && wish.grantedMessage && (
+                                    <p className="text-sm text-purple-600 mt-2 italic">
+                                      💬 어디선가 들려오는 목소리: "{wish.grantedMessage}"
+                                    </p>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => handleLikeWish(wish.id, isLiked)}
+                                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-sm ${
+                                    isLiked
+                                      ? 'bg-red-100 text-red-500'
+                                      : 'bg-gray-100 text-gray-500'
+                                  }`}
+                                >
+                                  {isLiked ? '❤️' : '🤍'} {wish.likes.length}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                    {/* 페이지네이션 */}
+                    {wishes.length > WISHES_PER_PAGE && (
+                      <div className="flex justify-center items-center gap-2 mt-4">
+                        <button
+                          onClick={() => setWishPage(p => Math.max(1, p - 1))}
+                          disabled={wishPage === 1}
+                          className="px-3 py-1 text-sm rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          ◀ 이전
+                        </button>
+                        <span className="text-sm text-gray-600">
+                          {wishPage} / {Math.ceil(wishes.length / WISHES_PER_PAGE)} 페이지
+                        </span>
+                        <button
+                          onClick={() => setWishPage(p => Math.min(Math.ceil(wishes.length / WISHES_PER_PAGE), p + 1))}
+                          disabled={wishPage >= Math.ceil(wishes.length / WISHES_PER_PAGE)}
+                          className="px-3 py-1 text-sm rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          다음 ▶
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>

@@ -114,6 +114,7 @@ export interface Wish {
   isGranted: boolean;
   grantedReward: number;  // deprecated - 더이상 사용하지 않음
   grantedMessage?: string; // 선정 시 교사 코멘트
+  grantedAt?: Timestamp; // 선정된 시각 (24시간 후 자동 삭제용)
 }
 
 // 상점 아이템
@@ -532,7 +533,8 @@ export async function grantWish(
   const wishRef = doc(db, 'teachers', teacherId, 'wishes', wishId);
   await updateDoc(wishRef, {
     isGranted: true,
-    grantedMessage: message
+    grantedMessage: message,
+    grantedAt: serverTimestamp()
   });
 }
 
@@ -544,6 +546,29 @@ export async function deleteWish(
 ): Promise<void> {
   const wishRef = doc(db, 'teachers', teacherId, 'wishes', wishId);
   await deleteDoc(wishRef);
+}
+
+// 24시간 지난 선정된 소원 삭제
+export async function cleanupExpiredGrantedWishes(teacherId: string): Promise<number> {
+  const wishesRef = collection(db, 'teachers', teacherId, 'wishes');
+  const snapshot = await getDocs(wishesRef);
+
+  const now = new Date();
+  const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+  let deletedCount = 0;
+
+  for (const docSnap of snapshot.docs) {
+    const wish = docSnap.data() as Wish;
+    if (wish.isGranted && wish.grantedAt) {
+      const grantedTime = wish.grantedAt.toDate();
+      if (now.getTime() - grantedTime.getTime() > TWENTY_FOUR_HOURS) {
+        await deleteDoc(docSnap.ref);
+        deletedCount++;
+      }
+    }
+  }
+
+  return deletedCount;
 }
 
 // 실시간 소원 구독 (모든 클래스룸 공유)
@@ -899,6 +924,38 @@ export async function resetGrassData(
   }
 
   return { success: true, deletedCount };
+}
+
+// 특정 날짜에 잔디 기록 추가 (과거 소급용)
+export async function addGrassRecordForDate(
+  teacherId: string,
+  classId: string,
+  studentCode: string,
+  dateStr: string, // YYYY-MM-DD 형식
+  cookieChange: number
+): Promise<void> {
+  const grassRef = doc(db, 'teachers', teacherId, 'classes', classId, 'grass', dateStr);
+
+  const grassSnap = await getDoc(grassRef);
+
+  if (grassSnap.exists()) {
+    const records = grassSnap.data().records || {};
+    const currentData = records[studentCode] || { change: 0, count: 0 };
+
+    await updateDoc(grassRef, {
+      [`records.${studentCode}`]: {
+        change: currentData.change + cookieChange,
+        count: currentData.count + 1
+      }
+    });
+  } else {
+    await setDoc(grassRef, {
+      date: new Date(dateStr),
+      records: {
+        [studentCode]: { change: cookieChange, count: 1 }
+      }
+    });
+  }
 }
 
 // ========================================
