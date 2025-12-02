@@ -846,7 +846,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                   border: `2px solid ${getBorderColor(currentStudent.profile.buttonBorderCode)}`,
                   ...(isGradientFill(currentStudent.profile.buttonFillCode)
                     ? { backgroundImage: getGradientStyle(currentStudent.profile.buttonFillCode) }
-                    : { backgroundColor: getFillColor(currentStudent.profile.buttonFillCode) || 'rgb(255 251 235)' }
+                    : { backgroundColor: (!currentStudent.profile.buttonFillCode || currentStudent.profile.buttonFillCode === 'none' || currentStudent.profile.buttonFillCode === 'transparent') ? 'rgb(255 251 235)' : getFillColor(currentStudent.profile.buttonFillCode) }
                   ),
                 }}>
                 <div className={`text-center ${getAnimationClass(currentStudent.profile.animationCode || 'none')}`}>

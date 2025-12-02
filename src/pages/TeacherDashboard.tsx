@@ -815,18 +815,28 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     return 'bg-green-700'; // 3개 이상
   };
 
-  // 최근 14일 잔디
+  // 최근 10일 잔디 (평일만)
   const getStudentLast14Days = () => {
     const days: Array<{ date: string; count: number }> = [];
-    for (let i = 13; i >= 0; i--) {
+    let daysAdded = 0;
+    let daysBack = 0;
+
+    while (daysAdded < 10) {  // 평일 10일 (2주)
       const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      const grassRecord = studentGrassData.find((g: { date: string; cookieChange: number; count: number }) => g.date === dateStr);
-      days.push({
-        date: dateStr,
-        count: grassRecord?.cookieChange || 0
-      });
+      date.setDate(date.getDate() - daysBack);
+      const dayOfWeek = date.getDay();
+
+      // 평일만 (월~금)
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        const dateStr = date.toISOString().split('T')[0];
+        const grassRecord = studentGrassData.find((g: { date: string; cookieChange: number; count: number }) => g.date === dateStr);
+        days.unshift({
+          date: dateStr,
+          count: grassRecord?.cookieChange || 0
+        });
+        daysAdded++;
+      }
+      daysBack++;
     }
     return days;
   };
@@ -881,13 +891,23 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     return grouped;
   };
 
-  // 최근 14일 날짜 목록
+  // 최근 10일 날짜 목록 (평일만)
   const getLast14Days = () => {
     const dates: string[] = [];
-    for (let i = 13; i >= 0; i--) {
+    let daysAdded = 0;
+    let daysBack = 0;
+
+    while (daysAdded < 10) {  // 평일 10일 (2주)
       const date = new Date();
-      date.setDate(date.getDate() - i);
-      dates.push(date.toISOString().split('T')[0]);
+      date.setDate(date.getDate() - daysBack);
+      const dayOfWeek = date.getDay();
+
+      // 평일만 (월~금)
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        dates.unshift(date.toISOString().split('T')[0]);
+        daysAdded++;
+      }
+      daysBack++;
     }
     return dates;
   };
