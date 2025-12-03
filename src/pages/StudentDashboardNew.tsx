@@ -187,6 +187,20 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [activeRpsGame, setActiveRpsGame] = useState<RPSGame | null>(null);
   const [isJoiningRps, setIsJoiningRps] = useState(false);
 
+  // 쿠키 배틀 활성 게임
+  interface CookieBattleGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    status: 'waiting' | 'betting' | 'targeting' | 'battle' | 'result' | 'finished';
+    lossMode: 'basic' | 'zeroSum' | 'soft';
+    round: number;
+    className?: string;
+  }
+
+  const [activeCookieBattleGame, setActiveCookieBattleGame] = useState<CookieBattleGame | null>(null);
+  const [isJoiningCookieBattle, setIsJoiningCookieBattle] = useState(false);
+
   // 숫자야구 활성 게임 구독
   useEffect(() => {
     if (!studentTeacherId || !student) {
@@ -480,6 +494,59 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
       toast.error('게임 참가에 실패했습니다.');
     }
     setIsJoiningRps(false);
+  };
+
+  // 쿠키 배틀 활성 게임 구독
+  useEffect(() => {
+    if (!studentTeacherId || !student) {
+      setActiveCookieBattleGame(null);
+      return;
+    }
+
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: CookieBattleGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        // 쿠키 배틀 게임은 진행 중(finished 제외)인 것도 참가 가능
+        if (data.teacherId === studentTeacherId &&
+            data.classId === student.classId &&
+            data.status !== 'finished' &&
+            docSnap.id.startsWith('cookiebattle_')) {
+          activeGame = { id: docSnap.id, ...data } as CookieBattleGame;
+        }
+      });
+
+      setActiveCookieBattleGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [studentTeacherId, student]);
+
+  // 쿠키 배틀 참가
+  const joinCookieBattleGame = async () => {
+    if (!activeCookieBattleGame || !student || !currentStudent || !studentTeacherId) return;
+
+    setIsJoiningCookieBattle(true);
+    try {
+      // 플레이어로 등록
+      const playerRef = doc(db, 'games', activeCookieBattleGame.id, 'players', student.code);
+      await setDoc(playerRef, {
+        name: currentStudent.name,
+        joinedAt: serverTimestamp()
+      }, { merge: true });
+
+      // 새 탭으로 게임 열기
+      const gameUrl = `${window.location.origin}?game=cookie-battle&gameId=${activeCookieBattleGame.id}&studentCode=${student.code}&studentName=${encodeURIComponent(currentStudent.name)}`;
+      window.open(gameUrl, '_blank');
+
+      toast.success('쿠키 배틀에 참가했습니다! 새 창을 확인하세요.');
+    } catch (error) {
+      console.error('Failed to join cookie battle:', error);
+      toast.error('게임 참가에 실패했습니다.');
+    }
+    setIsJoiningCookieBattle(false);
   };
 
   // 데이터 로드
@@ -2756,18 +2823,38 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 </button>
               )}
 
-              {/* 쿠키 배틀 - 준비중 */}
-              <button
-                disabled
-                className="p-5 rounded-2xl bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
-              >
-                <div className="text-4xl mb-2">⚔️</div>
-                <h3 className="font-bold text-red-800 text-sm">쿠키 배틀</h3>
-                <p className="text-xs text-red-600 mt-1">팀 대결</p>
-                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
-                  준비중
-                </span>
-              </button>
+              {/* 쿠키 배틀 */}
+              {activeCookieBattleGame ? (
+                <button
+                  onClick={joinCookieBattleGame}
+                  disabled={isJoiningCookieBattle}
+                  className="p-5 rounded-2xl bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-400 transition-all hover:scale-[1.02] hover:shadow-lg relative overflow-hidden"
+                >
+                  <div className="absolute top-1 right-1">
+                    <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  </div>
+                  <div className="text-4xl mb-2">⚔️</div>
+                  <h3 className="font-bold text-red-800 text-sm">쿠키 배틀</h3>
+                  <p className="text-xs text-red-600 mt-1">팀 대결</p>
+                  <span className="inline-block mt-2 bg-red-500 text-white px-2 py-0.5 rounded text-xs animate-pulse">
+                    {isJoiningCookieBattle ? '참가 중...' :
+                     activeCookieBattleGame.status === 'waiting' ? '참가하기!' :
+                     `R${activeCookieBattleGame.round} 진행중`}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  disabled
+                  className="p-5 rounded-2xl bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+                >
+                  <div className="text-4xl mb-2">⚔️</div>
+                  <h3 className="font-bold text-red-800 text-sm">쿠키 배틀</h3>
+                  <p className="text-xs text-red-600 mt-1">팀 대결</p>
+                  <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                    대기중
+                  </span>
+                </button>
+              )}
 
               {/* 스피드 퀴즈 - 준비중 */}
               <button
