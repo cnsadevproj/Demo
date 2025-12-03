@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
-import { doc, onSnapshot, updateDoc, collection, getDocs, deleteDoc, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, collection, getDocs, deleteDoc, setDoc, getDoc } from 'firebase/firestore';
 
 // 밸런스 게임 질문 목록 (학생에게 적합한 내용)
 const BALANCE_QUESTIONS = [
@@ -58,6 +58,14 @@ interface PlayerData {
   survivedRounds: number;
 }
 
+interface StudentData {
+  name: string;
+  number: number;
+  code: string;
+  jelly?: number;
+  cookie?: number;
+}
+
 export function MinorityGameTeacher() {
   const params = new URLSearchParams(window.location.search);
   const gameId = params.get('gameId');
@@ -65,6 +73,61 @@ export function MinorityGameTeacher() {
   const [gameData, setGameData] = useState<GameData | null>(null);
   const [players, setPlayers] = useState<PlayerData[]>([]);
   const [countdown, setCountdown] = useState<number | null>(null);
+
+  // 학생 모달 관련 상태
+  const [selectedPlayer, setSelectedPlayer] = useState<PlayerData | null>(null);
+  const [studentData, setStudentData] = useState<StudentData | null>(null);
+  const [candyAmount, setCandyAmount] = useState('');
+  const [isAddingCandy, setIsAddingCandy] = useState(false);
+
+  // 학생 모달 열기
+  const openStudentModal = async (player: PlayerData) => {
+    if (!gameData) return;
+    setSelectedPlayer(player);
+
+    try {
+      const studentRef = doc(db, 'teachers', gameData.teacherId, 'students', player.code);
+      const studentSnap = await getDoc(studentRef);
+      if (studentSnap.exists()) {
+        setStudentData({ code: player.code, ...studentSnap.data() } as StudentData);
+      }
+    } catch (error) {
+      console.error('Failed to load student:', error);
+    }
+  };
+
+  // 학생 모달 닫기
+  const closeStudentModal = () => {
+    setSelectedPlayer(null);
+    setStudentData(null);
+    setCandyAmount('');
+  };
+
+  // 캔디 부여/차감
+  const handleAddCandy = async (directAmount?: number) => {
+    if (!gameData || !selectedPlayer || !studentData) return;
+
+    const amount = directAmount !== undefined ? directAmount : parseInt(candyAmount);
+    if (isNaN(amount) || amount === 0) return;
+
+    setIsAddingCandy(true);
+    try {
+      const studentRef = doc(db, 'teachers', gameData.teacherId, 'students', selectedPlayer.code);
+      const currentCandy = studentData.jelly ?? studentData.cookie ?? 0;
+      const newCandy = Math.max(0, currentCandy + amount);
+
+      await updateDoc(studentRef, {
+        jelly: newCandy
+      });
+
+      setStudentData(prev => prev ? { ...prev, jelly: newCandy } : null);
+      setCandyAmount('');
+    } catch (error) {
+      console.error('Failed to add candy:', error);
+      alert('캔디 부여에 실패했습니다.');
+    }
+    setIsAddingCandy(false);
+  };
 
   // 게임 데이터 구독
   useEffect(() => {
@@ -392,7 +455,8 @@ export function MinorityGameTeacher() {
             {players.map((player) => (
               <div
                 key={player.code}
-                className={`flex items-center justify-between p-3 rounded-xl ${
+                onClick={() => openStudentModal(player)}
+                className={`flex items-center justify-between p-3 rounded-xl cursor-pointer hover:ring-2 hover:ring-pink-400 transition-all ${
                   player.isAlive ? 'bg-green-50' : 'bg-gray-100'
                 }`}
               >
@@ -490,6 +554,56 @@ export function MinorityGameTeacher() {
           {gameData.status === 'finished' && <p>게임이 종료되었습니다!</p>}
         </div>
       </div>
+
+      {/* 학생 모달 */}
+      {selectedPlayer && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={closeStudentModal}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl max-w-sm w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-gray-800 text-lg">{selectedPlayer.name}</h3>
+                <p className="text-sm text-gray-500">{selectedPlayer.code}</p>
+              </div>
+              <button onClick={closeStudentModal} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+            </div>
+
+            <div className="p-4 bg-pink-50 text-center">
+              <p className="text-pink-600 font-bold text-3xl">
+                {studentData ? (studentData.jelly ?? studentData.cookie ?? 0) : '...'}
+              </p>
+              <p className="text-sm text-pink-700">🍭 캔디</p>
+            </div>
+
+            <div className="p-4">
+              <p className="text-sm font-medium text-gray-700 mb-3">🍭 캔디 부여/차감</p>
+              <div className="flex gap-2 mb-2">
+                <button onClick={() => handleAddCandy(-5)} disabled={isAddingCandy}
+                  className="flex-1 py-2 rounded-lg bg-red-100 text-red-600 font-bold hover:bg-red-200 disabled:opacity-50">-5</button>
+                <button onClick={() => handleAddCandy(-1)} disabled={isAddingCandy}
+                  className="flex-1 py-2 rounded-lg bg-red-100 text-red-600 font-bold hover:bg-red-200 disabled:opacity-50">-1</button>
+                <button onClick={() => handleAddCandy(1)} disabled={isAddingCandy}
+                  className="flex-1 py-2 rounded-lg bg-green-100 text-green-600 font-bold hover:bg-green-200 disabled:opacity-50">+1</button>
+                <button onClick={() => handleAddCandy(5)} disabled={isAddingCandy}
+                  className="flex-1 py-2 rounded-lg bg-green-100 text-green-600 font-bold hover:bg-green-200 disabled:opacity-50">+5</button>
+              </div>
+              <div className="flex gap-2">
+                <input type="number" value={candyAmount} onChange={(e) => setCandyAmount(e.target.value)}
+                  placeholder="직접 입력" className="flex-1 px-3 py-2 border-2 border-gray-200 rounded-lg text-center focus:border-pink-400 focus:outline-none"/>
+                <button onClick={() => handleAddCandy()} disabled={isAddingCandy || !candyAmount}
+                  className="px-4 py-2 rounded-lg bg-pink-500 text-white font-bold hover:bg-pink-600 disabled:opacity-50">
+                  {isAddingCandy ? '...' : '적용'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
