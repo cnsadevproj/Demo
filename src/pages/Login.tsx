@@ -136,7 +136,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="student" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsList className="grid w-full grid-cols-2 gap-2 mb-6">
                 <TabsTrigger value="student">🎒 학생</TabsTrigger>
                 <TabsTrigger value="teacher">👨‍🏫 선생님</TabsTrigger>
               </TabsList>
