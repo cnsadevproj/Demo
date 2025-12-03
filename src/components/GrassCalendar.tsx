@@ -8,19 +8,26 @@ interface GrassCalendarProps {
 }
 
 export function GrassCalendar({ data, mini = false, onDateClick }: GrassCalendarProps) {
-  // 주차별로 데이터 그룹화
+  // 주말 제외하고 주차별로 데이터 그룹화 (월~금만)
   const groupByWeeks = (grassData: GrassData[]) => {
     const weeks: GrassData[][] = [];
     let currentWeek: GrassData[] = [];
 
-    grassData.forEach((item, index) => {
-      currentWeek.push(item);
-      
+    // 주말 데이터 필터링
+    const weekdayData = grassData.filter(item => {
       const date = new Date(item.date);
       const dayOfWeek = date.getDay();
-      
-      // 일요일이거나 마지막 항목이면 주 종료
-      if (dayOfWeek === 0 || index === grassData.length - 1) {
+      return dayOfWeek >= 1 && dayOfWeek <= 5; // 월(1)~금(5)만
+    });
+
+    weekdayData.forEach((item, index) => {
+      currentWeek.push(item);
+
+      const date = new Date(item.date);
+      const dayOfWeek = date.getDay();
+
+      // 금요일이거나 마지막 항목이면 주 종료
+      if (dayOfWeek === 5 || index === weekdayData.length - 1) {
         weeks.push([...currentWeek]);
         currentWeek = [];
       }
@@ -43,23 +50,25 @@ export function GrassCalendar({ data, mini = false, onDateClick }: GrassCalendar
   const getIntensity = (item: GrassData) => {
     if (!item.completed) return 'bg-gray-200 dark:bg-gray-700';
 
-    // refreshCount 기반 색상 (2회 이상 = 진한 초록)
+    // refreshCount 기반 색상 (3단계: 1개, 2개, 3개 이상)
     if (item.refreshCount !== undefined) {
-      if (item.refreshCount >= 2) return 'bg-green-600';
-      if (item.refreshCount === 1) return 'bg-green-400';
+      if (item.refreshCount >= 3) return 'bg-green-700';
+      if (item.refreshCount === 2) return 'bg-green-500';
+      if (item.refreshCount === 1) return 'bg-green-300';
     }
 
-    // 쿠키 변화량 기반 색상 (2개 이상 = 진한 초록)
+    // 쿠키 변화량 기반 색상 (3단계: 1개, 2개, 3개 이상)
     if (item.cookieChange !== undefined) {
-      if (item.cookieChange >= 2) return 'bg-green-600';
-      if (item.cookieChange === 1) return 'bg-green-400';
+      if (item.cookieChange >= 3) return 'bg-green-700';
+      if (item.cookieChange === 2) return 'bg-green-500';
+      if (item.cookieChange === 1) return 'bg-green-300';
     }
 
     // 기존 로직: 팀 미션은 진한 초록색
     if (item.missionType === 'team') {
-      return 'bg-green-600';
+      return 'bg-green-700';
     }
-    return 'bg-green-400';
+    return 'bg-green-300';
   };
 
   if (mini) {
@@ -141,13 +150,12 @@ export function GrassCalendar({ data, mini = false, onDateClick }: GrassCalendar
 
         {/* 범례 */}
         <div className="flex items-center gap-2 text-xs text-gray-500 ml-8">
-          <span>적음</span>
           <div className="flex gap-1">
-            <div className="w-3 h-3 bg-gray-200 dark:bg-gray-700 rounded-sm" />
-            <div className="w-3 h-3 bg-green-400 rounded-sm" />
-            <div className="w-3 h-3 bg-green-600 rounded-sm" />
+            <div className="w-3 h-3 bg-gray-200 dark:bg-gray-700 rounded-sm" title="0개" />
+            <div className="w-3 h-3 bg-green-300 rounded-sm" title="1개" />
+            <div className="w-3 h-3 bg-green-500 rounded-sm" title="2개" />
+            <div className="w-3 h-3 bg-green-700 rounded-sm" title="3개+" />
           </div>
-          <span>많음</span>
         </div>
       </div>
     </div>

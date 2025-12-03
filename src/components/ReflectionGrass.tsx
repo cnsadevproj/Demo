@@ -3,6 +3,7 @@ import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { ReflectionKing, ReflectionRecord } from '../types/game';
 import { Crown, Calendar, TrendingUp, Flame, Award } from 'lucide-react';
+import { getKoreanDateString } from '../utils/dateUtils';
 
 interface ReflectionGrassProps {
   reflectionKings: ReflectionKing[];
@@ -51,27 +52,36 @@ export function ReflectionGrass({
     return data;
   }, [reflectionKings, studentCode]);
 
-  // 최근 N일 데이터 생성
+  // 최근 N일 데이터 생성 (평일만)
   const generateRecentDays = (days: number): DayData[] => {
     const result: DayData[] = [];
     const today = new Date();
+    let daysAdded = 0;
+    let daysBack = 0;
 
-    for (let i = days - 1; i >= 0; i--) {
+    // 평일만 추가 (주말 제외)
+    while (daysAdded < days) {
       const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
+      date.setDate(date.getDate() - daysBack);
+      const dayOfWeek = date.getDay();
 
-      result.push(dateData.get(dateStr) || {
-        date: dateStr,
-        count: 0,
-        students: [],
-      });
+      // 평일만 (월~금)
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        const dateStr = getKoreanDateString(date);
+        result.unshift(dateData.get(dateStr) || {
+          date: dateStr,
+          count: 0,
+          students: [],
+        });
+        daysAdded++;
+      }
+      daysBack++;
     }
 
     return result;
   };
 
-  // 주차별로 그룹화
+  // 주차별로 그룹화 (금요일 기준으로 주 종료)
   const groupByWeeks = (days: DayData[]): DayData[][] => {
     const weeks: DayData[][] = [];
     let currentWeek: DayData[] = [];
@@ -81,7 +91,8 @@ export function ReflectionGrass({
       const date = new Date(day.date);
       const dayOfWeek = date.getDay();
 
-      if (dayOfWeek === 0 || index === days.length - 1) {
+      // 금요일이거나 마지막 항목이면 주 종료
+      if (dayOfWeek === 5 || index === days.length - 1) {
         weeks.push([...currentWeek]);
         currentWeek = [];
       }
@@ -149,12 +160,30 @@ export function ReflectionGrass({
   const selectedDayData = selectedDate ? dateData.get(selectedDate) : null;
 
   if (mini) {
+    // 미니 뷰: 최근 40일(평일)을 5행으로 표시 - 오른쪽이 최신
+    const miniDays = recentDays.slice(-40);
+    const rows = 5;
+    const cols = Math.ceil(miniDays.length / rows);
+
+    // 열 단위로 재배열 (아래에서 위로, 왼쪽에서 오른쪽으로)
+    const columns: DayData[][] = [];
+    for (let c = 0; c < cols; c++) {
+      const column: DayData[] = [];
+      for (let r = 0; r < rows; r++) {
+        const index = c * rows + r;
+        if (index < miniDays.length) {
+          column.push(miniDays[index]);
+        }
+      }
+      columns.push(column);
+    }
+
     return (
       <div className="flex flex-col gap-1">
         <div className={`flex ${gap}`}>
-          {weeks.slice(-8).map((week, weekIndex) => (
-            <div key={weekIndex} className={`flex flex-col ${gap}`}>
-              {week.map((day) => (
+          {columns.map((column, colIndex) => (
+            <div key={colIndex} className={`flex flex-col ${gap}`}>
+              {column.map((day) => (
                 <div
                   key={day.date}
                   className={`${cellSize} ${getColor(day.count)} rounded-sm`}
@@ -164,7 +193,7 @@ export function ReflectionGrass({
             </div>
           ))}
         </div>
-        <p className="text-xs text-gray-500 mt-1">최근 8주 성찰 기록</p>
+        <p className="text-xs text-gray-500 mt-1">최근 {miniDays.length}일 성찰 기록</p>
       </div>
     );
   }
@@ -226,9 +255,9 @@ export function ReflectionGrass({
       )}
 
       {/* 잔디 캘린더 */}
-      <Card className="p-6">
-        <h3 className="mb-6 font-medium">성찰 기록</h3>
-        <div className="w-full overflow-x-auto">
+      <Card className="p-4 sm:p-6 overflow-hidden">
+        <h3 className="mb-4 sm:mb-6 font-medium">성찰 기록</h3>
+        <div className="w-full overflow-x-auto -mx-1 px-1">
           <div className="inline-flex flex-col gap-2 min-w-fit">
             {/* 월 라벨 */}
             <div className="flex gap-1 ml-8">

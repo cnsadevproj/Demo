@@ -7,7 +7,10 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Checkbox } from '../components/ui/checkbox';
 import { toast } from 'sonner';
+import { db } from '../services/firebase';
+import { doc, setDoc, onSnapshot, updateDoc, deleteDoc, collection, serverTimestamp, getDocs } from 'firebase/firestore';
 import {
   createClass,
   getClasses,
@@ -15,6 +18,7 @@ import {
   createStudent,
   refreshStudentCookies,
   fetchClassroomsFromDahandin,
+  fetchStudentFromDahandin,
   getGrassData,
   deleteAllStudents,
   getStudent,
@@ -35,6 +39,7 @@ import {
   getWishes,
   grantWish,
   deleteWish,
+  cleanupExpiredGrantedWishes,
   addCookiesToStudent,
   ClassInfo,
   Student,
@@ -45,9 +50,27 @@ import {
   Wish,
   updateShopItem,
   resetGrassData,
-  updateTeamCookie
+  updateTeamCookie,
+  updateTeam,
+  addGrassRecordForDate,
+  migrateGrassDateToToday,
+  updateTeacher,
+  CookieShopItem,
+  CookieShopRequest,
+  getCookieShopItems,
+  addCookieShopItem,
+  updateCookieShopItem,
+  deleteCookieShopItem,
+  getCookieShopRequests,
+  updateCookieShopRequestStatus,
+  deleteCookieShopRequest,
+  ItemSuggestion,
+  getItemSuggestions,
+  updateItemSuggestionStatus,
+  deleteItemSuggestion
 } from '../services/firestoreApi';
-import { parseXlsxFile, downloadCsvTemplate, exportStudentsToCsv } from '../utils/csv';
+import { parseXlsxFile, downloadCsvTemplate, exportStudentsToCsv, parsePastGrassXlsx, PastGrassData } from '../utils/csv';
+import { getKoreanDateString, getLastWeekdays, getLastWeekdaysWithData } from '../utils/dateUtils';
 import { TEAM_FLAGS, generateRandomTeamNameWithEmoji } from '../types/game';
 import { ALL_SHOP_ITEMS } from '../types/shop';
 
@@ -58,7 +81,7 @@ interface TeacherDashboardProps {
 }
 
 export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
-  const { user, teacher, classes, selectedClass, selectClass, refreshClasses } = useAuth();
+  const { user, teacher, classes, selectedClass, selectClass, refreshClasses, updateTeacherEmail } = useAuth();
   
   // 상태
   const [students, setStudents] = useState<Student[]>([]);
@@ -79,6 +102,21 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [viewHiddenMode, setViewHiddenMode] = useState(false);
   const [selectedForHide, setSelectedForHide] = useState<string[]>([]);
 
+  // 프로필 수정
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editSchoolName, setEditSchoolName] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // 이메일 변경
+  const [isEditingEmail, setIsEditingEmail] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [emailPassword, setEmailPassword] = useState('');
+  const [isChangingEmail, setIsChangingEmail] = useState(false);
+
+  // 전체 동기화
+  const [isSyncing, setIsSyncing] = useState(false);
+
   // 학급 선택 시 학생 목록 로드
   useEffect(() => {
     if (selectedClass && user) {
@@ -86,10 +124,41 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     }
   }, [selectedClass, user]);
 
+  // 로그인 시 모든 학급 자동 새로고침 (최초 1회)
+  const [hasAutoRefreshed, setHasAutoRefreshed] = useState(false);
+  useEffect(() => {
+    const autoRefreshAllClasses = async () => {
+      if (!user || !teacher || !classes || classes.length === 0 || hasAutoRefreshed) return;
+
+      setHasAutoRefreshed(true);
+      console.log('🔄 자동 새로고침 시작...');
+
+      let totalRefreshed = 0;
+      for (const classInfo of classes) {
+        try {
+          const result = await refreshStudentCookies(user.uid, classInfo.id, teacher.dahandinApiKey);
+          totalRefreshed += result.count;
+        } catch (error) {
+          console.error(`Failed to auto-refresh class ${classInfo.name}:`, error);
+        }
+      }
+
+      if (totalRefreshed > 0) {
+        console.log(`✅ ${totalRefreshed}명의 학생 정보 자동 새로고침 완료`);
+        // 현재 선택된 학급이 있으면 학생 목록도 새로고침
+        if (selectedClass) {
+          await loadStudents();
+        }
+      }
+    };
+
+    autoRefreshAllClasses();
+  }, [user, teacher, classes, hasAutoRefreshed]);
+
   // 학생 목록 로드
   const loadStudents = async () => {
     if (!user || !selectedClass) return;
-    
+
     setIsLoadingStudents(true);
     try {
       const studentsData = await getClassStudents(user.uid, selectedClass);
@@ -99,6 +168,128 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       toast.error('학생 목록을 불러오는데 실패했습니다.');
     }
     setIsLoadingStudents(false);
+  };
+
+  // 전체 동기화 (학생 정보, 상점 요청, 물품 요청 등 모든 데이터)
+  const handleSync = async () => {
+    if (!user || !teacher) return;
+
+    setIsSyncing(true);
+    try {
+      // 학급 목록 새로고침
+      await refreshClasses();
+
+      // 현재 선택된 학급이 있으면 학생 정보 새로고침
+      if (selectedClass) {
+        // 다했니 연동 학생 정보 새로고침
+        await refreshStudentCookies(user.uid, selectedClass, teacher.dahandinApiKey);
+
+        // 학생 목록 다시 로드
+        const studentsData = await getClassStudents(user.uid, selectedClass);
+        setStudents(studentsData);
+
+        // 쿠키 상점 요청 새로고침
+        const requests = await getCookieShopRequests(user.uid);
+        setCookieShopRequests(requests);
+
+        // 물품 요청 현황 새로고침
+        const suggestions = await getItemSuggestions(user.uid);
+        setItemSuggestions(suggestions);
+
+        // 팀 정보 새로고침
+        const teamsData = await getTeams(user.uid, selectedClass);
+        setTeams(teamsData);
+      }
+
+      toast.success('모든 데이터를 동기화했습니다! 🔄');
+    } catch (error) {
+      console.error('Failed to sync data:', error);
+      toast.error('동기화에 실패했습니다.');
+    }
+    setIsSyncing(false);
+  };
+
+  // 프로필 수정 시작
+  const startEditingProfile = () => {
+    setEditName(teacher?.name || '');
+    setEditSchoolName(teacher?.schoolName || '');
+    setIsEditingProfile(true);
+  };
+
+  // 프로필 저장
+  const saveProfile = async () => {
+    if (!user) return;
+
+    if (!editName.trim()) {
+      toast.error('이름을 입력해주세요.');
+      return;
+    }
+
+    setIsSavingProfile(true);
+    try {
+      await updateTeacher(user.uid, {
+        name: editName.trim(),
+        schoolName: editSchoolName.trim()
+      });
+      toast.success('프로필이 수정되었습니다.');
+      setIsEditingProfile(false);
+      // AuthContext에서 teacher 정보 갱신을 위해 페이지 새로고침
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+      toast.error('프로필 수정에 실패했습니다.');
+    }
+    setIsSavingProfile(false);
+  };
+
+  // 프로필 수정 취소
+  const cancelEditingProfile = () => {
+    setIsEditingProfile(false);
+    setEditName('');
+    setEditSchoolName('');
+  };
+
+  // 이메일 변경 시작
+  const startEditingEmail = () => {
+    setNewEmail(teacher?.email || '');
+    setEmailPassword('');
+    setIsEditingEmail(true);
+  };
+
+  // 이메일 변경 저장
+  const handleChangeEmail = async () => {
+    if (!newEmail.trim()) {
+      toast.error('새 이메일을 입력해주세요.');
+      return;
+    }
+    if (!emailPassword) {
+      toast.error('현재 비밀번호를 입력해주세요.');
+      return;
+    }
+    if (newEmail === teacher?.email) {
+      toast.error('현재와 동일한 이메일입니다.');
+      return;
+    }
+
+    setIsChangingEmail(true);
+    const result = await updateTeacherEmail(newEmail.trim(), emailPassword);
+
+    if (result.success) {
+      toast.success(result.message);
+      setIsEditingEmail(false);
+      setNewEmail('');
+      setEmailPassword('');
+    } else {
+      toast.error(result.message);
+    }
+    setIsChangingEmail(false);
+  };
+
+  // 이메일 변경 취소
+  const cancelEditingEmail = () => {
+    setIsEditingEmail(false);
+    setNewEmail('');
+    setEmailPassword('');
   };
 
   // 애니메이션 스타일 클래스
@@ -117,6 +308,192 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       'snow': 'animate-snow',
     };
     return animMap[value] || '';
+  };
+
+  // 이모지 코드에서 이모지 가져오기
+  const getEmojiFromCode = (code: string | undefined): string => {
+    if (!code) return '';
+    // 코드 형식(emoji_XX)인 경우 아이템에서 조회
+    if (code.startsWith('emoji_')) {
+      const item = ALL_SHOP_ITEMS.find(i => i.code === code);
+      return item?.value || '';
+    }
+    // 이미 이모지 값인 경우 그대로 반환
+    return code;
+  };
+
+  // 테두리 색상값 (inline style용) - 파스텔톤
+  const getBorderColor = (value: string | undefined): string => {
+    if (!value) return 'rgb(209 213 219)'; // gray-300
+    const colorMap: Record<string, string> = {
+      'gray-300': 'rgb(209 213 219)',
+      'gray-800': 'rgb(31 41 55)',
+      'border-blue-500': 'rgb(147 197 253)',      // 파스텔 블루
+      'border-red-500': 'rgb(252 165 165)',       // 파스텔 레드
+      'border-green-500': 'rgb(134 239 172)',     // 파스텔 그린
+      'border-yellow-500': 'rgb(253 224 71)',     // 파스텔 옐로우
+      'border-purple-500': 'rgb(196 181 253)',    // 파스텔 퍼플
+      'border-pink-500': 'rgb(249 168 212)',      // 파스텔 핑크
+      'border-amber-400': 'rgb(252 211 77)',      // 파스텔 앰버
+      'border-gray-800': 'rgb(31 41 55)',
+      'border-orange-500': 'rgb(253 186 116)',    // 파스텔 오렌지
+      'border-cyan-500': 'rgb(103 232 249)',      // 파스텔 시안
+      'border-teal-500': 'rgb(94 234 212)',       // 파스텔 틸
+      'border-indigo-500': 'rgb(165 180 252)',    // 파스텔 인디고
+      // 색상 이름 직접 지원
+      'blue': 'rgb(147 197 253)',
+      'red': 'rgb(252 165 165)',
+      'green': 'rgb(134 239 172)',
+      'yellow': 'rgb(253 224 71)',
+      'purple': 'rgb(196 181 253)',
+      'pink': 'rgb(249 168 212)',
+      'amber': 'rgb(252 211 77)',
+      'orange': 'rgb(253 186 116)',
+    };
+    return colorMap[value] || 'rgb(209 213 219)';
+  };
+
+  // 배경 색상값 (inline style용) - 파스텔톤
+  const getFillColor = (value: string | undefined): string => {
+    if (!value || value === 'none') return 'transparent';
+    const colorMap: Record<string, string> = {
+      'none': 'transparent',
+      'transparent': 'transparent',
+      'white': 'rgb(255 255 255)',
+      'bg-blue-500': 'rgb(191 219 254)',          // 파스텔 블루
+      'bg-red-500': 'rgb(254 202 202)',           // 파스텔 레드
+      'bg-green-500': 'rgb(187 247 208)',         // 파스텔 그린
+      'bg-green-200': 'rgb(187 247 208)',
+      'bg-green-300': 'rgb(134 239 172)',
+      'bg-yellow-500': 'rgb(254 240 138)',        // 파스텔 옐로우
+      'bg-purple-500': 'rgb(221 214 254)',        // 파스텔 퍼플
+      'bg-pink-500': 'rgb(251 207 232)',          // 파스텔 핑크
+      'bg-amber-400': 'rgb(253 230 138)',         // 파스텔 앰버
+      'bg-gray-800': 'rgb(31 41 55)',
+      'bg-orange-500': 'rgb(254 215 170)',        // 파스텔 오렌지
+      'bg-cyan-500': 'rgb(165 243 252)',          // 파스텔 시안
+      'bg-teal-500': 'rgb(153 246 228)',          // 파스텔 틸
+      'bg-indigo-500': 'rgb(199 210 254)',        // 파스텔 인디고
+      // 색상 이름 직접 지원
+      'blue': 'rgb(191 219 254)',
+      'red': 'rgb(254 202 202)',
+      'green': 'rgb(187 247 208)',
+      'light-green': 'rgb(220 252 231)',
+      'yellow': 'rgb(254 240 138)',
+      'purple': 'rgb(221 214 254)',
+      'pink': 'rgb(251 207 232)',
+      'amber': 'rgb(253 230 138)',
+      'orange': 'rgb(254 215 170)',
+    };
+    return colorMap[value] || 'transparent';
+  };
+
+  // 그라데이션 여부 확인
+  const isGradientFill = (value: string | undefined): boolean => {
+    if (!value) return false;
+    return value.startsWith('gradient-') || value === 'bg-gradient-to-r from-pink-500 to-purple-500';
+  };
+
+  // 그라데이션 CSS 값 가져오기 - 파스텔톤
+  const getGradientStyle = (value: string | undefined): string => {
+    const gradientMap: Record<string, string> = {
+      // 부드러운 파스텔 그라데이션
+      'gradient-rainbow': 'linear-gradient(to right, rgb(254 202 202), rgb(254 240 138), rgb(187 247 208), rgb(191 219 254), rgb(221 214 254))',
+      'gradient-fire': 'linear-gradient(to right, rgb(254 202 202), rgb(254 215 170), rgb(254 240 138))',
+      'gradient-ocean': 'linear-gradient(to right, rgb(165 243 252), rgb(191 219 254), rgb(199 210 254))',
+      'gradient-sunset': 'linear-gradient(to right, rgb(254 215 170), rgb(251 207 232), rgb(221 214 254))',
+      'gradient-aurora': 'linear-gradient(to right, rgb(187 247 208), rgb(165 243 252), rgb(221 214 254))',
+      'gradient-pink-purple': 'linear-gradient(to right, rgb(251 207 232), rgb(221 214 254))',
+      'gradient-mint': 'linear-gradient(to right, rgb(165 243 252), rgb(153 246 228))',
+      'gradient-orange': 'linear-gradient(to right, rgb(254 240 138), rgb(254 215 170))',
+      // 추가 파스텔 그라데이션
+      'gradient-cotton-candy': 'linear-gradient(to right, rgb(251 207 232), rgb(191 219 254))',
+      'gradient-peach': 'linear-gradient(to right, rgb(254 215 170), rgb(251 207 232))',
+      'gradient-lavender': 'linear-gradient(to right, rgb(221 214 254), rgb(251 207 232))',
+      'gradient-spring': 'linear-gradient(to right, rgb(187 247 208), rgb(254 240 138))',
+      'gradient-sky': 'linear-gradient(to right, rgb(191 219 254), rgb(165 243 252))',
+      'bg-gradient-to-r from-pink-500 to-purple-500': 'linear-gradient(to right, rgb(251 207 232), rgb(221 214 254))',
+    };
+    return gradientMap[value || ''] || '';
+  };
+
+  // 이름 효과 스타일 클래스
+  const getNameEffectClass = (value: string | undefined) => {
+    if (!value) return '';
+    const effectMap: Record<string, string> = {
+      'none': '',
+      'gradient-rainbow': 'block bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 bg-clip-text text-transparent',
+      'gradient-fire': 'block bg-gradient-to-r from-orange-500 via-red-500 to-yellow-500 bg-clip-text text-transparent',
+      'gradient-ocean': 'block bg-gradient-to-r from-blue-400 via-cyan-500 to-teal-500 bg-clip-text text-transparent',
+      'gradient-gold': 'block bg-gradient-to-r from-yellow-400 via-amber-500 to-yellow-600 bg-clip-text text-transparent',
+      'glow-blue': 'text-blue-500 drop-shadow-lg',
+      'glow-pink': 'text-pink-500 drop-shadow-lg',
+      'glow-gold': 'text-amber-500 drop-shadow-lg',
+      'shadow': 'text-gray-800 drop-shadow-md',
+    };
+    return effectMap[value] || '';
+  };
+
+  // 칭호 색상 스타일
+  const getTitleColorClass = (value: string | undefined) => {
+    if (!value) return 'text-gray-600';
+    const colorMap: Record<string, string> = {
+      '0': 'text-red-500',
+      '1': 'text-orange-500',
+      '2': 'text-yellow-500',
+      '3': 'text-green-500',
+      '4': 'text-blue-500',
+      '5': 'text-purple-500',
+      '6': 'text-pink-500',
+      '7': 'text-gray-800',
+      '8': 'text-amber-600',
+      '9': 'block bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 bg-clip-text text-transparent',
+    };
+    return colorMap[value] || 'text-gray-600';
+  };
+
+  // 배경 스타일 클래스
+  const getBackgroundClass = (value: string | undefined) => {
+    if (!value) return 'bg-transparent';
+    const bgMap: Record<string, string> = {
+      'none': 'bg-transparent',
+      'dots': 'bg-pattern-dots',
+      'stripes': 'bg-pattern-stripes',
+      'waves': 'bg-pattern-waves',
+      'hearts': 'bg-pattern-hearts',
+      'stars': 'bg-pattern-stars',
+      'gradient-soft': 'bg-gradient-to-br from-pink-50 to-blue-50',
+      'gradient-vivid': 'bg-gradient-to-br from-purple-100 to-pink-100',
+      'gradient-mint': 'bg-gradient-to-br from-green-50 to-cyan-50',
+      'gradient-sunset': 'bg-gradient-to-br from-orange-50 to-pink-50',
+      'gradient-lavender': 'bg-gradient-to-br from-purple-50 to-indigo-50',
+    };
+    return bgMap[value] || 'bg-transparent';
+  };
+
+  // 잔디 색상
+  const getGrassColor = (cookieChange: number) => {
+    if (cookieChange === 0) return 'bg-gray-200';
+    if (cookieChange === 1) return 'bg-green-300';
+    if (cookieChange === 2) return 'bg-green-500';
+    return 'bg-green-700';
+  };
+
+  // 프로필 학생 선택 및 잔디 데이터 로드
+  const handleSelectProfileStudent = async (student: Student) => {
+    setSelectedProfileStudent(student);
+    setProfileStudentGrass([]);
+
+    if (!user || !selectedClass) return;
+
+    setIsLoadingProfileGrass(true);
+    try {
+      const grass = await getGrassData(user.uid, selectedClass, student.code);
+      setProfileStudentGrass(grass.map(g => ({ date: g.date, cookieChange: g.cookieChange, count: g.count || 1 })));
+    } catch (error) {
+      console.error('Failed to load profile student grass:', error);
+    }
+    setIsLoadingProfileGrass(false);
   };
 
   // 다했니 API에서 학급 가져오기
@@ -232,14 +609,27 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [grassData, setGrassData] = useState<Array<{ date: string; studentCode: string; cookieChange: number; count: number }>>([]);
   const [isLoadingGrass, setIsLoadingGrass] = useState(false);
   const [isResettingGrass, setIsResettingGrass] = useState(false);
+  const [isUploadingPastGrass, setIsUploadingPastGrass] = useState(false);
+  const [pastGrassYear, setPastGrassYear] = useState(new Date().getFullYear());
 
   // 학생 상세 모달
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [studentGrassData, setStudentGrassData] = useState<Array<{ date: string; cookieChange: number; count: number }>>([]);
 
-  // 쿠키 부여
+  // 프로필 확인 모달
+  const [selectedProfileStudent, setSelectedProfileStudent] = useState<Student | null>(null);
+  const [profileStudentGrass, setProfileStudentGrass] = useState<Array<{ date: string; cookieChange: number; count: number }>>([]);
+  const [isLoadingProfileGrass, setIsLoadingProfileGrass] = useState(false);
+
+  // 캔디 부여
   const [cookieAmount, setCookieAmount] = useState('');
   const [isAddingCookie, setIsAddingCookie] = useState(false);
+
+  // 전체 캔디 부여
+  const [selectedForCookie, setSelectedForCookie] = useState<string[]>([]);
+  const [bulkCookieAmount, setBulkCookieAmount] = useState('');
+  const [isAddingBulkCookie, setIsAddingBulkCookie] = useState(false);
+  const [showBulkCookieMode, setShowBulkCookieMode] = useState(false);
 
   // 상점 상태
   const [shopItems, setShopItems] = useState<ShopItem[]>([]);
@@ -253,12 +643,39 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [newItemDescription, setNewItemDescription] = useState('');
   const [shopCategoryFilter, setShopCategoryFilter] = useState<string>('all');
 
+  // 상점 모드 (캔디/쿠키)
+  const [shopMode, setShopMode] = useState<'candy' | 'cookie'>('candy');
+
+  // 쿠키 상점 상태
+  const [cookieShopItems, setCookieShopItems] = useState<CookieShopItem[]>([]);
+  const [cookieShopRequests, setCookieShopRequests] = useState<CookieShopRequest[]>([]);
+  const [isLoadingCookieShop, setIsLoadingCookieShop] = useState(false);
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+  const [newCookieItemName, setNewCookieItemName] = useState('');
+  const [newCookieItemPrice, setNewCookieItemPrice] = useState('');
+  const [newCookieItemDescription, setNewCookieItemDescription] = useState('');
+  const [showCookieRequestModal, setShowCookieRequestModal] = useState(false);
+  const [selectedCookieRequest, setSelectedCookieRequest] = useState<CookieShopRequest | null>(null);
+  const [teacherResponse, setTeacherResponse] = useState('');
+
+  // 물품 요청 (학생 → 교사) 상태
+  const [itemSuggestions, setItemSuggestions] = useState<ItemSuggestion[]>([]);
+  const [showItemSuggestionsModal, setShowItemSuggestionsModal] = useState(false);
+  const [selectedItemSuggestion, setSelectedItemSuggestion] = useState<ItemSuggestion | null>(null);
+  const [suggestionResponseMessage, setSuggestionResponseMessage] = useState('');
+
   // 팀 상태
   const [teams, setTeams] = useState<Team[]>([]);
   const [isLoadingTeams, setIsLoadingTeams] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamFlag, setNewTeamFlag] = useState(TEAM_FLAGS[0]);
   const [selectedTeamForMember, setSelectedTeamForMember] = useState<string | null>(null);
+  const [showTeamMemberModal, setShowTeamMemberModal] = useState(false);
+  const [teamForMemberModal, setTeamForMemberModal] = useState<string | null>(null);
+  const [membersToAdd, setMembersToAdd] = useState<string[]>([]);
+  const [membersToRemove, setMembersToRemove] = useState<string[]>([]);
+  const [editingTeamName, setEditingTeamName] = useState('');
+  const [editingTeamFlag, setEditingTeamFlag] = useState('');
   const [swapStudent1, setSwapStudent1] = useState<{ code: string; teamId: string } | null>(null);
   const [swapStudent2, setSwapStudent2] = useState<{ code: string; teamId: string } | null>(null);
 
@@ -276,33 +693,601 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [wishSortOrder, setWishSortOrder] = useState<'latest' | 'likes'>('latest');
   const [grantingWish, setGrantingWish] = useState<Wish | null>(null);
   const [grantMessage, setGrantMessage] = useState('');
+  const [wishPage, setWishPage] = useState(1);
+  const WISHES_PER_PAGE = 20;
 
   // 팀 현황 상태
   const [teamStatusData, setTeamStatusData] = useState<Map<string, Array<{ date: string; cookieChange: number; count: number }>>>(new Map());
   const [isLoadingTeamStatus, setIsLoadingTeamStatus] = useState(false);
 
-  const handleAddStudent = async () => {
+  // 숫자야구 게임 상태
+  interface BaseballGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    digits: 4 | 5;
+    answer: string;
+    status: 'waiting' | 'playing' | 'finished';
+    createdAt: any;
+    completedCount: number;
+    className?: string;
+  }
+
+  interface BaseballPlayer {
+    code: string;
+    name: string;
+    joinedAt: any;
+    solvedAt: any | null;
+    rank: number | null;
+    attempts: number;
+  }
+
+  const [baseballGame, setBaseballGame] = useState<BaseballGame | null>(null);
+  const [baseballPlayers, setBaseballPlayers] = useState<BaseballPlayer[]>([]);
+  const [baseballDigits, setBaseballDigits] = useState<4 | 5>(4);
+  const [baseballEntryFee, setBaseballEntryFee] = useState(0); // 참가비
+  const [isCreatingGame, setIsCreatingGame] = useState(false);
+  const [showBaseballAnswer, setShowBaseballAnswer] = useState(false); // 정답 표시 토글
+
+  // 소수결게임 상태
+  interface MinorityGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    status: 'waiting' | 'question' | 'result' | 'finished';
+    currentRound: number;
+    className?: string;
+    createdAt: any;
+  }
+
+  const [minorityGame, setMinorityGame] = useState<MinorityGame | null>(null);
+  const [isCreatingMinorityGame, setIsCreatingMinorityGame] = useState(false);
+  const [minorityEntryFee, setMinorityEntryFee] = useState(0); // 소수결 참가비
+
+  // 소수결게임 생성
+  const createMinorityGame = async () => {
     if (!user || !selectedClass) {
       toast.error('학급을 먼저 선택해주세요.');
       return;
     }
-    
+
+    setIsCreatingMinorityGame(true);
+    try {
+      const gameId = `minority_${user.uid}_${Date.now()}`;
+      const currentClassName = classes?.find(c => c.id === selectedClass)?.name || '';
+
+      const gameData = {
+        teacherId: user.uid,
+        classId: selectedClass,
+        status: 'waiting' as const,
+        currentRound: 0,
+        currentQuestion: null,
+        usedQuestions: [],
+        createdAt: serverTimestamp(),
+        className: currentClassName,
+        entryFee: minorityEntryFee // 참가비
+      };
+
+      await setDoc(doc(db, 'games', gameId), gameData);
+
+      // 교사용 게임 관리 창 열기
+      const teacherGameUrl = `${window.location.origin}?game=minority-teacher&gameId=${gameId}`;
+      window.open(teacherGameUrl, '_blank', 'width=800,height=900');
+
+      toast.success('소수결게임이 생성되었습니다!');
+    } catch (error) {
+      console.error('Failed to create minority game:', error);
+      toast.error('게임 생성에 실패했습니다.');
+    }
+    setIsCreatingMinorityGame(false);
+  };
+
+  // 소수결게임 삭제
+  const deleteMinorityGame = async () => {
+    if (!minorityGame) return;
+
+    if (!confirm('정말 게임을 삭제하시겠습니까?')) return;
+
+    try {
+      // 플레이어 데이터 삭제
+      const playersRef = collection(db, 'games', minorityGame.id, 'players');
+      const playersSnap = await getDocs(playersRef);
+      for (const playerDoc of playersSnap.docs) {
+        await deleteDoc(playerDoc.ref);
+      }
+
+      // 게임 삭제
+      await deleteDoc(doc(db, 'games', minorityGame.id));
+      setMinorityGame(null);
+      toast.success('게임이 삭제되었습니다.');
+    } catch (error) {
+      console.error('Failed to delete game:', error);
+      toast.error('게임 삭제에 실패했습니다.');
+    }
+  };
+
+  // 소수결게임 구독 (활성 게임 찾기)
+  useEffect(() => {
+    if (!user || !selectedClass) {
+      setMinorityGame(null);
+      return;
+    }
+
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: MinorityGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.teacherId === user.uid &&
+            data.classId === selectedClass &&
+            data.status !== 'finished' &&
+            docSnap.id.startsWith('minority_')) {
+          activeGame = { id: docSnap.id, ...data } as MinorityGame;
+        }
+      });
+
+      setMinorityGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [user, selectedClass]);
+
+  // 총알피하기 상태
+  interface BulletDodgeGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    status: 'waiting' | 'playing' | 'finished';
+    className?: string;
+    createdAt: any;
+  }
+
+  const [bulletDodgeGame, setBulletDodgeGame] = useState<BulletDodgeGame | null>(null);
+  const [isCreatingBulletDodge, setIsCreatingBulletDodge] = useState(false);
+  const [bulletDodgeEntryFee, setBulletDodgeEntryFee] = useState(0); // 총알피하기 참가비
+
+  // 가위바위보 상태
+  type RPSGameMode = 'survivor' | 'candy15' | 'candy12';
+  interface RPSGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    status: 'waiting' | 'selecting' | 'result' | 'finished';
+    gameMode: RPSGameMode;
+    round: number;
+    className?: string;
+    createdAt: any;
+  }
+
+  const [rpsGame, setRpsGame] = useState<RPSGame | null>(null);
+  const [isCreatingRps, setIsCreatingRps] = useState(false);
+  const [selectedRpsMode, setSelectedRpsMode] = useState<RPSGameMode>('survivor');
+  const [rpsEntryFee, setRpsEntryFee] = useState(0); // 가위바위보 참가비
+
+  // 총알피하기 게임 생성
+  const createBulletDodgeGame = async () => {
+    if (!user || !selectedClass) {
+      toast.error('학급을 먼저 선택해주세요.');
+      return;
+    }
+
+    setIsCreatingBulletDodge(true);
+    try {
+      const gameId = `bulletdodge_${user.uid}_${Date.now()}`;
+      const currentClassName = classes?.find(c => c.id === selectedClass)?.name || '';
+
+      const gameData = {
+        teacherId: user.uid,
+        classId: selectedClass,
+        status: 'waiting' as const,
+        createdAt: serverTimestamp(),
+        className: currentClassName,
+        entryFee: bulletDodgeEntryFee // 참가비
+      };
+
+      await setDoc(doc(db, 'games', gameId), gameData);
+
+      // 교사용 게임 관리 창 열기
+      const teacherGameUrl = `${window.location.origin}?game=bullet-dodge-teacher&gameId=${gameId}`;
+      window.open(teacherGameUrl, '_blank', 'width=800,height=900');
+
+      toast.success('총알피하기 게임이 생성되었습니다!');
+    } catch (error) {
+      console.error('Failed to create bullet dodge game:', error);
+      toast.error('게임 생성에 실패했습니다.');
+    }
+    setIsCreatingBulletDodge(false);
+  };
+
+  // 총알피하기 삭제
+  const deleteBulletDodgeGame = async () => {
+    if (!bulletDodgeGame) return;
+
+    if (!confirm('정말 게임을 삭제하시겠습니까?')) return;
+
+    try {
+      const playersRef = collection(db, 'games', bulletDodgeGame.id, 'players');
+      const playersSnap = await getDocs(playersRef);
+      for (const playerDoc of playersSnap.docs) {
+        await deleteDoc(playerDoc.ref);
+      }
+
+      await deleteDoc(doc(db, 'games', bulletDodgeGame.id));
+      setBulletDodgeGame(null);
+      toast.success('게임이 삭제되었습니다.');
+    } catch (error) {
+      console.error('Failed to delete game:', error);
+      toast.error('게임 삭제에 실패했습니다.');
+    }
+  };
+
+  // 총알피하기 구독
+  useEffect(() => {
+    if (!user || !selectedClass) {
+      setBulletDodgeGame(null);
+      return;
+    }
+
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: BulletDodgeGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.teacherId === user.uid &&
+            data.classId === selectedClass &&
+            data.status !== 'finished' &&
+            docSnap.id.startsWith('bulletdodge_')) {
+          activeGame = { id: docSnap.id, ...data } as BulletDodgeGame;
+        }
+      });
+
+      setBulletDodgeGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [user, selectedClass]);
+
+  // 가위바위보 게임 생성
+  const createRpsGame = async () => {
+    if (!user || !selectedClass) {
+      toast.error('학급을 먼저 선택해주세요.');
+      return;
+    }
+
+    setIsCreatingRps(true);
+    try {
+      const gameId = `rps_${user.uid}_${Date.now()}`;
+      const currentClassName = classes?.find(c => c.id === selectedClass)?.name || '';
+
+      const gameData = {
+        teacherId: user.uid,
+        classId: selectedClass,
+        status: 'waiting' as const,
+        gameMode: selectedRpsMode,
+        teacherChoice: null,
+        round: 0,
+        showResult: false,
+        createdAt: serverTimestamp(),
+        className: currentClassName,
+        entryFee: rpsEntryFee // 참가비
+      };
+
+      await setDoc(doc(db, 'games', gameId), gameData);
+
+      // 교사용 게임 관리 창 열기
+      const teacherGameUrl = `${window.location.origin}?game=rps-teacher&gameId=${gameId}`;
+      window.open(teacherGameUrl, '_blank', 'width=800,height=900');
+
+      toast.success('가위바위보 게임이 생성되었습니다!');
+    } catch (error) {
+      console.error('Failed to create RPS game:', error);
+      toast.error('게임 생성에 실패했습니다.');
+    }
+    setIsCreatingRps(false);
+  };
+
+  // 가위바위보 삭제
+  const deleteRpsGame = async () => {
+    if (!rpsGame) return;
+
+    if (!confirm('정말 게임을 삭제하시겠습니까?')) return;
+
+    try {
+      const playersRef = collection(db, 'games', rpsGame.id, 'players');
+      const playersSnap = await getDocs(playersRef);
+      for (const playerDoc of playersSnap.docs) {
+        await deleteDoc(playerDoc.ref);
+      }
+
+      await deleteDoc(doc(db, 'games', rpsGame.id));
+      setRpsGame(null);
+      toast.success('게임이 삭제되었습니다.');
+    } catch (error) {
+      console.error('Failed to delete game:', error);
+      toast.error('게임 삭제에 실패했습니다.');
+    }
+  };
+
+  // 가위바위보 구독
+  useEffect(() => {
+    if (!user || !selectedClass) {
+      setRpsGame(null);
+      return;
+    }
+
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: RPSGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.teacherId === user.uid &&
+            data.classId === selectedClass &&
+            data.status !== 'finished' &&
+            docSnap.id.startsWith('rps_')) {
+          activeGame = { id: docSnap.id, ...data } as RPSGame;
+        }
+      });
+
+      setRpsGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [user, selectedClass]);
+
+  // 모든 클래스의 모든 게임 닫기
+  const closeAllGames = async () => {
+    if (!user) return;
+
+    if (!confirm('정말 모든 클래스의 모든 게임을 닫으시겠습니까?\n(숫자야구, 소수결, 총알피하기, 가위바위보 게임이 모두 삭제됩니다)')) return;
+
+    try {
+      const gamesRef = collection(db, 'games');
+      const snapshot = await getDocs(gamesRef);
+
+      let deletedCount = 0;
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        // 이 교사가 만든 게임만 삭제
+        if (data.teacherId === user.uid) {
+          // 플레이어 데이터 삭제
+          const playersRef = collection(db, 'games', docSnap.id, 'players');
+          const playersSnap = await getDocs(playersRef);
+          for (const playerDoc of playersSnap.docs) {
+            await deleteDoc(playerDoc.ref);
+          }
+
+          // 라운드 데이터 삭제 (소수결게임용)
+          if (docSnap.id.startsWith('minority_')) {
+            const roundsRef = collection(db, 'games', docSnap.id, 'rounds');
+            const roundsSnap = await getDocs(roundsRef);
+            for (const roundDoc of roundsSnap.docs) {
+              await deleteDoc(roundDoc.ref);
+            }
+          }
+
+          // 게임 삭제
+          await deleteDoc(docSnap.ref);
+          deletedCount++;
+        }
+      }
+
+      if (deletedCount > 0) {
+        toast.success(`${deletedCount}개의 게임이 삭제되었습니다.`);
+      } else {
+        toast.info('삭제할 게임이 없습니다.');
+      }
+
+      // 상태 초기화
+      setBaseballGame(null);
+      setMinorityGame(null);
+      setBulletDodgeGame(null);
+      setRpsGame(null);
+    } catch (error) {
+      console.error('Failed to close all games:', error);
+      toast.error('게임 닫기에 실패했습니다.');
+    }
+  };
+
+  // 숫자야구 게임 생성
+  const generateNonRepeatingNumber = (digits: number): string => {
+    const available = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    let result = '';
+
+    // 첫 자리는 0이 아니어야 함
+    const firstIndex = Math.floor(Math.random() * 9) + 1;
+    result += available[firstIndex];
+    available.splice(firstIndex, 1);
+
+    // 나머지 자리
+    for (let i = 1; i < digits; i++) {
+      const index = Math.floor(Math.random() * available.length);
+      result += available[index];
+      available.splice(index, 1);
+    }
+
+    return result;
+  };
+
+  const createBaseballGame = async () => {
+    if (!user || !selectedClass) {
+      toast.error('학급을 먼저 선택해주세요.');
+      return;
+    }
+
+    setIsCreatingGame(true);
+    try {
+      const gameId = `baseball_${user.uid}_${Date.now()}`;
+      const answer = generateNonRepeatingNumber(baseballDigits);
+      const currentClassName = classes?.find(c => c.id === selectedClass)?.name || '';
+
+      const gameData = {
+        teacherId: user.uid,
+        classId: selectedClass,
+        digits: baseballDigits,
+        answer,
+        status: 'waiting' as const,
+        createdAt: serverTimestamp(),
+        completedCount: 0,
+        className: currentClassName,
+        entryFee: baseballEntryFee // 참가비
+      };
+
+      await setDoc(doc(db, 'games', gameId), gameData);
+
+      // 교사용 게임 관리 창 열기
+      const teacherGameUrl = `${window.location.origin}?game=baseball-teacher&gameId=${gameId}`;
+      window.open(teacherGameUrl, '_blank', 'width=800,height=900');
+
+      toast.success(`${baseballDigits}자리 숫자야구 게임이 생성되었습니다!`);
+    } catch (error) {
+      console.error('Failed to create baseball game:', error);
+      toast.error('게임 생성에 실패했습니다.');
+    }
+    setIsCreatingGame(false);
+  };
+
+  const startBaseballGame = async () => {
+    if (!baseballGame) return;
+
+    try {
+      await updateDoc(doc(db, 'games', baseballGame.id), {
+        status: 'playing'
+      });
+      toast.success('게임이 시작되었습니다!');
+    } catch (error) {
+      console.error('Failed to start game:', error);
+      toast.error('게임 시작에 실패했습니다.');
+    }
+  };
+
+  const endBaseballGame = async () => {
+    if (!baseballGame) return;
+
+    try {
+      await updateDoc(doc(db, 'games', baseballGame.id), {
+        status: 'finished'
+      });
+      toast.success('게임이 종료되었습니다!');
+    } catch (error) {
+      console.error('Failed to end game:', error);
+      toast.error('게임 종료에 실패했습니다.');
+    }
+  };
+
+  const deleteBaseballGame = async () => {
+    if (!baseballGame) return;
+
+    if (!confirm('정말 게임을 삭제하시겠습니까?')) return;
+
+    try {
+      // 플레이어 데이터 삭제
+      const playersRef = collection(db, 'games', baseballGame.id, 'players');
+      const playersSnap = await getDocs(playersRef);
+      for (const playerDoc of playersSnap.docs) {
+        await deleteDoc(playerDoc.ref);
+      }
+
+      // 게임 삭제
+      await deleteDoc(doc(db, 'games', baseballGame.id));
+      setBaseballGame(null);
+      setBaseballPlayers([]);
+      toast.success('게임이 삭제되었습니다.');
+    } catch (error) {
+      console.error('Failed to delete game:', error);
+      toast.error('게임 삭제에 실패했습니다.');
+    }
+  };
+
+  // 숫자야구 게임 구독 (활성 게임 찾기)
+  useEffect(() => {
+    if (!user || !selectedClass) {
+      setBaseballGame(null);
+      setBaseballPlayers([]);
+      return;
+    }
+
+    // 현재 선택된 학급의 활성 게임 찾기
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: BaseballGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.teacherId === user.uid &&
+            data.classId === selectedClass &&
+            data.status !== 'finished') {
+          activeGame = { id: docSnap.id, ...data } as BaseballGame;
+        }
+      });
+
+      setBaseballGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [user, selectedClass]);
+
+  // 숫자야구 플레이어 구독
+  useEffect(() => {
+    if (!baseballGame) {
+      setBaseballPlayers([]);
+      return;
+    }
+
+    const playersRef = collection(db, 'games', baseballGame.id, 'players');
+    const unsubscribe = onSnapshot(playersRef, (snapshot) => {
+      const players: BaseballPlayer[] = [];
+      snapshot.docs.forEach(docSnap => {
+        players.push({ code: docSnap.id, ...docSnap.data() } as BaseballPlayer);
+      });
+
+      // 순위 순으로 정렬 (맞춘 사람 우선, 그 다음 참가 순서)
+      players.sort((a, b) => {
+        if (a.rank && b.rank) return a.rank - b.rank;
+        if (a.rank) return -1;
+        if (b.rank) return 1;
+        return 0;
+      });
+
+      setBaseballPlayers(players);
+    });
+
+    return () => unsubscribe();
+  }, [baseballGame]);
+
+  const handleAddStudent = async () => {
+    if (!user || !selectedClass || !teacher) {
+      toast.error('학급을 먼저 선택해주세요.');
+      return;
+    }
+
     if (!newStudentNumber || !newStudentName || !newStudentCode) {
       toast.error('모든 항목을 입력해주세요.');
       return;
     }
-    
+
     setIsAddingStudent(true);
     try {
+      // 다했니 API에서 현재 쿠키 정보 가져오기
+      let initialData = { cookie: 0, usedCookie: 0, totalCookie: 0, chocoChips: 0, badges: {} as Record<string, Badge> };
+      try {
+        initialData = await fetchStudentFromDahandin(teacher.dahandinApiKey, newStudentCode.trim());
+      } catch (apiError) {
+        console.log('다했니 API 조회 실패 - 기본값 사용:', apiError);
+      }
+
       await createStudent(user.uid, selectedClass, {
         code: newStudentCode.trim(),
         number: parseInt(newStudentNumber),
         name: newStudentName.trim(),
-        cookie: 0,
-        usedCookie: 0,
-        totalCookie: 0,
-        chocoChips: 0,
-        previousCookie: 0,
+        cookie: initialData.cookie,
+        usedCookie: initialData.usedCookie,
+        totalCookie: initialData.totalCookie,
+        chocoChips: initialData.chocoChips,
+        previousCookie: initialData.cookie, // 등록 시점의 쿠키
+        initialCookie: initialData.cookie,  // 등록 시점의 쿠키 (잔디 계산용)
         profile: {
           emojiCode: 'emoji_00',
           title: '',
@@ -311,9 +1296,10 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           nameEffectCode: 'name_00',
           backgroundCode: 'bg_00'
         },
-        ownedItems: []
+        ownedItems: [],
+        badges: initialData.badges
       });
-      
+
       await loadStudents();
       setNewStudentNumber('');
       setNewStudentName('');
@@ -364,6 +1350,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             totalCookie: 0,
             chocoChips: 0,
             previousCookie: 0,
+            initialCookie: 0, // 이후 refreshStudentCookies에서 설정됨
             profile: {
               emojiCode: 'emoji_00',
               title: '',
@@ -479,13 +1466,13 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     setCookieAmount('');
   };
 
-  // 쿠키 부여 (직접 금액 지정 또는 입력값 사용)
+  // 캔디 부여 (직접 금액 지정 또는 입력값 사용)
   const handleAddCookie = async (directAmount?: number) => {
     if (!user || !selectedStudent) return;
 
     const amount = directAmount !== undefined ? directAmount : parseInt(cookieAmount);
     if (isNaN(amount) || amount === 0) {
-      toast.error('부여할 쿠키 수를 입력해주세요.');
+      toast.error('부여할 캔디 수를 입력해주세요.');
       return;
     }
 
@@ -501,12 +1488,62 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       await loadStudents();
 
       setCookieAmount('');
-      toast.success(`${selectedStudent.name}에게 ${amount > 0 ? '+' : ''}${amount}🍪 ${amount > 0 ? '부여' : '차감'}!`);
+      toast.success(`${selectedStudent.name}에게 ${amount > 0 ? '+' : ''}${amount}🍭 ${amount > 0 ? '부여' : '차감'}!`);
     } catch (error) {
       console.error('Failed to add cookie:', error);
-      toast.error('쿠키 부여에 실패했습니다.');
+      toast.error('캔디 부여에 실패했습니다.');
     }
     setIsAddingCookie(false);
+  };
+
+  // 선택된 학생들에게 캔디 전체 부여
+  const handleBulkAddCookie = async () => {
+    if (!user || selectedForCookie.length === 0) {
+      toast.error('캔디를 부여할 학생을 선택해주세요.');
+      return;
+    }
+
+    const amount = parseInt(bulkCookieAmount);
+    if (isNaN(amount) || amount === 0) {
+      toast.error('부여할 캔디 수를 입력해주세요.');
+      return;
+    }
+
+    setIsAddingBulkCookie(true);
+    let successCount = 0;
+    try {
+      for (const studentCode of selectedForCookie) {
+        await addCookiesToStudent(user.uid, studentCode, amount);
+        successCount++;
+      }
+      await loadStudents();
+      setBulkCookieAmount('');
+      setSelectedForCookie([]);
+      setShowBulkCookieMode(false);
+      toast.success(`${successCount}명에게 ${amount > 0 ? '+' : ''}${amount}🍭 ${amount > 0 ? '부여' : '차감'}!`);
+    } catch (error) {
+      console.error('Failed to add bulk cookie:', error);
+      toast.error(`캔디 부여 중 오류 (${successCount}명 완료)`);
+    }
+    setIsAddingBulkCookie(false);
+  };
+
+  // 전체 선택/해제
+  const handleSelectAllForCookie = (checked: boolean) => {
+    if (checked) {
+      setSelectedForCookie(students.map(s => s.code));
+    } else {
+      setSelectedForCookie([]);
+    }
+  };
+
+  // 개별 학생 선택/해제
+  const handleSelectStudentForCookie = (code: string, checked: boolean) => {
+    if (checked) {
+      setSelectedForCookie(prev => [...prev, code]);
+    } else {
+      setSelectedForCookie(prev => prev.filter(c => c !== code));
+    }
   };
 
   // 잔디 색상 (3단계: 1개, 2개, 3개 이상)
@@ -517,20 +1554,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     return 'bg-green-700'; // 3개 이상
   };
 
-  // 최근 14일 잔디
+  // 최근 10일 잔디 (평일만, 한국 시간 기준, 최신순)
   const getStudentLast14Days = () => {
-    const days: Array<{ date: string; count: number }> = [];
-    for (let i = 13; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      const grassRecord = studentGrassData.find((g: { date: string; cookieChange: number; count: number }) => g.date === dateStr);
-      days.push({
-        date: dateStr,
-        count: grassRecord?.cookieChange || 0
-      });
-    }
-    return days;
+    return getLastWeekdaysWithData(10, studentGrassData);
   };
 
   // 잔디 데이터 로드
@@ -539,6 +1565,8 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
     setIsLoadingGrass(true);
     try {
+      // UTC 기준 어제로 저장된 잔디를 오늘로 자동 이동
+      await migrateGrassDateToToday(user.uid, selectedClass);
       const data = await getGrassData(user.uid, selectedClass);
       setGrassData(data);
     } catch (error) {
@@ -568,6 +1596,62 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     setIsResettingGrass(false);
   };
 
+  // 과거 잔디 엑셀 업로드
+  const handlePastGrassUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !user || !selectedClass) return;
+
+    setIsUploadingPastGrass(true);
+    let totalAdded = 0;
+    let totalSkipped = 0;
+    const notFoundNames: string[] = [];
+
+    try {
+      for (const file of Array.from(files)) {
+        const grassDataList = await parsePastGrassXlsx(file, pastGrassYear);
+
+        for (const item of grassDataList) {
+          // 이름으로 학생 찾기
+          const student = students.find(s => s.name === item.name);
+          if (!student) {
+            if (!notFoundNames.includes(item.name)) {
+              notFoundNames.push(item.name);
+            }
+            totalSkipped++;
+            continue;
+          }
+
+          // 잔디 데이터 추가
+          await addGrassRecordForDate(
+            user.uid,
+            selectedClass,
+            student.code,
+            item.date,
+            item.cookies
+          );
+          totalAdded++;
+        }
+      }
+
+      // 결과 메시지
+      let message = `✅ ${totalAdded}개의 잔디 기록이 추가되었습니다.`;
+      if (totalSkipped > 0) {
+        message += `\n⚠️ ${totalSkipped}개 스킵됨`;
+        if (notFoundNames.length > 0) {
+          message += ` (찾을 수 없는 학생: ${notFoundNames.slice(0, 5).join(', ')}${notFoundNames.length > 5 ? '...' : ''})`;
+        }
+      }
+      toast.success(message);
+
+      // 잔디 데이터 새로고침
+      await loadGrassData();
+    } catch (error) {
+      console.error('Failed to upload past grass:', error);
+      toast.error(error instanceof Error ? error.message : '과거 잔디 업로드에 실패했습니다.');
+    }
+
+    setIsUploadingPastGrass(false);
+  };
+
   // 잔디 데이터를 날짜별로 그룹화
   const getGrassByDate = () => {
     const grouped: Record<string, Record<string, { change: number; count: number }>> = {};
@@ -583,23 +1667,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     return grouped;
   };
 
-  // 최근 14일 날짜 목록
+  // 최근 10일 날짜 목록 (평일만, 한국 시간 기준, 최신순)
   const getLast14Days = () => {
-    const dates: string[] = [];
-    for (let i = 13; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      dates.push(date.toISOString().split('T')[0]);
-    }
-    return dates;
-  };
-
-  // 잔디 색상 (3단계: 1개, 2개, 3개 이상)
-  const getGrassColor = (change: number) => {
-    if (change === 0) return 'bg-gray-200'; // 없음
-    if (change === 1) return 'bg-green-300'; // 1개
-    if (change === 2) return 'bg-green-500'; // 2개
-    return 'bg-green-700'; // 3개 이상
+    return getLastWeekdays(10);
   };
 
   // ========== 상점 핸들러 ==========
@@ -667,15 +1737,24 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     setShowDeleteAllShopConfirm(false);
   };
 
-  // 기본 상품 일괄 등록
+  // 기본 상품 일괄 등록 (중복 방지)
   const handleRegisterDefaultItems = async () => {
     if (!user) return;
 
     setIsRegisteringDefaults(true);
     try {
+      // 기존 상품 코드 목록 가져오기
+      const existingCodes = new Set(shopItems.map(item => item.code));
+
       let count = 0;
       for (const item of ALL_SHOP_ITEMS) {
+        // 이미 존재하는 상품은 건너뛰기
+        if (existingCodes.has(item.code)) {
+          continue;
+        }
+
         await addShopItem(user.uid, {
+          code: item.code,  // 원래 코드 유지
           name: item.name,
           price: item.price,
           category: item.category,
@@ -685,7 +1764,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
         count++;
       }
       await loadShopItems();
-      toast.success(`${count}개의 기본 상품이 등록되었습니다!`);
+
+      if (count > 0) {
+        toast.success(`${count}개의 새로운 상품이 등록되었습니다!`);
+      } else {
+        toast.info('모든 기본 상품이 이미 등록되어 있습니다.');
+      }
     } catch (error) {
       console.error('Failed to register default items:', error);
       toast.error('기본 상품 등록에 실패했습니다.');
@@ -702,6 +1786,143 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       toast.success('가격이 수정되었습니다!');
     } catch (error) {
       toast.error('가격 수정에 실패했습니다.');
+    }
+  };
+
+  // ========== 쿠키 상점 핸들러 ==========
+  // 쿠키 상점 로드 (전체 클래스 공유)
+  const loadCookieShopItems = async () => {
+    if (!user) return;
+    setIsLoadingCookieShop(true);
+    try {
+      const items = await getCookieShopItems(user.uid);
+      setCookieShopItems(items);
+    } catch (error) {
+      console.error('Failed to load cookie shop items:', error);
+    }
+    setIsLoadingCookieShop(false);
+  };
+
+  // 쿠키 상점 신청 로드 (전체 클래스 공유)
+  const loadCookieShopRequests = async () => {
+    if (!user) return;
+    try {
+      const requests = await getCookieShopRequests(user.uid);
+      setCookieShopRequests(requests);
+      setPendingRequestsCount(requests.filter(r => r.status === 'pending').length);
+    } catch (error) {
+      console.error('Failed to load cookie shop requests:', error);
+    }
+  };
+
+  // 물품 요청 로드 (학생 → 교사)
+  const loadItemSuggestions = async () => {
+    if (!user) return;
+    try {
+      const suggestions = await getItemSuggestions(user.uid);
+      setItemSuggestions(suggestions);
+    } catch (error) {
+      console.error('Failed to load item suggestions:', error);
+    }
+  };
+
+  // 물품 요청 처리 (승인/거절)
+  const handleSuggestionResponse = async (
+    suggestion: ItemSuggestion,
+    status: 'approved' | 'rejected',
+    message: string
+  ) => {
+    if (!user) return;
+    try {
+      await updateItemSuggestionStatus(user.uid, suggestion.id, status, message || undefined);
+      await loadItemSuggestions();
+      toast.success(status === 'approved' ? '요청을 승인했습니다.' : '요청을 거절했습니다.');
+      setSelectedItemSuggestion(null);
+      setSuggestionResponseMessage('');
+    } catch (error) {
+      console.error('Failed to update suggestion:', error);
+      toast.error('처리에 실패했습니다.');
+    }
+  };
+
+  // 물품 요청 삭제
+  const handleDeleteSuggestion = async (suggestionId: string) => {
+    if (!user) return;
+    try {
+      await deleteItemSuggestion(user.uid, suggestionId);
+      await loadItemSuggestions();
+      toast.success('요청을 삭제했습니다.');
+    } catch (error) {
+      console.error('Failed to delete suggestion:', error);
+      toast.error('삭제에 실패했습니다.');
+    }
+  };
+
+  // 쿠키 상점 아이템 추가 (전체 클래스 공유)
+  const handleAddCookieShopItem = async () => {
+    if (!user) return;
+    if (!newCookieItemName || !newCookieItemPrice) {
+      toast.error('상품명과 가격을 입력해주세요.');
+      return;
+    }
+    try {
+      await addCookieShopItem(user.uid, {
+        name: newCookieItemName,
+        description: newCookieItemDescription,
+        price: parseInt(newCookieItemPrice),
+        isActive: true
+      });
+      setNewCookieItemName('');
+      setNewCookieItemPrice('');
+      setNewCookieItemDescription('');
+      await loadCookieShopItems();
+      toast.success('실물 상품이 추가되었습니다!');
+    } catch (error) {
+      toast.error('상품 추가에 실패했습니다.');
+    }
+  };
+
+  // 쿠키 상점 아이템 삭제 (전체 클래스 공유)
+  const handleDeleteCookieShopItem = async (itemId: string) => {
+    if (!user) return;
+    try {
+      await deleteCookieShopItem(user.uid, itemId);
+      await loadCookieShopItems();
+      toast.success('상품이 삭제되었습니다.');
+    } catch (error) {
+      toast.error('상품 삭제에 실패했습니다.');
+    }
+  };
+
+  // 쿠키 상점 아이템 가격 수정 (전체 클래스 공유)
+  const handleUpdateCookieShopItemPrice = async (itemId: string, newPrice: number) => {
+    if (!user) return;
+    try {
+      await updateCookieShopItem(user.uid, itemId, { price: newPrice });
+      await loadCookieShopItems();
+      toast.success('가격이 수정되었습니다!');
+    } catch (error) {
+      toast.error('가격 수정에 실패했습니다.');
+    }
+  };
+
+  // 쿠키 상점 신청 응답 (전체 클래스 공유)
+  const handleCookieRequestResponse = async (status: 'approved' | 'rejected' | 'completed') => {
+    if (!user || !selectedCookieRequest) return;
+    try {
+      await updateCookieShopRequestStatus(
+        user.uid,
+        selectedCookieRequest.id,
+        status,
+        teacherResponse
+      );
+      await loadCookieShopRequests();
+      setShowCookieRequestModal(false);
+      setSelectedCookieRequest(null);
+      setTeacherResponse('');
+      toast.success(status === 'approved' ? '신청이 승인되었습니다.' : status === 'rejected' ? '신청이 거절되었습니다.' : '처리가 완료되었습니다.');
+    } catch (error) {
+      toast.error('신청 처리에 실패했습니다.');
     }
   };
 
@@ -917,9 +2138,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     if (!user) return;
     setIsLoadingWishes(true);
     try {
+      // 24시간 지난 선정 소원 자동 삭제
+      await cleanupExpiredGrantedWishes(user.uid);
       // 소원은 모든 클래스룸에서 공유되므로 classId는 사용되지 않음
       const wishesData = await getWishes(user.uid, '');
       setWishes(wishesData);
+      setWishPage(1); // 페이지 리셋
     } catch (error) {
       console.error('Failed to load wishes:', error);
     }
@@ -965,10 +2189,21 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 <p className="text-sm text-gray-500">{teacher?.schoolName} - {teacher?.name}</p>
               </div>
             </div>
-            <Button variant="outline" onClick={onLogout} className="flex items-center gap-1">
-              <span>🚪</span>
-              <span>로그아웃</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={handleSync}
+                disabled={isSyncing}
+                className="flex items-center gap-1"
+              >
+                <span className={isSyncing ? 'animate-spin' : ''}>🔄</span>
+                <span>{isSyncing ? '동기화 중...' : '전체 동기화'}</span>
+              </Button>
+              <Button variant="outline" onClick={onLogout} className="flex items-center gap-1">
+                <span>🚪</span>
+                <span>로그아웃</span>
+              </Button>
+            </div>
           </div>
           {/* 학급 선택 - 헤더에 크게 표시 (숨긴 학급 제외) */}
           {classes.filter(c => !hiddenClasses.includes(c.id)).length > 0 && (
@@ -994,15 +2229,16 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       {/* 메인 콘텐츠 */}
       <main className="max-w-4xl mx-auto px-4 py-6">
         <Tabs defaultValue="classes" className="space-y-6">
-          <TabsList className="flex flex-wrap">
+          <TabsList className="w-full flex justify-evenly gap-2">
             <TabsTrigger value="classes">📚 학급</TabsTrigger>
             <TabsTrigger value="students">👨‍🎓 학생</TabsTrigger>
             <TabsTrigger value="grass" onClick={loadGrassData}>🌱 잔디</TabsTrigger>
             <TabsTrigger value="shop" onClick={loadShopItems}>🏪 상점</TabsTrigger>
             <TabsTrigger value="teams" onClick={loadTeams}>👥 팀</TabsTrigger>
             <TabsTrigger value="teamStatus" onClick={loadTeamStatus}>📊 팀 현황</TabsTrigger>
-            <TabsTrigger value="battles" onClick={() => { loadTeams(); loadBattles(); }}>⚔️ 배틀</TabsTrigger>
+            <TabsTrigger value="gameCenter">🎮 게임센터</TabsTrigger>
             <TabsTrigger value="wishes" onClick={loadWishes}>⭐ 소원</TabsTrigger>
+            <TabsTrigger value="profiles">👤 프로필</TabsTrigger>
             <TabsTrigger value="settings">⚙️ 설정</TabsTrigger>
           </TabsList>
 
@@ -1174,22 +2410,62 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               </Card>
             ) : (
               <>
-                {/* 쿠키 새로고침 */}
+                {/* 쿠키 새로고침 & 전체 지급 */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>🔄 쿠키 새로고침</CardTitle>
+                    <CardTitle>🍪 쿠키 관리</CardTitle>
                     <CardDescription>
-                      다했니 API에서 최신 쿠키 정보를 가져옵니다.
+                      쿠키 새로고침 및 학생들에게 쿠키 지급
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <Button
-                      onClick={handleRefreshCookies}
-                      disabled={isRefreshing}
-                      className="bg-amber-500 hover:bg-amber-600"
-                    >
-                      {isRefreshing ? '새로고침 중...' : '🍪 쿠키 새로고침'}
-                    </Button>
+                  <CardContent className="space-y-4">
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={handleRefreshCookies}
+                        disabled={isRefreshing}
+                        className="bg-amber-500 hover:bg-amber-600"
+                      >
+                        {isRefreshing ? '새로고침 중...' : '🔄 쿠키 새로고침'}
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setShowBulkCookieMode(!showBulkCookieMode);
+                          setSelectedForCookie([]);
+                          setBulkCookieAmount('');
+                        }}
+                        className={showBulkCookieMode ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}
+                      >
+                        {showBulkCookieMode ? '✕ 취소' : '🎁 전체 지급'}
+                      </Button>
+                    </div>
+
+                    {/* 전체 지급 모드 */}
+                    {showBulkCookieMode && (
+                      <div className="p-4 bg-green-50 rounded-lg border border-green-200 space-y-3">
+                        <p className="text-sm text-green-700 font-medium">
+                          📋 아래 학생 목록에서 체크박스로 학생을 선택한 후 쿠키 수를 입력하세요.
+                        </p>
+                        <div className="flex gap-2 items-center">
+                          <Input
+                            type="number"
+                            placeholder="쿠키 수 (음수도 가능)"
+                            value={bulkCookieAmount}
+                            onChange={(e) => setBulkCookieAmount(e.target.value)}
+                            className="w-40"
+                          />
+                          <Button
+                            onClick={handleBulkAddCookie}
+                            disabled={isAddingBulkCookie || selectedForCookie.length === 0}
+                            className="bg-green-500 hover:bg-green-600"
+                          >
+                            {isAddingBulkCookie ? '처리 중...' : `${selectedForCookie.length}명에게 지급`}
+                          </Button>
+                        </div>
+                        <p className="text-xs text-green-600">
+                          선택된 학생: {selectedForCookie.length}명
+                        </p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -1200,7 +2476,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       👨‍🎓 학생 목록 - {classes.find(c => c.id === selectedClass)?.name}
                     </CardTitle>
                     <CardDescription>
-                      {students.length}명의 학생 · 더블클릭하여 상세 정보 보기
+                      {students.length}명의 학생 · 클릭하여 상세 정보 보기
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -1215,20 +2491,44 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b">
+                              {showBulkCookieMode && (
+                                <th className="text-center py-2 px-2 w-10">
+                                  <Checkbox
+                                    checked={selectedForCookie.length === students.length && students.length > 0}
+                                    onCheckedChange={(checked) => handleSelectAllForCookie(!!checked)}
+                                  />
+                                </th>
+                              )}
                               <th className="text-left py-2 px-2">번호</th>
                               <th className="text-left py-2 px-2">이름</th>
                               <th className="text-center py-2 px-2">뱃지</th>
                               <th className="text-right py-2 px-2">🍪 쿠키</th>
-                              <th className="text-right py-2 px-2">총 쿠키</th>
+                              <th className="text-right py-2 px-2">🍭 캔디</th>
                             </tr>
                           </thead>
                           <tbody>
                             {students.map((student) => (
                               <tr
                                 key={student.code}
-                                className="border-b hover:bg-amber-50 cursor-pointer transition-colors"
-                                onDoubleClick={() => handleStudentDoubleClick(student)}
+                                className={`border-b hover:bg-amber-50 cursor-pointer transition-colors ${
+                                  showBulkCookieMode && selectedForCookie.includes(student.code) ? 'bg-green-50' : ''
+                                }`}
+                                onClick={() => {
+                                  if (showBulkCookieMode) {
+                                    handleSelectStudentForCookie(student.code, !selectedForCookie.includes(student.code));
+                                  } else {
+                                    handleStudentDoubleClick(student);
+                                  }
+                                }}
                               >
+                                {showBulkCookieMode && (
+                                  <td className="py-2 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                                    <Checkbox
+                                      checked={selectedForCookie.includes(student.code)}
+                                      onCheckedChange={(checked) => handleSelectStudentForCookie(student.code, !!checked)}
+                                    />
+                                  </td>
+                                )}
                                 <td className="py-2 px-2">{student.number}</td>
                                 <td className="py-2 px-2 font-medium">{student.name}</td>
                                 <td className="py-2 px-2">
@@ -1250,11 +2550,11 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                                     )}
                                   </div>
                                 </td>
-                                <td className="py-2 px-2 text-right font-bold text-amber-600">
+                                <td className="py-2 px-2 text-right text-amber-600">
                                   {student.cookie}
                                 </td>
-                                <td className="py-2 px-2 text-right text-gray-500">
-                                  {student.totalCookie}
+                                <td className="py-2 px-2 text-right font-bold text-pink-600">
+                                  {student.jelly ?? student.cookie}
                                 </td>
                               </tr>
                             ))}
@@ -1270,15 +2570,15 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   <CardHeader>
                     <CardTitle>➕ 학생 추가</CardTitle>
                     <CardDescription>
-                      다했니 XLSX 파일로 학생을 일괄 추가할 수 있습니다.
+                      다했니에서 다운로드한 학생코드 파일로 일괄 추가할 수 있습니다.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {/* XLSX 일괄 추가 */}
                     <div>
-                      <h4 className="text-sm font-medium mb-2">📁 다했니 XLSX 파일로 일괄 추가</h4>
+                      <h4 className="text-sm font-medium mb-2">📁 학생코드 파일 업로드</h4>
                       <p className="text-sm text-gray-500 mb-3">
-                        다했니 웹에서 다운로드한 XLSX 파일을 업로드하세요 (D열에서 학생코드 추출)
+                        다했니 &gt; 학생 관리 &gt; 학생코드 다운로드를 한 파일을 올려주세요!
                       </p>
                       <div className="flex flex-wrap gap-2">
                         <label className="cursor-pointer">
@@ -1374,7 +2674,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex gap-2 mb-4">
+                    <div className="flex flex-wrap gap-2 mb-4">
                       <Button
                         onClick={loadGrassData}
                         disabled={isLoadingGrass}
@@ -1390,6 +2690,36 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       >
                         {isResettingGrass ? '초기화 중...' : '🗑️ 잔디 초기화'}
                       </Button>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          value={pastGrassYear}
+                          onChange={(e) => setPastGrassYear(parseInt(e.target.value) || new Date().getFullYear())}
+                          className="w-20 text-sm"
+                          min={2020}
+                          max={2030}
+                        />
+                        <label className="relative cursor-pointer">
+                          <input
+                            type="file"
+                            accept=".xlsx"
+                            multiple
+                            onChange={(e) => handlePastGrassUpload(e.target.files)}
+                            className="hidden"
+                            disabled={isUploadingPastGrass}
+                          />
+                          <Button
+                            variant="outline"
+                            className="text-green-600 hover:bg-green-50"
+                            disabled={isUploadingPastGrass}
+                            asChild
+                          >
+                            <span>
+                              {isUploadingPastGrass ? '업로드 중...' : '📂 과거 잔디 추가'}
+                            </span>
+                          </Button>
+                        </label>
+                      </div>
                     </div>
 
                     {isLoadingGrass ? (
@@ -1482,189 +2812,435 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
           {/* 상점 탭 */}
           <TabsContent value="shop" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>🏪 상점 아이템 관리</CardTitle>
-                <CardDescription>학생들이 쿠키로 구매할 수 있는 아이템을 등록하세요</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* 아이템 추가 */}
-                <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
-                  <Input
-                    placeholder="상품명 (예: 😎 쿨한)"
-                    value={newItemName}
-                    onChange={(e) => setNewItemName(e.target.value)}
-                  />
-                  <Input
-                    type="number"
-                    placeholder="가격"
-                    value={newItemPrice}
-                    onChange={(e) => setNewItemPrice(e.target.value)}
-                  />
-                  <select
-                    value={newItemCategory}
-                    onChange={(e) => setNewItemCategory(e.target.value)}
-                    className="px-3 py-2 border rounded-md text-sm"
-                  >
-                    <option value="emoji">이모지</option>
-                    <option value="nameEffect">이름효과</option>
-                    <option value="titleColor">칭호색상</option>
-                    <option value="animation">애니메이션</option>
-                    <option value="titlePermit">칭호권</option>
-                  </select>
-                  <Input
-                    placeholder="값 (예: 😎)"
-                    value={newItemDescription}
-                    onChange={(e) => setNewItemDescription(e.target.value)}
-                  />
-                  <Button onClick={handleAddShopItem} className="bg-green-500 hover:bg-green-600 col-span-2 md:col-span-2">
-                    + 추가
-                  </Button>
-                </div>
-                <p className="text-xs text-gray-400">카테고리별 값: 이모지(😎), 이름효과(gradient-fire), 칭호색상(0~9), 애니메이션(pulse)</p>
+            {/* 상점 모드 토글 */}
+            <div className="flex gap-2 p-1 bg-gray-100 rounded-lg w-fit">
+              <button
+                onClick={() => setShopMode('candy')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  shopMode === 'candy'
+                    ? 'bg-white text-pink-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                🍭 캔디 상점 (프로필)
+              </button>
+              <button
+                onClick={() => {
+                  setShopMode('cookie');
+                  if (selectedClass) {
+                    loadCookieShopItems();
+                    loadCookieShopRequests();
+                    loadItemSuggestions();
+                  }
+                }}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
+                  shopMode === 'cookie'
+                    ? 'bg-white text-amber-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                🍪 쿠키 상점 (실물 교환)
+                {pendingRequestsCount > 0 && (
+                  <span className="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
+                    {pendingRequestsCount}
+                  </span>
+                )}
+              </button>
+            </div>
 
-                {/* 기본 상품 일괄 등록 */}
-                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-amber-800">📦 기본 상품 일괄 등록</p>
-                      <p className="text-xs text-amber-600">이모지, 이름효과, 칭호색상, 애니메이션 등을 한 번에 등록합니다</p>
-                    </div>
-                    <Button
-                      onClick={handleRegisterDefaultItems}
-                      disabled={isRegisteringDefaults}
-                      className="bg-amber-500 hover:bg-amber-600"
+            {/* 캔디 상점 (프로필) */}
+            {shopMode === 'candy' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>🍭 캔디 상점 관리</CardTitle>
+                  <CardDescription>학생들이 캔디로 구매할 수 있는 프로필 아이템을 등록하세요</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* 아이템 추가 */}
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+                    <Input
+                      placeholder="상품명 (예: 😎 쿨한)"
+                      value={newItemName}
+                      onChange={(e) => setNewItemName(e.target.value)}
+                    />
+                    <Input
+                      type="number"
+                      placeholder="가격"
+                      value={newItemPrice}
+                      onChange={(e) => setNewItemPrice(e.target.value)}
+                    />
+                    <select
+                      value={newItemCategory}
+                      onChange={(e) => setNewItemCategory(e.target.value)}
+                      className="px-3 py-2 border rounded-md text-sm"
                     >
-                      {isRegisteringDefaults ? '등록 중...' : '🛒 기본 상품 등록'}
+                      <option value="emoji">이모지</option>
+                      <option value="nameEffect">이름효과</option>
+                      <option value="titleColor">칭호색상</option>
+                      <option value="animation">애니메이션</option>
+                      <option value="titlePermit">칭호권</option>
+                    </select>
+                    <Input
+                      placeholder="값 (예: 😎)"
+                      value={newItemDescription}
+                      onChange={(e) => setNewItemDescription(e.target.value)}
+                    />
+                    <Button onClick={handleAddShopItem} className="bg-green-500 hover:bg-green-600 col-span-2 md:col-span-2">
+                      + 추가
                     </Button>
                   </div>
-                </div>
+                  <p className="text-xs text-gray-400">카테고리별 값: 이모지(😎), 이름효과(gradient-fire), 칭호색상(0~9), 애니메이션(pulse)</p>
 
-                {/* 상점 전체 삭제 */}
-                {shopItems.length > 0 && (
-                  <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+                  {/* 기본 상품 일괄 등록 */}
+                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-red-800">🗑️ 상점 전체 삭제</p>
-                        <p className="text-xs text-red-600">현재 등록된 모든 상품({shopItems.length}개)을 삭제합니다</p>
+                        <p className="text-sm font-medium text-amber-800">📦 기본 상품 일괄 등록</p>
+                        <p className="text-xs text-amber-600">이모지, 이름효과, 칭호색상, 애니메이션 등을 한 번에 등록합니다</p>
                       </div>
-                      {!showDeleteAllShopConfirm ? (
-                        <Button
-                          variant="outline"
-                          onClick={() => setShowDeleteAllShopConfirm(true)}
-                          className="border-red-300 text-red-600 hover:bg-red-50"
-                        >
-                          🗑️ 전체 삭제
-                        </Button>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-red-700">정말 삭제하시겠습니까?</span>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={handleDeleteAllShopItems}
-                            disabled={isDeletingAllShop}
-                          >
-                            {isDeletingAllShop ? '삭제 중...' : '확인'}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowDeleteAllShopConfirm(false)}
-                            disabled={isDeletingAllShop}
-                          >
-                            취소
-                          </Button>
-                        </div>
-                      )}
+                      <Button
+                        onClick={handleRegisterDefaultItems}
+                        disabled={isRegisteringDefaults}
+                        className="bg-amber-500 hover:bg-amber-600"
+                      >
+                        {isRegisteringDefaults ? '등록 중...' : '🛒 기본 상품 등록'}
+                      </Button>
                     </div>
                   </div>
-                )}
 
-                {/* 카테고리 탭 */}
-                <div className="flex flex-wrap gap-2 py-3 border-b mb-4">
-                  {[
-                    { key: 'all', label: '전체', icon: '📦' },
-                    { key: 'emoji', label: '이모지', icon: '😊' },
-                    { key: 'titlePermit', label: '칭호권', icon: '🏷️' },
-                    { key: 'titleColor', label: '칭호색상', icon: '🎨' },
-                    { key: 'nameEffect', label: '이름효과', icon: '✨' },
-                    { key: 'animation', label: '애니메이션', icon: '🎬' },
-                    { key: 'buttonBorder', label: '버튼테두리', icon: '🔲' },
-                    { key: 'buttonFill', label: '버튼채우기', icon: '🎨' },
-                  ].map((cat) => {
-                    const count = cat.key === 'all'
-                      ? shopItems.length
-                      : shopItems.filter(item => item.category === cat.key).length;
-                    return (
-                      <button
-                        key={cat.key}
-                        onClick={() => setShopCategoryFilter(cat.key)}
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1 ${
-                          shopCategoryFilter === cat.key
-                            ? 'bg-amber-500 text-white'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        <span>{cat.icon}</span>
-                        <span>{cat.label}</span>
-                        <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs ${
-                          shopCategoryFilter === cat.key ? 'bg-amber-600' : 'bg-gray-200'
-                        }`}>
-                          {count}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* 아이템 목록 */}
-                {isLoadingShop ? (
-                  <p className="text-center py-8 text-gray-500">로딩 중...</p>
-                ) : shopItems.length === 0 ? (
-                  <p className="text-center py-8 text-gray-500">등록된 상품이 없습니다.</p>
-                ) : shopItems.filter(item => shopCategoryFilter === 'all' || item.category === shopCategoryFilter).length === 0 ? (
-                  <p className="text-center py-8 text-gray-500">해당 카테고리에 상품이 없습니다.</p>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {shopItems
-                      .filter(item => shopCategoryFilter === 'all' || item.category === shopCategoryFilter)
-                      .map((item) => (
-                      <div key={item.code} className="p-3 border rounded-lg">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <p className="font-medium">{item.name}</p>
-                            <p className="text-xs text-gray-400">{item.category}</p>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-500 h-6 px-2"
-                            onClick={() => handleDeleteShopItem(item.code)}
-                          >
-                            삭제
-                          </Button>
+                  {/* 상점 전체 삭제 */}
+                  {shopItems.length > 0 && (
+                    <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-red-800">🗑️ 상점 전체 삭제</p>
+                          <p className="text-xs text-red-600">현재 등록된 모든 상품({shopItems.length}개)을 삭제합니다</p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        {!showDeleteAllShopConfirm ? (
+                          <Button
+                            variant="outline"
+                            onClick={() => setShowDeleteAllShopConfirm(true)}
+                            className="border-red-300 text-red-600 hover:bg-red-50"
+                          >
+                            🗑️ 전체 삭제
+                          </Button>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-red-700">정말 삭제하시겠습니까?</span>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={handleDeleteAllShopItems}
+                              disabled={isDeletingAllShop}
+                            >
+                              {isDeletingAllShop ? '삭제 중...' : '확인'}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setShowDeleteAllShopConfirm(false)}
+                              disabled={isDeletingAllShop}
+                            >
+                              취소
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 카테고리 탭 */}
+                  <div className="flex flex-wrap gap-2 py-3 border-b mb-4">
+                    {[
+                      { key: 'all', label: '전체', icon: '📦' },
+                      { key: 'emoji', label: '이모지', icon: '😊' },
+                      { key: 'titlePermit', label: '칭호권', icon: '🏷️' },
+                      { key: 'titleColor', label: '칭호색상', icon: '🎨' },
+                      { key: 'nameEffect', label: '이름효과', icon: '✨' },
+                      { key: 'animation', label: '애니메이션', icon: '🎬' },
+                      { key: 'buttonBorder', label: '버튼테두리', icon: '🔲' },
+                      { key: 'buttonFill', label: '버튼채우기', icon: '🎨' },
+                    ].map((cat) => {
+                      const count = cat.key === 'all'
+                        ? shopItems.length
+                        : shopItems.filter(item => item.category === cat.key).length;
+                      return (
+                        <button
+                          key={cat.key}
+                          onClick={() => setShopCategoryFilter(cat.key)}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1 ${
+                            shopCategoryFilter === cat.key
+                              ? 'bg-amber-500 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          <span>{cat.icon}</span>
+                          <span>{cat.label}</span>
+                          <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs ${
+                            shopCategoryFilter === cat.key ? 'bg-amber-600' : 'bg-gray-200'
+                          }`}>
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* 아이템 목록 */}
+                  {isLoadingShop ? (
+                    <p className="text-center py-8 text-gray-500">로딩 중...</p>
+                  ) : shopItems.length === 0 ? (
+                    <p className="text-center py-8 text-gray-500">등록된 상품이 없습니다.</p>
+                  ) : shopItems.filter(item => shopCategoryFilter === 'all' || item.category === shopCategoryFilter).length === 0 ? (
+                    <p className="text-center py-8 text-gray-500">해당 카테고리에 상품이 없습니다.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {shopItems
+                        .filter(item => shopCategoryFilter === 'all' || item.category === shopCategoryFilter)
+                        .map((item) => (
+                        <div key={item.code} className="p-3 border rounded-lg">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <p className="font-medium">{item.name}</p>
+                              <p className="text-xs text-gray-400">{item.category}</p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-500 h-6 px-2"
+                              onClick={() => handleDeleteShopItem(item.code)}
+                            >
+                              삭제
+                            </Button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              defaultValue={item.price}
+                              className="w-20 h-8 text-sm"
+                              onBlur={(e) => {
+                                const newPrice = parseInt(e.target.value);
+                                if (!isNaN(newPrice) && newPrice !== item.price) {
+                                  handleUpdateItemPrice(item.code, newPrice);
+                                }
+                              }}
+                            />
+                            <span className="text-sm">🍭</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* 쿠키 상점 (실물 교환) */}
+            {shopMode === 'cookie' && (
+              <>
+                {!selectedClass ? (
+                  <Card>
+                    <CardContent className="py-12 text-center text-gray-500">
+                      👆 상단에서 학급을 선택해주세요
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <>
+                    {/* 안내 문구 */}
+                    <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                      <p className="text-sm text-amber-800 font-medium">🍪 쿠키 상점 안내</p>
+                      <p className="text-xs text-amber-600 mt-1">학생들이 실물 상품을 신청하면 다했니 쿠키가 차감됩니다. 매주 목요일 오전 8시에 신청 내역이 이메일로 발송됩니다.</p>
+                    </div>
+
+                    {/* 상품 관리 */}
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between">
+                        <div>
+                          <CardTitle>📦 실물 상품 관리</CardTitle>
+                          <CardDescription>학생들이 쿠키로 교환할 수 있는 실물 상품을 등록하세요</CardDescription>
+                        </div>
+                        <button
+                          onClick={() => {
+                            loadItemSuggestions();
+                            setShowItemSuggestionsModal(true);
+                          }}
+                          className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-200 transition-all flex items-center gap-1"
+                        >
+                          💡 물품 요청
+                          {itemSuggestions.filter(s => s.status === 'pending').length > 0 && (
+                            <span className="px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">
+                              {itemSuggestions.filter(s => s.status === 'pending').length}
+                            </span>
+                          )}
+                        </button>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {/* 상품 추가 */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                          <Input
+                            placeholder="상품명 (예: 연필 세트)"
+                            value={newCookieItemName}
+                            onChange={(e) => setNewCookieItemName(e.target.value)}
+                          />
                           <Input
                             type="number"
-                            defaultValue={item.price}
-                            className="w-20 h-8 text-sm"
-                            onBlur={(e) => {
-                              const newPrice = parseInt(e.target.value);
-                              if (!isNaN(newPrice) && newPrice !== item.price) {
-                                handleUpdateItemPrice(item.code, newPrice);
-                              }
-                            }}
+                            placeholder="가격 (쿠키)"
+                            value={newCookieItemPrice}
+                            onChange={(e) => setNewCookieItemPrice(e.target.value)}
                           />
-                          <span className="text-sm">🍪</span>
+                          <Input
+                            placeholder="설명 (선택)"
+                            value={newCookieItemDescription}
+                            onChange={(e) => setNewCookieItemDescription(e.target.value)}
+                          />
+                          <Button onClick={handleAddCookieShopItem} className="bg-amber-500 hover:bg-amber-600">
+                            + 상품 추가
+                          </Button>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+
+                        {/* 상품 목록 */}
+                        {isLoadingCookieShop ? (
+                          <p className="text-center py-8 text-gray-500">로딩 중...</p>
+                        ) : cookieShopItems.length === 0 ? (
+                          <p className="text-center py-8 text-gray-500">등록된 상품이 없습니다.</p>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {cookieShopItems.map((item) => (
+                              <div key={item.id} className="p-3 border rounded-lg">
+                                <div className="flex justify-between items-start mb-2">
+                                  <div>
+                                    <p className="font-medium">{item.name}</p>
+                                    {item.description && (
+                                      <p className="text-xs text-gray-400">{item.description}</p>
+                                    )}
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-500 h-6 px-2"
+                                    onClick={() => handleDeleteCookieShopItem(item.id)}
+                                  >
+                                    삭제
+                                  </Button>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="number"
+                                    defaultValue={item.price}
+                                    className="w-20 h-8 text-sm"
+                                    onBlur={(e) => {
+                                      const newPrice = parseInt(e.target.value);
+                                      if (!isNaN(newPrice) && newPrice !== item.price) {
+                                        handleUpdateCookieShopItemPrice(item.id, newPrice);
+                                      }
+                                    }}
+                                  />
+                                  <span className="text-sm">🍪 쿠키</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* 신청 관리 */}
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between">
+                        <div>
+                          <CardTitle className="flex items-center gap-2">
+                            📋 신청 관리
+                            {cookieShopRequests.filter(r => r.status === 'pending').length > 0 && (
+                              <span className="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
+                                {cookieShopRequests.filter(r => r.status === 'pending').length}
+                              </span>
+                            )}
+                          </CardTitle>
+                          <CardDescription>학생들의 상품 신청 내역을 관리하세요</CardDescription>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={loadCookieShopRequests}>
+                          🔄 새로고침
+                        </Button>
+                      </CardHeader>
+                      <CardContent>
+                        {cookieShopRequests.length === 0 ? (
+                          <p className="text-center py-8 text-gray-500">신청 내역이 없습니다.</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {cookieShopRequests.map((request) => (
+                              <div
+                                key={request.id}
+                                className={`p-4 border rounded-lg ${
+                                  request.status === 'pending' ? 'border-amber-300 bg-amber-50' :
+                                  request.status === 'approved' ? 'border-green-300 bg-green-50' :
+                                  request.status === 'rejected' ? 'border-red-300 bg-red-50' :
+                                  'border-gray-300 bg-gray-50'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="font-medium">{request.studentName} ({request.studentNumber}번)</p>
+                                    <p className="text-sm text-gray-600">{request.itemName} x{request.quantity}</p>
+                                    <p className="text-xs text-gray-400">총 {request.totalPrice} 쿠키</p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                      request.status === 'pending' ? 'bg-amber-200 text-amber-800' :
+                                      request.status === 'approved' ? 'bg-green-200 text-green-800' :
+                                      request.status === 'rejected' ? 'bg-red-200 text-red-800' :
+                                      'bg-gray-200 text-gray-800'
+                                    }`}>
+                                      {request.status === 'pending' ? '대기중' :
+                                       request.status === 'approved' ? '승인됨' :
+                                       request.status === 'rejected' ? '거절됨' : '완료'}
+                                    </span>
+                                    {request.status === 'pending' && (
+                                      <Button
+                                        size="sm"
+                                        onClick={() => {
+                                          setSelectedCookieRequest(request);
+                                          setShowCookieRequestModal(true);
+                                        }}
+                                      >
+                                        처리
+                                      </Button>
+                                    )}
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      onClick={async () => {
+                                        if (!user) return;
+                                        if (confirm(`${request.studentName}님의 "${request.itemName}" 신청을 삭제하시겠습니까?`)) {
+                                          try {
+                                            await deleteCookieShopRequest(user.uid, request.id);
+                                            setCookieShopRequests(prev => prev.filter(r => r.id !== request.id));
+                                            toast.success('신청이 삭제되었습니다.');
+                                          } catch (error) {
+                                            console.error('Failed to delete request:', error);
+                                            toast.error('삭제에 실패했습니다.');
+                                          }
+                                        }
+                                      }}
+                                    >
+                                      삭제
+                                    </Button>
+                                  </div>
+                                </div>
+                                {request.teacherResponse && (
+                                  <p className="mt-2 text-sm text-gray-600 bg-white p-2 rounded">
+                                    💬 {request.teacherResponse}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </>
                 )}
-              </CardContent>
-            </Card>
+              </>
+            )}
           </TabsContent>
 
           {/* 팀 탭 */}
@@ -1913,35 +3489,18 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                                   </span>
                                 );
                               })}
-                              {/* 멤버 추가 버튼 */}
-                              {selectedTeamForMember === team.teamId ? (
-                                <select
-                                  className="px-1 py-0.5 text-xs border rounded"
-                                  onChange={(e) => {
-                                    if (e.target.value) {
-                                      handleAddMemberToTeam(team.teamId, e.target.value);
-                                      setSelectedTeamForMember(null);
-                                    }
-                                  }}
-                                  defaultValue=""
-                                  autoFocus
-                                  onBlur={() => setSelectedTeamForMember(null)}
-                                >
-                                  <option value="">선택</option>
-                                  {students
-                                    .filter(s => !team.members.includes(s.code))
-                                    .map(s => (
-                                      <option key={s.code} value={s.code}>{s.name}</option>
-                                    ))}
-                                </select>
-                              ) : (
-                                <button
-                                  onClick={() => setSelectedTeamForMember(team.teamId)}
-                                  className="px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-600 hover:bg-green-200"
-                                >
-                                  +
-                                </button>
-                              )}
+                              {/* 멤버 추가/관리 버튼 */}
+                              <button
+                                onClick={() => {
+                                  setTeamForMemberModal(team.teamId);
+                                  setEditingTeamName(team.teamName);
+                                  setEditingTeamFlag(team.flag);
+                                  setShowTeamMemberModal(true);
+                                }}
+                                className="px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-600 hover:bg-green-200"
+                              >
+                                +
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -1986,6 +3545,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     });
                   });
 
+                  // 팀원들의 쿠키 합계 계산
+                  const teamTotalCookie = team.members.reduce((sum, code) => {
+                    const student = students.find(s => s.code === code);
+                    return sum + (student?.cookie ?? 0);
+                  }, 0);
+
                   return (
                     <Card key={team.teamId}>
                       <CardHeader>
@@ -1997,7 +3562,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                           <div className="flex items-center gap-4">
                             <div className="text-center">
                               <p className="text-xs text-gray-500">현재 쿠키</p>
-                              <p className="text-xl font-bold text-amber-600">{team.teamCookie} 🍪</p>
+                              <p className="text-xl font-bold text-amber-600">{teamTotalCookie} 🍪</p>
                             </div>
                             <div className="text-center">
                               <p className="text-xs text-gray-500">총 획득량</p>
@@ -2023,7 +3588,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                             for (let i = 6; i >= 0; i--) {
                               const d = new Date(today);
                               d.setDate(d.getDate() - i);
-                              const dateStr = d.toISOString().split('T')[0];
+                              const dateStr = getKoreanDateString(d);
                               const dayData = memberGrass.find(g => g.date === dateStr);
                               recentDays.push({
                                 date: dateStr,
@@ -2054,11 +3619,11 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                                   <div className="flex items-center gap-4 text-sm">
                                     <div className="text-center">
                                       <p className="text-gray-500">보유</p>
-                                      <p className="font-bold text-amber-600">{student?.cookie || 0} 🍪</p>
+                                      <p className="font-bold text-amber-600">{student?.cookie ?? 0} 🍪</p>
                                     </div>
                                     <div className="text-center">
                                       <p className="text-gray-500">총 획득</p>
-                                      <p className="font-bold text-green-600">+{totalGain}</p>
+                                      <p className="font-bold text-green-600">+{totalGain} 🍪</p>
                                     </div>
                                   </div>
                                 </div>
@@ -2108,185 +3673,593 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             )}
           </TabsContent>
 
-          {/* 배틀 탭 */}
-          <TabsContent value="battles" className="space-y-6">
-            {!selectedClass ? (
-              <Card>
-                <CardContent className="py-12 text-center text-gray-500">
-                  👆 먼저 학급 관리 탭에서 학급을 선택해주세요.
-                </CardContent>
-              </Card>
-            ) : teams.length < 2 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-gray-500">
-                  ⚠️ 배틀을 시작하려면 최소 2개의 팀이 필요합니다. 팀 탭에서 팀을 먼저 생성해주세요.
-                </CardContent>
-              </Card>
-            ) : (
-              <>
-                {/* 배틀 생성 */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>⚔️ 배틀 관리</CardTitle>
-                    <CardDescription>팀 간 배틀을 생성하고 점수를 관리하세요</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-                      <Input
-                        placeholder="배틀 제목"
-                        value={newBattleTitle}
-                        onChange={(e) => setNewBattleTitle(e.target.value)}
-                      />
-                      <select
-                        value={newBattleTeam1}
-                        onChange={(e) => setNewBattleTeam1(e.target.value)}
-                        className="px-3 py-2 border rounded-md"
+          {/* 게임센터 탭 */}
+          <TabsContent value="gameCenter" className="space-y-6">
+            {/* 게임센터 헤더 */}
+            <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl p-6 text-center border-2 border-purple-200">
+              <div className="text-5xl mb-3">🎮</div>
+              <h2 className="text-xl font-bold text-purple-800 mb-2">게임센터 관리</h2>
+              <p className="text-purple-600 text-sm">
+                학생들이 쿠키를 사용해서 즐길 수 있는 다양한 게임을 관리하세요
+              </p>
+              <div className="mt-4 flex justify-center gap-3">
+                <button
+                  onClick={closeAllGames}
+                  className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition-all"
+                >
+                  🗑️ 모든 클래스 게임 닫기
+                </button>
+              </div>
+            </div>
+
+            {/* 게임 활성화 관리 */}
+            <Card>
+              <CardHeader>
+                <CardTitle>🎯 게임 활성화 관리</CardTitle>
+                <CardDescription>학생들에게 공개할 게임을 선택하세요. 비활성화된 게임은 학생 화면에서 숨겨집니다.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* 숫자야구 - 활성화됨! */}
+                <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-violet-50 border-2 border-purple-300">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-4">
+                      <span className="text-3xl">⚾</span>
+                      <div>
+                        <h3 className="font-bold text-purple-800">숫자야구</h3>
+                        <p className="text-xs text-purple-600">숫자를 맞춰라!</p>
+                        <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전 · 실시간</span>
+                      </div>
+                    </div>
+                    <span className="px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold">활성화</span>
+                  </div>
+
+                  {!selectedClass ? (
+                    <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-center text-sm">
+                      ⚠️ 학급을 먼저 선택해주세요
+                    </div>
+                  ) : !baseballGame ? (
+                    // 게임 생성 UI
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">자릿수:</span>
+                        <button
+                          onClick={() => setBaseballDigits(4)}
+                          className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
+                            baseballDigits === 4
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          4자리
+                        </button>
+                        <button
+                          onClick={() => setBaseballDigits(5)}
+                          className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
+                            baseballDigits === 5
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          5자리
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">참가비:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={baseballEntryFee}
+                          onChange={(e) => setBaseballEntryFee(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded-lg text-center"
+                          placeholder="0"
+                        />
+                        <span className="text-sm text-gray-500">🍭</span>
+                      </div>
+                      <Button
+                        onClick={createBaseballGame}
+                        disabled={isCreatingGame}
+                        className="w-full bg-purple-600 hover:bg-purple-700"
                       >
-                        <option value="">팀1 선택</option>
-                        {teams.map((t) => (
-                          <option key={t.teamId} value={t.teamId}>{t.flag} {t.teamName}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={newBattleTeam2}
-                        onChange={(e) => setNewBattleTeam2(e.target.value)}
-                        className="px-3 py-2 border rounded-md"
-                      >
-                        <option value="">팀2 선택</option>
-                        {teams.map((t) => (
-                          <option key={t.teamId} value={t.teamId}>{t.flag} {t.teamName}</option>
-                        ))}
-                      </select>
-                      <Input
-                        type="number"
-                        placeholder="보상"
-                        value={newBattleReward}
-                        onChange={(e) => setNewBattleReward(e.target.value)}
-                      />
-                      <Button onClick={handleCreateBattle} className="bg-red-500 hover:bg-red-600">
-                        배틀 시작
+                        {isCreatingGame ? '생성 중...' : '🎮 게임 방 만들기'}
                       </Button>
                     </div>
-                  </CardContent>
-                </Card>
+                  ) : (
+                    // 게임 관리 UI
+                    <div className="space-y-3">
+                      {/* 게임 상태 */}
+                      <div className="flex items-center justify-between bg-white p-3 rounded-lg">
+                        <div>
+                          <span className="text-sm text-gray-600">상태: </span>
+                          <span className={`font-bold ${
+                            baseballGame.status === 'waiting' ? 'text-amber-600' :
+                            baseballGame.status === 'playing' ? 'text-green-600' : 'text-gray-600'
+                          }`}>
+                            {baseballGame.status === 'waiting' ? '⏳ 대기중' :
+                             baseballGame.status === 'playing' ? '🎮 진행중' : '🏁 종료'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                          <span>{baseballGame.digits}자리</span>
+                          <button
+                            onClick={() => setShowBaseballAnswer(!showBaseballAnswer)}
+                            className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                              showBaseballAnswer
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'bg-gray-100 text-gray-500'
+                            }`}
+                          >
+                            {showBaseballAnswer ? `🔓 ${baseballGame.answer}` : '🔒 정답 보기'}
+                          </button>
+                        </div>
+                      </div>
 
-                {/* 배틀 목록 */}
-                {isLoadingBattles ? (
-                  <Card>
-                    <CardContent className="py-8 text-center text-gray-500">로딩 중...</CardContent>
-                  </Card>
-                ) : battles.length === 0 ? (
-                  <Card>
-                    <CardContent className="py-8 text-center text-gray-500">진행 중인 배틀이 없습니다.</CardContent>
-                  </Card>
-                ) : (
-                  <div className="space-y-4">
-                    {battles.map((battle) => {
-                      const team1 = teams.find(t => t.teamId === battle.team1Id);
-                      const team2 = teams.find(t => t.teamId === battle.team2Id);
-                      const isOngoing = battle.status === 'ongoing';
-
-                      return (
-                        <Card key={battle.id} className={!isOngoing ? 'opacity-70' : ''}>
-                          <CardContent className="py-4">
-                            <div className="flex items-center justify-between mb-4">
-                              <h3 className="font-bold text-lg">{battle.title}</h3>
-                              <div className="flex items-center gap-2">
-                                {isOngoing ? (
-                                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-sm">진행중</span>
-                                ) : (
-                                  <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-sm">종료</span>
-                                )}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-red-500"
-                                  onClick={() => handleDeleteBattle(battle.id)}
+                      {/* 참가자 목록 */}
+                      <div className="bg-white p-3 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700">
+                            👥 참가자 ({baseballPlayers.length}명)
+                          </span>
+                          {baseballGame.status === 'playing' && (
+                            <span className="text-xs text-green-600">
+                              🏆 완료: {baseballPlayers.filter(p => p.rank).length}명
+                            </span>
+                          )}
+                        </div>
+                        {baseballPlayers.length === 0 ? (
+                          <p className="text-sm text-gray-400 text-center py-2">
+                            아직 참가한 학생이 없습니다
+                          </p>
+                        ) : (
+                          <div className="max-h-40 overflow-y-auto space-y-1">
+                            {baseballPlayers.map((player, index) => {
+                              const playerStudent = students.find(s => s.code === player.code);
+                              return (
+                                <div
+                                  key={player.code}
+                                  className={`flex items-center justify-between px-2 py-1 rounded ${
+                                    player.rank ? 'bg-green-50' : 'bg-gray-50'
+                                  }`}
                                 >
-                                  삭제
-                                </Button>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-center gap-4">
-                              {/* 팀1 */}
-                              <div className="text-center flex-1">
-                                <p className="text-3xl">{team1?.flag}</p>
-                                <p className="font-medium">{team1?.teamName}</p>
-                                {isOngoing ? (
-                                  <div className="flex items-center justify-center gap-2 mt-2">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleUpdateBattleScore(battle.id, Math.max(0, battle.team1Score - 1), battle.team2Score)}
+                                  <div className="flex items-center gap-2">
+                                    {player.rank ? (
+                                      <span className={`text-lg ${
+                                        player.rank === 1 ? '' : player.rank === 2 ? '' : player.rank === 3 ? '' : ''
+                                      }`}>
+                                        {player.rank === 1 ? '🥇' : player.rank === 2 ? '🥈' : player.rank === 3 ? '🥉' : `${player.rank}등`}
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-400 text-sm">⏳</span>
+                                    )}
+                                    <button
+                                      onClick={() => playerStudent && handleStudentDoubleClick(playerStudent)}
+                                      className={`text-sm ${player.rank ? 'font-medium text-green-700' : 'text-gray-600'} hover:underline cursor-pointer`}
                                     >
-                                      -
-                                    </Button>
-                                    <span className="text-3xl font-bold w-12">{battle.team1Score}</span>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleUpdateBattleScore(battle.id, battle.team1Score + 1, battle.team2Score)}
-                                    >
-                                      +
-                                    </Button>
+                                      {player.name}
+                                    </button>
                                   </div>
-                                ) : (
-                                  <p className="text-3xl font-bold mt-2">{battle.team1Score}</p>
-                                )}
-                              </div>
+                                  {player.rank && (
+                                    <span className="text-xs text-gray-500">{player.attempts}회</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
 
-                              <div className="text-2xl font-bold text-gray-400">VS</div>
+                      {/* 컨트롤 버튼 */}
+                      <div className="flex gap-2">
+                        {baseballGame.status === 'waiting' && (
+                          <>
+                            <Button
+                              onClick={startBaseballGame}
+                              disabled={baseballPlayers.length === 0}
+                              className="flex-1 bg-green-600 hover:bg-green-700"
+                            >
+                              🚀 게임 시작
+                            </Button>
+                            <Button
+                              onClick={deleteBaseballGame}
+                              variant="outline"
+                              className="text-red-600 border-red-300 hover:bg-red-50"
+                            >
+                              삭제
+                            </Button>
+                          </>
+                        )}
+                        {baseballGame.status === 'playing' && (
+                          <>
+                            <Button
+                              onClick={endBaseballGame}
+                              className="flex-1 bg-amber-600 hover:bg-amber-700"
+                            >
+                              🏁 게임 종료
+                            </Button>
+                            <Button
+                              onClick={deleteBaseballGame}
+                              variant="outline"
+                              className="text-red-600 border-red-300 hover:bg-red-50"
+                            >
+                              삭제
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
 
-                              {/* 팀2 */}
-                              <div className="text-center flex-1">
-                                <p className="text-3xl">{team2?.flag}</p>
-                                <p className="font-medium">{team2?.teamName}</p>
-                                {isOngoing ? (
-                                  <div className="flex items-center justify-center gap-2 mt-2">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleUpdateBattleScore(battle.id, battle.team1Score, Math.max(0, battle.team2Score - 1))}
-                                    >
-                                      -
-                                    </Button>
-                                    <span className="text-3xl font-bold w-12">{battle.team2Score}</span>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleUpdateBattleScore(battle.id, battle.team1Score, battle.team2Score + 1)}
-                                    >
-                                      +
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <p className="text-3xl font-bold mt-2">{battle.team2Score}</p>
-                                )}
-                              </div>
-                            </div>
-
-                            {isOngoing && (
-                              <div className="text-center mt-4">
-                                <Button onClick={() => handleEndBattle(battle)} className="bg-amber-500 hover:bg-amber-600">
-                                  배틀 종료 (보상: {battle.reward}🍪)
-                                </Button>
-                              </div>
-                            )}
-
-                            {!isOngoing && battle.winnerId && (
-                              <p className="text-center mt-4 text-green-600 font-medium">
-                                🏆 승리: {battle.winnerId === team1?.teamId ? team1?.teamName : team2?.teamName}
-                              </p>
-                            )}
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
+                {/* 소수결게임 */}
+                <div className="p-4 rounded-xl bg-gradient-to-r from-teal-50 to-cyan-50 border-2 border-teal-300">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-4">
+                      <span className="text-3xl">⚖️</span>
+                      <div>
+                        <h3 className="font-bold text-teal-800">소수결게임</h3>
+                        <p className="text-xs text-teal-600">소수파가 살아남는다!</p>
+                        <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">단체전 · 실시간</span>
+                      </div>
+                    </div>
+                    <span className="px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold">활성화</span>
                   </div>
-                )}
-              </>
-            )}
+
+                  {!selectedClass ? (
+                    <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-center text-sm">
+                      ⚠️ 학급을 먼저 선택해주세요
+                    </div>
+                  ) : !minorityGame ? (
+                    // 게임 생성 UI
+                    <div className="space-y-3">
+                      <div className="bg-white p-3 rounded-lg text-sm text-gray-600">
+                        <p className="font-medium text-teal-700 mb-1">📋 게임 규칙</p>
+                        <p>· 밸런스 질문이 출제됩니다</p>
+                        <p>· A 또는 B 중 하나를 선택!</p>
+                        <p>· 소수파(적은 쪽)가 생존</p>
+                        <p>· 최후의 1~2명이 승자</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">참가비:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={minorityEntryFee}
+                          onChange={(e) => setMinorityEntryFee(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded-lg text-center"
+                          placeholder="0"
+                        />
+                        <span className="text-sm text-gray-500">🍭</span>
+                      </div>
+                      <Button
+                        onClick={createMinorityGame}
+                        disabled={isCreatingMinorityGame}
+                        className="w-full bg-teal-600 hover:bg-teal-700"
+                      >
+                        {isCreatingMinorityGame ? '생성 중...' : '⚖️ 게임 방 만들기'}
+                      </Button>
+                    </div>
+                  ) : (
+                    // 게임 관리 UI
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between bg-white p-3 rounded-lg">
+                        <div>
+                          <span className="text-sm text-gray-600">상태: </span>
+                          <span className={`font-bold ${
+                            minorityGame.status === 'waiting' ? 'text-amber-600' :
+                            minorityGame.status === 'question' ? 'text-green-600' :
+                            minorityGame.status === 'result' ? 'text-blue-600' : 'text-gray-600'
+                          }`}>
+                            {minorityGame.status === 'waiting' ? '⏳ 대기중' :
+                             minorityGame.status === 'question' ? '❓ 투표중' :
+                             minorityGame.status === 'result' ? '📊 결과발표' : '🏁 종료'}
+                          </span>
+                        </div>
+                        <span className="text-sm text-teal-600 font-medium">
+                          라운드 {minorityGame.currentRound}
+                        </span>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={deleteMinorityGame}
+                          variant="outline"
+                          className="flex-1 text-red-600 border-red-300 hover:bg-red-50"
+                        >
+                          게임 삭제
+                        </Button>
+                      </div>
+                      <p className="text-xs text-center text-gray-500">
+                        게임 관리는 새 창에서 진행됩니다
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* 총알피하기 */}
+                <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-300">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-4">
+                      <span className="text-3xl">🚀</span>
+                      <div>
+                        <h3 className="font-bold text-indigo-800">총알피하기</h3>
+                        <p className="text-xs text-indigo-600">우주선을 조종해 총알을 피하라!</p>
+                        <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전 · 점수</span>
+                      </div>
+                    </div>
+                    <span className="px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold">활성화</span>
+                  </div>
+
+                  {!selectedClass ? (
+                    <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-center text-sm">
+                      ⚠️ 학급을 먼저 선택해주세요
+                    </div>
+                  ) : !bulletDodgeGame ? (
+                    <div className="space-y-3">
+                      <div className="bg-white p-3 rounded-lg text-sm text-gray-600">
+                        <p className="font-medium text-indigo-700 mb-1">📋 게임 규칙</p>
+                        <p>· 화면을 터치하여 우주선을 조종</p>
+                        <p>· 날아오는 총알을 피하세요!</p>
+                        <p>· 생존 시간이 점수로 기록됩니다</p>
+                        <p>· 최고 기록 경쟁!</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">참가비:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={bulletDodgeEntryFee}
+                          onChange={(e) => setBulletDodgeEntryFee(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded-lg text-center"
+                          placeholder="0"
+                        />
+                        <span className="text-sm text-gray-500">🍭</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={createBulletDodgeGame}
+                          disabled={isCreatingBulletDodge}
+                          className="flex-1 bg-indigo-600 hover:bg-indigo-700"
+                        >
+                          {isCreatingBulletDodge ? '생성 중...' : '🚀 게임 방 만들기'}
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            // 테스트용 게임 URL 생성 (게임 데이터 없이 바로 플레이 가능)
+                            const testUrl = `${window.location.origin}?game=bullet-dodge&gameId=test_${Date.now()}&studentCode=teacher_test&studentName=${encodeURIComponent(teacher?.name || '선생님')}&testMode=true`;
+                            window.open(testUrl, '_blank', 'width=400,height=700');
+                          }}
+                          variant="outline"
+                          className="border-indigo-300 text-indigo-600 hover:bg-indigo-50"
+                        >
+                          🎮 테스트
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between bg-white p-3 rounded-lg">
+                        <div>
+                          <span className="text-sm text-gray-600">상태: </span>
+                          <span className={`font-bold ${
+                            bulletDodgeGame.status === 'waiting' ? 'text-amber-600' :
+                            bulletDodgeGame.status === 'playing' ? 'text-green-600' : 'text-gray-600'
+                          }`}>
+                            {bulletDodgeGame.status === 'waiting' ? '⏳ 대기중' :
+                             bulletDodgeGame.status === 'playing' ? '🎮 진행중' : '🏁 종료'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={deleteBulletDodgeGame}
+                          variant="outline"
+                          className="flex-1 text-red-600 border-red-300 hover:bg-red-50"
+                        >
+                          게임 삭제
+                        </Button>
+                      </div>
+                      <p className="text-xs text-center text-gray-500">
+                        게임 관리는 새 창에서 진행됩니다
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* 가위바위보 */}
+                <div className="p-4 rounded-xl bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-4">
+                      <span className="text-3xl">✊✋✌️</span>
+                      <div>
+                        <h3 className="font-bold text-green-800">가위바위보</h3>
+                        <p className="text-xs text-green-600">선생님과 학생들의 가위바위보 대결!</p>
+                        <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전 · 서바이벌/캔디</span>
+                      </div>
+                    </div>
+                    <span className="px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold">활성화</span>
+                  </div>
+
+                  {!selectedClass ? (
+                    <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-center text-sm">
+                      ⚠️ 학급을 먼저 선택해주세요
+                    </div>
+                  ) : !rpsGame ? (
+                    <div className="space-y-3">
+                      <div className="bg-white p-3 rounded-lg text-sm text-gray-600">
+                        <p className="font-medium text-green-700 mb-1">🎮 게임 모드 선택</p>
+                        <div className="grid grid-cols-3 gap-2 mt-2">
+                          <button
+                            onClick={() => setSelectedRpsMode('survivor')}
+                            className={`p-2 rounded-lg text-xs font-medium transition-all ${
+                              selectedRpsMode === 'survivor'
+                                ? 'bg-green-500 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            🏆 최후의 승자
+                          </button>
+                          <button
+                            onClick={() => setSelectedRpsMode('candy15')}
+                            className={`p-2 rounded-lg text-xs font-medium transition-all ${
+                              selectedRpsMode === 'candy15'
+                                ? 'bg-amber-500 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            🍬 1.5배 이벤트
+                          </button>
+                          <button
+                            onClick={() => setSelectedRpsMode('candy12')}
+                            className={`p-2 rounded-lg text-xs font-medium transition-all ${
+                              selectedRpsMode === 'candy12'
+                                ? 'bg-amber-400 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            🍬 1.2배 이벤트
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          {selectedRpsMode === 'survivor'
+                            ? '진 사람은 탈락! 최후의 1인이 될 때까지!'
+                            : selectedRpsMode === 'candy15'
+                              ? '이기면 캔디 1.5배! (비기면 X)'
+                              : '이기면 캔디 1.2배! (비겨도 원금)'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">참가비:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={rpsEntryFee}
+                          onChange={(e) => setRpsEntryFee(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded-lg text-center"
+                          placeholder="0"
+                        />
+                        <span className="text-sm text-gray-500">🍭</span>
+                      </div>
+                      <Button
+                        onClick={createRpsGame}
+                        disabled={isCreatingRps}
+                        className="w-full bg-green-600 hover:bg-green-700"
+                      >
+                        {isCreatingRps ? '생성 중...' : '✊ 게임 방 만들기'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between bg-white p-3 rounded-lg">
+                        <div>
+                          <span className="text-sm text-gray-600">모드: </span>
+                          <span className="font-bold text-green-700">
+                            {rpsGame.gameMode === 'survivor' ? '🏆 최후의 승자' :
+                             rpsGame.gameMode === 'candy15' ? '🍬 1.5배' : '🍬 1.2배'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-sm text-gray-600">라운드: </span>
+                          <span className="font-bold text-green-700">{rpsGame.round}</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => {
+                            const teacherGameUrl = `${window.location.origin}?game=rps-teacher&gameId=${rpsGame.id}`;
+                            window.open(teacherGameUrl, '_blank', 'width=800,height=900');
+                          }}
+                          className="flex-1 bg-green-600 hover:bg-green-700"
+                        >
+                          🎮 관리 창 열기
+                        </Button>
+                        <Button
+                          onClick={deleteRpsGame}
+                          variant="outline"
+                          className="text-red-600 border-red-300 hover:bg-red-50"
+                        >
+                          삭제
+                        </Button>
+                      </div>
+                      <p className="text-xs text-center text-gray-500">
+                        게임 관리는 새 창에서 진행됩니다
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* 쿠키 배틀 */}
+                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-red-50 to-orange-50 border border-red-200">
+                  <div className="flex items-center gap-4">
+                    <span className="text-3xl">⚔️</span>
+                    <div>
+                      <h3 className="font-bold text-red-800">쿠키 배틀</h3>
+                      <p className="text-xs text-red-600">팀끼리 쿠키를 걸고 전략 대결!</p>
+                      <span className="inline-block mt-1 bg-blue-100 text-blue-600 px-2 py-0.5 rounded text-xs">팀 대결</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">준비중</span>
+                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
+                  </div>
+                </div>
+
+                {/* 스피드 퀴즈 */}
+                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200">
+                  <div className="flex items-center gap-4">
+                    <span className="text-3xl">⚡</span>
+                    <div>
+                      <h3 className="font-bold text-yellow-800">스피드 퀴즈</h3>
+                      <p className="text-xs text-yellow-600">빠르게 정답을 맞춰라!</p>
+                      <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">준비중</span>
+                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
+                  </div>
+                </div>
+
+                {/* 홀짝 게임 */}
+                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
+                  <div className="flex items-center gap-4">
+                    <span className="text-3xl">🎲</span>
+                    <div>
+                      <h3 className="font-bold text-blue-800">홀짝 게임</h3>
+                      <p className="text-xs text-blue-600">운을 시험해보세요!</p>
+                      <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">준비중</span>
+                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
+                  </div>
+                </div>
+
+                {/* 끝말잇기 */}
+                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-pink-50 to-rose-50 border border-pink-200">
+                  <div className="flex items-center gap-4">
+                    <span className="text-3xl">💬</span>
+                    <div>
+                      <h3 className="font-bold text-pink-800">끝말잇기</h3>
+                      <p className="text-xs text-pink-600">단어 대결!</p>
+                      <span className="inline-block mt-1 bg-purple-100 text-purple-600 px-2 py-0.5 rounded text-xs">실시간</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">준비중</span>
+                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 안내 */}
+            <Card className="bg-gray-50 border-dashed">
+              <CardContent className="py-4 text-center text-gray-500 text-sm">
+                <p>🔜 더 많은 게임이 곧 추가될 예정이에요!</p>
+                <p className="text-xs mt-1">숫자야구는 지금 바로 플레이할 수 있어요!</p>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* 소원 탭 - 모든 클래스룸에서 공유 */}
@@ -2322,101 +4295,289 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   ) : wishes.length === 0 ? (
                     <p className="text-center py-8 text-gray-500">등록된 소원이 없습니다.</p>
                   ) : (
-                    <div className="space-y-3">
-                      {[...wishes]
-                        .sort((a, b) => wishSortOrder === 'likes'
-                          ? b.likes.length - a.likes.length
-                          : (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)
-                        )
-                        .map((wish) => (
-                        <div
-                          key={wish.id}
-                          className={`p-4 rounded-lg ${wish.isGranted ? '' : 'bg-white'}`}
-                          style={{
-                            border: wish.isGranted
-                              ? '3px solid transparent'
-                              : '1px solid rgb(229 231 235)',
-                            backgroundImage: wish.isGranted
-                              ? 'linear-gradient(to right, rgb(254 243 199), rgb(253 230 138), rgb(254 243 199)), linear-gradient(to right, rgb(239 68 68), rgb(234 179 8), rgb(34 197 94), rgb(59 130 246), rgb(168 85 247))'
-                              : undefined,
-                            backgroundOrigin: 'border-box',
-                            backgroundClip: wish.isGranted ? 'padding-box, border-box' : undefined,
-                          }}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-medium">{wish.studentName}</span>
-                                {wish.isGranted && (
-                                  <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-orange-400 text-white rounded text-xs">
-                                    ✨ 선정됨
-                                  </span>
-                                )}
+                    <>
+                      <div className="space-y-3">
+                        {(() => {
+                          const sortedWishes = [...wishes].sort((a, b) => wishSortOrder === 'likes'
+                            ? b.likes.length - a.likes.length
+                            : (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)
+                          );
+                          const startIndex = (wishPage - 1) * WISHES_PER_PAGE;
+                          const paginatedWishes = sortedWishes.slice(startIndex, startIndex + WISHES_PER_PAGE);
+                          return paginatedWishes.map((wish) => (
+                            <div
+                              key={wish.id}
+                              className={`p-4 rounded-lg ${wish.isGranted ? '' : 'bg-white'}`}
+                              style={{
+                                border: wish.isGranted
+                                  ? '3px solid transparent'
+                                  : '1px solid rgb(229 231 235)',
+                                backgroundImage: wish.isGranted
+                                  ? 'linear-gradient(to right, rgb(254 243 199), rgb(253 230 138), rgb(254 243 199)), linear-gradient(to right, rgb(239 68 68), rgb(234 179 8), rgb(34 197 94), rgb(59 130 246), rgb(168 85 247))'
+                                  : undefined,
+                                backgroundOrigin: 'border-box',
+                                backgroundClip: wish.isGranted ? 'padding-box, border-box' : undefined,
+                              }}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="font-medium">{wish.studentName}</span>
+                                    {wish.isGranted && (
+                                      <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-orange-400 text-white rounded text-xs">
+                                        ✨ 선정됨
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-gray-700">{wish.content}</p>
+                                  {wish.isGranted && wish.grantedMessage && (
+                                    <p className="text-sm text-purple-600 mt-2 italic">
+                                      💬 어디선가 들려오는 목소리: "{wish.grantedMessage}"
+                                    </p>
+                                  )}
+                                  <p className="text-xs text-gray-400 mt-1">❤️ {wish.likes.length}</p>
+                                </div>
+                                <div className="flex gap-2">
+                                  {!wish.isGranted && (
+                                    <Button
+                                      size="sm"
+                                      className="bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-500 hover:to-orange-500"
+                                      onClick={() => {
+                                        setGrantingWish(wish);
+                                        setGrantMessage('');
+                                      }}
+                                    >
+                                      ✨ 선정
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-500"
+                                    onClick={() => handleDeleteWish(wish.id)}
+                                  >
+                                    삭제
+                                  </Button>
+                                </div>
                               </div>
-                              <p className="text-gray-700">{wish.content}</p>
-                              {wish.isGranted && wish.grantedMessage && (
-                                <p className="text-sm text-purple-600 mt-2 italic">
-                                  💬 어디선가 들려오는 목소리: "{wish.grantedMessage}"
-                                </p>
-                              )}
-                              <p className="text-xs text-gray-400 mt-1">❤️ {wish.likes.length}</p>
                             </div>
-                            <div className="flex gap-2">
-                              {!wish.isGranted && (
-                                <Button
-                                  size="sm"
-                                  className="bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-500 hover:to-orange-500"
-                                  onClick={() => {
-                                    setGrantingWish(wish);
-                                    setGrantMessage('');
-                                  }}
-                                >
-                                  ✨ 선정
-                                </Button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-red-500"
-                                onClick={() => handleDeleteWish(wish.id)}
-                              >
-                                삭제
-                              </Button>
-                            </div>
-                          </div>
+                          ));
+                        })()}
+                      </div>
+                      {/* 페이지네이션 */}
+                      {wishes.length > WISHES_PER_PAGE && (
+                        <div className="flex justify-center items-center gap-2 mt-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setWishPage(p => Math.max(1, p - 1))}
+                            disabled={wishPage === 1}
+                          >
+                            ◀ 이전
+                          </Button>
+                          <span className="text-sm text-gray-600">
+                            {wishPage} / {Math.ceil(wishes.length / WISHES_PER_PAGE)} 페이지
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setWishPage(p => Math.min(Math.ceil(wishes.length / WISHES_PER_PAGE), p + 1))}
+                            disabled={wishPage >= Math.ceil(wishes.length / WISHES_PER_PAGE)}
+                          >
+                            다음 ▶
+                          </Button>
                         </div>
-                      ))}
-                    </div>
+                      )}
+                    </>
                   )}
                 </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* 프로필 확인 탭 */}
+          <TabsContent value="profiles" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>👤 학생 프로필 확인</CardTitle>
+                <CardDescription>학생들의 프로필을 구경해보세요!</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!selectedClass ? (
+                  <p className="text-center text-gray-500 py-8">학급을 먼저 선택해주세요</p>
+                ) : students.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">학생이 없습니다</p>
+                ) : (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                    {students.map((student) => (
+                      <button
+                        key={student.code}
+                        onClick={() => handleSelectProfileStudent(student)}
+                        className="p-3 rounded-xl hover:shadow-md transition-all flex flex-col items-center"
+                        style={{
+                          border: `2px solid ${getBorderColor(student.profile.buttonBorderCode)}`,
+                          ...(isGradientFill(student.profile.buttonFillCode)
+                            ? { backgroundImage: getGradientStyle(student.profile.buttonFillCode) }
+                            : { backgroundColor: getFillColor(student.profile.buttonFillCode) }
+                          ),
+                        }}
+                      >
+                        <div className={`text-3xl mb-1 ${getAnimationClass(student.profile.animationCode || 'none')}`}>
+                          {student.profile.profileBadgeKey && student.badges?.[student.profile.profileBadgeKey]?.hasBadge ? (
+                            <img
+                              src={student.badges[student.profile.profileBadgeKey].imgUrl}
+                              alt={student.badges[student.profile.profileBadgeKey].title}
+                              className="w-10 h-10 mx-auto rounded"
+                            />
+                          ) : getEmojiFromCode(student.profile.emojiCode) || (
+                            <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                              <span className="text-gray-400 text-xs">👤</span>
+                            </div>
+                          )}
+                        </div>
+                        <p className={`font-medium text-sm truncate w-full text-center ${getNameEffectClass(student.profile.nameEffectCode)}`}>
+                          {student.name}
+                        </p>
+                        {student.profile.title && (
+                          <p className={`text-xs truncate w-full text-center ${getTitleColorClass(student.profile.titleColorCode)}`}>
+                            {student.profile.title}
+                          </p>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
             </Card>
           </TabsContent>
 
           {/* 설정 탭 */}
           <TabsContent value="settings">
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>⚙️ 계정 정보</CardTitle>
+                {!isEditingProfile && (
+                  <Button variant="outline" size="sm" onClick={startEditingProfile}>
+                    ✏️ 프로필 수정
+                  </Button>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">이메일</label>
-                  <p className="font-medium">{teacher?.email}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">이름</label>
-                  <p className="font-medium">{teacher?.name}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">학교</label>
-                  <p className="font-medium">{teacher?.schoolName}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">다했니 API 키</label>
-                  <p className="font-mono text-xs bg-gray-100 p-2 rounded">
-                    {teacher?.dahandinApiKey ? '••••••••' + teacher.dahandinApiKey.slice(-8) : '-'}
-                  </p>
-                </div>
+                {isEditingProfile ? (
+                  <>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">이메일</label>
+                      <p className="font-medium text-gray-400">{teacher?.email}</p>
+                      <p className="text-xs text-gray-400 mt-1">이메일 변경은 아래 별도 섹션에서 가능합니다.</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">이름</label>
+                      <Input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="이름을 입력하세요"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">학교</label>
+                      <Input
+                        value={editSchoolName}
+                        onChange={(e) => setEditSchoolName(e.target.value)}
+                        placeholder="학교 이름을 입력하세요"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button onClick={saveProfile} disabled={isSavingProfile}>
+                        {isSavingProfile ? '저장 중...' : '💾 저장'}
+                      </Button>
+                      <Button variant="outline" onClick={cancelEditingProfile} disabled={isSavingProfile}>
+                        취소
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">이메일</label>
+                      <p className="font-medium">{teacher?.email}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">이름</label>
+                      <p className="font-medium">{teacher?.name}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">학교</label>
+                      <p className="font-medium">{teacher?.schoolName}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">다했니 API 키</label>
+                      <p className="font-mono text-xs bg-gray-100 p-2 rounded">
+                        {teacher?.dahandinApiKey ? '••••••••' + teacher.dahandinApiKey.slice(-8) : '-'}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* 이메일 변경 카드 */}
+            <Card className="mt-4">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>📧 이메일 변경</CardTitle>
+                {!isEditingEmail && (
+                  <Button variant="outline" size="sm" onClick={startEditingEmail}>
+                    ✏️ 변경하기
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent>
+                {isEditingEmail ? (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">현재 이메일</label>
+                      <p className="font-medium text-gray-400">{teacher?.email}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">새 이메일</label>
+                      <Input
+                        type="email"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        placeholder="새 이메일 주소를 입력하세요"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">현재 비밀번호</label>
+                      <Input
+                        type="password"
+                        value={emailPassword}
+                        onChange={(e) => setEmailPassword(e.target.value)}
+                        placeholder="보안을 위해 현재 비밀번호를 입력하세요"
+                        className="mt-1"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">이메일 변경을 위해 현재 비밀번호 확인이 필요합니다.</p>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button onClick={handleChangeEmail} disabled={isChangingEmail}>
+                        {isChangingEmail ? '변경 중...' : '💾 이메일 변경'}
+                      </Button>
+                      <Button variant="outline" onClick={cancelEditingEmail} disabled={isChangingEmail}>
+                        취소
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-sm text-gray-600">
+                      현재 이메일: <span className="font-medium">{teacher?.email}</span>
+                    </p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      이메일을 변경하면 로그인 시 새 이메일을 사용해야 합니다.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -2443,25 +4604,21 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               <button onClick={handleCloseStudentModal} className="text-gray-400 hover:text-gray-600 text-2xl p-1">×</button>
             </div>
 
-            {/* 쿠키 현황 */}
-            <div className="px-4 py-4 bg-amber-50 grid grid-cols-4 gap-2 text-center">
-              <div className="bg-white rounded-lg p-2">
-                <p className="text-amber-600 font-bold text-xl">{selectedStudent.cookie}</p>
-                <p className="text-xs text-amber-700">🍪 쿠키</p>
+            {/* 쿠키 & 캔디 현황 */}
+            <div className="px-4 py-4 bg-gradient-to-r from-amber-50 to-pink-50 grid grid-cols-2 gap-3 text-center">
+              <div className="bg-white rounded-lg p-3 border border-amber-200">
+                <p className="text-amber-600 font-bold text-2xl">{selectedStudent.cookie}</p>
+                <p className="text-xs text-amber-700">🍪 다했니 쿠키</p>
               </div>
-              <div className="bg-white rounded-lg p-2">
-                <p className="text-green-600 font-bold text-xl">{selectedStudent.totalCookie}</p>
-                <p className="text-xs text-gray-500">📊 누적</p>
-              </div>
-              <div className="bg-white rounded-lg p-2">
-                <p className="text-gray-600 font-bold text-xl">{selectedStudent.usedCookie}</p>
-                <p className="text-xs text-gray-500">💸 사용</p>
+              <div className="bg-white rounded-lg p-3 border border-pink-200">
+                <p className="text-pink-600 font-bold text-2xl">{selectedStudent.jelly ?? selectedStudent.cookie}</p>
+                <p className="text-xs text-pink-700">🍭 캔디 (게임용)</p>
               </div>
             </div>
 
-            {/* 쿠키 부여 */}
-            <div className="px-4 py-3 bg-blue-50 border-y">
-              <p className="text-sm font-medium text-blue-700 mb-2">🎁 쿠키 부여/차감</p>
+            {/* 캔디 부여 */}
+            <div className="px-4 py-3 bg-pink-50 border-y">
+              <p className="text-sm font-medium text-pink-700 mb-2">🍭 캔디 부여/차감</p>
               <div className="flex gap-2">
                 <div className="flex-1 flex gap-1">
                   <Button
@@ -2517,6 +4674,87 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 </Button>
               </div>
               <p className="text-xs text-gray-500 mt-1">버튼 클릭: 즉시 적용 / 직접 입력 후 적용 버튼</p>
+            </div>
+
+            {/* 프로필 꾸미기 미리보기 */}
+            <div className="px-4 py-4 bg-gradient-to-b from-purple-50 to-pink-50 border-b">
+              <p className="text-sm font-medium text-purple-700 mb-3 text-center">🎨 프로필 미리보기</p>
+              <div className="flex justify-center">
+                {(() => {
+                  const profile = selectedStudent?.profile;
+                  const emojiItem = ALL_SHOP_ITEMS.find(item => item.code === profile?.emojiCode);
+                  const emoji = emojiItem?.value || '😀';
+                  const borderItem = ALL_SHOP_ITEMS.find(item => item.code === profile?.buttonBorderCode);
+                  const fillItem = ALL_SHOP_ITEMS.find(item => item.code === profile?.buttonFillCode);
+                  const nameEffectItem = ALL_SHOP_ITEMS.find(item => item.code === profile?.nameEffectCode);
+                  const titleColorItem = ALL_SHOP_ITEMS.find(item => item.code === profile?.titleColorCode);
+
+                  const borderColorMap: Record<string, string> = {
+                    'border-blue-500': 'rgb(59 130 246)', 'border-red-500': 'rgb(239 68 68)',
+                    'border-green-500': 'rgb(34 197 94)', 'border-yellow-500': 'rgb(234 179 8)',
+                    'border-purple-500': 'rgb(168 85 247)', 'border-pink-500': 'rgb(236 72 153)',
+                    'border-amber-400': 'rgb(251 191 36)', 'border-gray-800': 'rgb(31 41 55)',
+                  };
+                  const borderColor = borderItem?.value ? borderColorMap[borderItem.value] || 'rgb(229 231 235)' : 'rgb(229 231 235)';
+
+                  const fillColorMap: Record<string, string> = {
+                    'bg-blue-500': 'rgb(59 130 246)', 'bg-red-500': 'rgb(239 68 68)',
+                    'bg-green-500': 'rgb(34 197 94)', 'bg-yellow-500': 'rgb(234 179 8)',
+                    'bg-purple-500': 'rgb(168 85 247)', 'bg-pink-500': 'rgb(236 72 153)',
+                    'bg-amber-400': 'rgb(251 191 36)', 'bg-gray-800': 'rgb(31 41 55)',
+                  };
+                  const gradientMap: Record<string, string> = {
+                    'gradient-rainbow': 'linear-gradient(to right, rgb(239 68 68), rgb(234 179 8), rgb(34 197 94), rgb(59 130 246), rgb(168 85 247))',
+                    'gradient-fire': 'linear-gradient(to right, rgb(239 68 68), rgb(249 115 22), rgb(234 179 8))',
+                    'gradient-ocean': 'linear-gradient(to right, rgb(6 182 212), rgb(59 130 246), rgb(99 102 241))',
+                    'gradient-sunset': 'linear-gradient(to right, rgb(249 115 22), rgb(236 72 153), rgb(168 85 247))',
+                    'gradient-aurora': 'linear-gradient(to right, rgb(34 197 94), rgb(6 182 212), rgb(168 85 247))',
+                    'gradient-pink-purple': 'linear-gradient(to right, rgb(236 72 153), rgb(168 85 247))',
+                    'gradient-mint': 'linear-gradient(to right, rgb(6 182 212), rgb(20 184 166))',
+                    'gradient-orange': 'linear-gradient(to right, rgb(234 179 8), rgb(249 115 22))',
+                  };
+                  const isGradient = fillItem?.value?.startsWith('gradient-');
+                  const fillStyle = isGradient
+                    ? { backgroundImage: gradientMap[fillItem?.value || ''] || 'none' }
+                    : { backgroundColor: fillColorMap[fillItem?.value || ''] || 'white' };
+
+                  const nameEffectClass = nameEffectItem?.value === 'rainbow'
+                    ? 'bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 bg-clip-text text-transparent'
+                    : nameEffectItem?.value === 'glow'
+                    ? 'text-amber-500 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]'
+                    : nameEffectItem?.value === 'neon'
+                    ? 'text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.9)]'
+                    : '';
+
+                  const titleColors = ['bg-red-100 text-red-700', 'bg-orange-100 text-orange-700', 'bg-yellow-100 text-yellow-700', 'bg-green-100 text-green-700', 'bg-blue-100 text-blue-700', 'bg-purple-100 text-purple-700', 'bg-pink-100 text-pink-700', 'bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 text-white'];
+                  const titleColorIndex = titleColorItem?.value ? parseInt(titleColorItem.value) : 0;
+                  const titleColorClass = titleColors[titleColorIndex] || 'bg-gray-100 text-gray-700';
+
+                  return (
+                    <div
+                      className="px-8 py-5 rounded-xl text-center shadow-lg"
+                      style={{
+                        border: `3px solid ${borderColor}`,
+                        ...fillStyle,
+                      }}
+                    >
+                      <div className={`text-5xl mb-3 ${getAnimationClass(profile?.animationCode || 'none')}`}>
+                        {emoji}
+                      </div>
+                      {profile?.title && (
+                        <div className="mb-2">
+                          <span className={`inline-block text-sm px-3 py-1 rounded-full ${titleColorClass}`}>
+                            {profile.title}
+                          </span>
+                        </div>
+                      )}
+                      <p className={`font-bold text-xl ${nameEffectClass}`}>
+                        {selectedStudent?.name}
+                      </p>
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
 
             {/* GitHub 스타일 잔디 */}
@@ -2593,6 +4831,599 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 }}
               >
                 ✨ 선정하기
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 프로필 확인 모달 */}
+      {selectedProfileStudent && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedProfileStudent(null)}
+        >
+          <div
+            className="bg-white shadow-2xl border-4 border-amber-300 overflow-hidden"
+            style={{ width: '420px', maxWidth: '95vw', borderRadius: '24px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 헤더 */}
+            <div className="bg-gradient-to-r from-amber-400 to-orange-400 px-6 py-4 flex items-center justify-between">
+              <span className="text-white font-bold text-lg">👤 학생 프로필</span>
+              <button onClick={() => setSelectedProfileStudent(null)} className="text-white/80 hover:text-white text-2xl p-1">✕</button>
+            </div>
+
+            {/* 바디 */}
+            <div className="p-6 space-y-5">
+              {/* 중앙 프로필 카드 */}
+              <div className={`text-center p-6 rounded-2xl ${getBackgroundClass(selectedProfileStudent.profile.backgroundCode) || 'bg-gradient-to-b from-amber-50 to-orange-50'}`}>
+                <div
+                  className={`inline-block p-4 rounded-2xl ${getAnimationClass(selectedProfileStudent.profile.animationCode || 'none')}`}
+                  style={{
+                    border: `2px solid ${getBorderColor(selectedProfileStudent.profile.buttonBorderCode)}`,
+                    ...(isGradientFill(selectedProfileStudent.profile.buttonFillCode)
+                      ? { backgroundImage: getGradientStyle(selectedProfileStudent.profile.buttonFillCode) }
+                      : { backgroundColor: getFillColor(selectedProfileStudent.profile.buttonFillCode) }
+                    ),
+                  }}
+                >
+                  {/* 뱃지가 설정되어 있으면 뱃지, 없으면 이모지 표시 */}
+                  {selectedProfileStudent.profile.profileBadgeKey && selectedProfileStudent.badges?.[selectedProfileStudent.profile.profileBadgeKey]?.hasBadge ? (
+                    <div className={`mb-3 ${getAnimationClass(selectedProfileStudent.profile.animationCode || 'none')}`}>
+                      <img
+                        src={selectedProfileStudent.badges[selectedProfileStudent.profile.profileBadgeKey].imgUrl}
+                        alt={selectedProfileStudent.badges[selectedProfileStudent.profile.profileBadgeKey].title}
+                        className="w-24 h-24 mx-auto rounded-lg"
+                      />
+                    </div>
+                  ) : getEmojiFromCode(selectedProfileStudent.profile.emojiCode) ? (
+                    <div className={`text-6xl mb-3 ${getAnimationClass(selectedProfileStudent.profile.animationCode || 'none')}`}>
+                      {getEmojiFromCode(selectedProfileStudent.profile.emojiCode)}
+                    </div>
+                  ) : (
+                    <div className="w-20 h-20 mx-auto mb-3 bg-gray-200 rounded-full flex items-center justify-center">
+                      <span className="text-gray-400 text-3xl">👤</span>
+                    </div>
+                  )}
+                  <p className={`font-bold text-xl ${getNameEffectClass(selectedProfileStudent.profile.nameEffectCode)}`}>
+                    {selectedProfileStudent.name}
+                  </p>
+                  {selectedProfileStudent.profile.title && (
+                    <p className={`text-sm mt-1 font-medium ${getTitleColorClass(selectedProfileStudent.profile.titleColorCode)}`}>
+                      {selectedProfileStudent.profile.title}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* 통계 */}
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="bg-amber-50 rounded-xl p-3">
+                  <p className="font-bold text-2xl text-amber-600">{selectedProfileStudent.cookie}</p>
+                  <p className="text-gray-500 text-sm">🍪 쿠키</p>
+                </div>
+                <div className="bg-green-50 rounded-xl p-3">
+                  <p className="font-bold text-2xl text-green-600">{selectedProfileStudent.totalCookie}</p>
+                  <p className="text-gray-500 text-sm">📊 누적</p>
+                </div>
+                <div className="bg-purple-50 rounded-xl p-3">
+                  <p className="font-bold text-2xl text-purple-600">{selectedProfileStudent.wishStreak || 0}</p>
+                  <p className="text-gray-500 text-sm">🔥 연속</p>
+                </div>
+              </div>
+
+              {/* 뱃지 */}
+              {selectedProfileStudent.badges && Object.values(selectedProfileStudent.badges).some(b => b.hasBadge) && (
+                <div className="p-3 bg-gray-50 rounded-xl">
+                  <p className="text-sm text-gray-500 mb-2">🏆 획득 뱃지</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {(Object.entries(selectedProfileStudent.badges) as [string, Badge][])
+                      .filter(([, badge]) => badge.hasBadge)
+                      .map(([key, badge]) => (
+                        <img key={key} src={badge.imgUrl} alt={badge.title} className="w-8 h-8 rounded" title={badge.title} />
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 장착 아이템 */}
+              <div className="p-3 bg-blue-50 rounded-xl">
+                <p className="text-sm text-gray-500 mb-2">🎨 장착 아이템</p>
+                <div className="flex flex-wrap gap-2">
+                  {/* 이모지 */}
+                  <span className="px-2 py-1 bg-white rounded-lg text-sm flex items-center gap-1">
+                    <span className="text-lg">{getEmojiFromCode(selectedProfileStudent.profile.emojiCode) || '👤'}</span>
+                    <span className="text-gray-600">이모지</span>
+                  </span>
+                  {/* 칭호 */}
+                  {selectedProfileStudent.profile.title && (
+                    <span className={`px-2 py-1 bg-white rounded-lg text-sm flex items-center gap-1 ${getTitleColorClass(selectedProfileStudent.profile.titleColorCode)}`}>
+                      <span>🏷️</span>
+                      <span>{selectedProfileStudent.profile.title}</span>
+                    </span>
+                  )}
+                  {/* 버튼 테두리 */}
+                  {selectedProfileStudent.profile.buttonBorderCode && selectedProfileStudent.profile.buttonBorderCode !== 'gray-300' && (
+                    <span
+                      className="px-2 py-1 bg-white rounded-lg text-sm flex items-center gap-1"
+                      style={{ border: `2px solid ${getBorderColor(selectedProfileStudent.profile.buttonBorderCode)}` }}
+                    >
+                      <span>🖼️</span>
+                      <span className="text-gray-600">테두리</span>
+                    </span>
+                  )}
+                  {/* 버튼 색상 */}
+                  {selectedProfileStudent.profile.buttonFillCode && selectedProfileStudent.profile.buttonFillCode !== 'none' && (
+                    <span
+                      className="px-2 py-1 rounded-lg text-sm flex items-center gap-1"
+                      style={{
+                        ...(isGradientFill(selectedProfileStudent.profile.buttonFillCode)
+                          ? { backgroundImage: getGradientStyle(selectedProfileStudent.profile.buttonFillCode) }
+                          : { backgroundColor: getFillColor(selectedProfileStudent.profile.buttonFillCode) }
+                        ),
+                      }}
+                    >
+                      <span>🎨</span>
+                      <span>버튼색</span>
+                    </span>
+                  )}
+                  {/* 애니메이션 */}
+                  {selectedProfileStudent.profile.animationCode && selectedProfileStudent.profile.animationCode !== 'none' && (
+                    <span className={`px-2 py-1 bg-white rounded-lg text-sm flex items-center gap-1 ${getAnimationClass(selectedProfileStudent.profile.animationCode)}`}>
+                      <span>✨</span>
+                      <span className="text-gray-600">애니메이션</span>
+                    </span>
+                  )}
+                  {/* 이름 효과 */}
+                  {selectedProfileStudent.profile.nameEffectCode && selectedProfileStudent.profile.nameEffectCode !== 'none' && (
+                    <span className="px-2 py-1 bg-white rounded-lg text-sm flex items-center gap-1">
+                      <span>💫</span>
+                      <span className={getNameEffectClass(selectedProfileStudent.profile.nameEffectCode)}>이름효과</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* 잔디 */}
+              <div className="p-3 bg-green-50 rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-600">🌱 최근 활동</span>
+                  <div className="flex items-center gap-1 text-xs text-gray-400">
+                    <span>적음</span>
+                    <div className="w-3 h-3 rounded-sm bg-gray-200" />
+                    <div className="w-3 h-3 rounded-sm bg-green-300" />
+                    <div className="w-3 h-3 rounded-sm bg-green-500" />
+                    <span>많음</span>
+                  </div>
+                </div>
+                {isLoadingProfileGrass ? (
+                  <p className="text-center text-sm text-gray-400 py-4">로딩 중...</p>
+                ) : (
+                  <div className="flex gap-[2px] justify-center">
+                    {(() => {
+                      const WEEKS = 12;
+                      const today = new Date();
+                      // 시작일을 12주 전 월요일로 설정
+                      const startDate = new Date(today);
+                      startDate.setDate(startDate.getDate() - (WEEKS * 7));
+                      const startDayOfWeek = startDate.getDay();
+                      if (startDayOfWeek === 0) {
+                        startDate.setDate(startDate.getDate() + 1);
+                      } else if (startDayOfWeek !== 1) {
+                        startDate.setDate(startDate.getDate() - (startDayOfWeek - 1));
+                      }
+                      return Array.from({ length: WEEKS }).map((_, weekIndex) => (
+                        <div key={weekIndex} className="flex flex-col gap-[2px]">
+                          {Array.from({ length: 5 }).map((_, dayIndex) => {
+                            const date = new Date(startDate);
+                            date.setDate(date.getDate() + weekIndex * 7 + dayIndex);
+                            const dateStr = getKoreanDateString(date);
+                            const isFuture = date > today;
+                            const grassRecord = profileStudentGrass.find((g) => g.date === dateStr);
+                            const cookieChange = grassRecord?.cookieChange || 0;
+                            return (
+                              <div
+                                key={dayIndex}
+                                className={`w-3 h-3 rounded-sm ${isFuture ? 'bg-gray-100' : getGrassColor(cookieChange)}`}
+                                title={`${dateStr}: +${cookieChange}쿠키`}
+                              />
+                            );
+                          })}
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 팀원 선택 모달 */}
+      {showTeamMemberModal && teamForMemberModal && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setShowTeamMemberModal(false);
+            setTeamForMemberModal(null);
+            setMembersToAdd([]);
+            setMembersToRemove([]);
+          }}
+        >
+          <div
+            className="bg-white shadow-2xl border-2 border-green-300 overflow-hidden flex flex-col"
+            style={{ width: '380px', maxWidth: '95vw', maxHeight: '70vh', borderRadius: '16px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 헤더 */}
+            <div className="bg-gradient-to-r from-green-400 to-emerald-400 px-4 py-3 flex items-center justify-between">
+              <span className="text-white font-bold">👥 팀 관리</span>
+              <button
+                onClick={() => {
+                  setShowTeamMemberModal(false);
+                  setTeamForMemberModal(null);
+                  setMembersToAdd([]);
+                  setMembersToRemove([]);
+                  setEditingTeamName('');
+                  setEditingTeamFlag('');
+                }}
+                className="text-white/80 hover:text-white text-xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 바디 */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              {/* 팀 이름/이모지 수정 */}
+              <div className="p-2 bg-blue-50 rounded-lg">
+                <p className="text-xs font-medium text-blue-600 mb-2">✏️ 팀 정보 수정</p>
+                <div className="flex gap-2">
+                  <select
+                    value={editingTeamFlag}
+                    onChange={(e) => setEditingTeamFlag(e.target.value)}
+                    className="px-2 py-1 border rounded text-xl w-14"
+                  >
+                    {TEAM_FLAGS.slice(0, 20).map((flag) => (
+                      <option key={flag} value={flag}>{flag}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={editingTeamName}
+                    onChange={(e) => setEditingTeamName(e.target.value)}
+                    className="flex-1 px-2 py-1 border rounded text-sm"
+                    placeholder="팀 이름"
+                  />
+                </div>
+              </div>
+
+              {/* 현재 팀원 */}
+              {(() => {
+                const currentTeam = teams.find(t => t.teamId === teamForMemberModal);
+                const currentMembers = currentTeam?.members || [];
+                if (currentMembers.length === 0) return null;
+
+                return (
+                  <div className="p-2 bg-red-50 rounded-lg">
+                    <p className="text-xs font-medium text-red-600 mb-2">🗑️ 현재 팀원 (클릭하여 제거)</p>
+                    <div className="flex flex-wrap gap-1">
+                      {currentMembers.map(code => {
+                        const student = students.find(s => s.code === code);
+                        const isMarkedForRemove = membersToRemove.includes(code);
+                        return (
+                          <button
+                            key={code}
+                            onClick={() => {
+                              if (isMarkedForRemove) {
+                                setMembersToRemove(prev => prev.filter(c => c !== code));
+                              } else {
+                                setMembersToRemove(prev => [...prev, code]);
+                              }
+                            }}
+                            className={`px-2 py-1 rounded text-xs flex items-center gap-1 transition-all ${
+                              isMarkedForRemove
+                                ? 'bg-red-500 text-white line-through'
+                                : 'bg-white border border-red-200 hover:bg-red-100'
+                            }`}
+                          >
+                            <span>{getEmojiFromCode(student?.profile.emojiCode || '') || '👤'}</span>
+                            <span>{student?.name || code}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 추가할 학생 선택 */}
+              <div className="p-2 bg-green-50 rounded-lg">
+                <p className="text-xs font-medium text-green-600 mb-2">➕ 학생 선택 (클릭하여 추가)</p>
+                <div className="flex flex-wrap gap-1 max-h-[200px] overflow-y-auto">
+                  {students.map((student) => {
+                    const currentTeam = teams.find(t => t.teamId === teamForMemberModal);
+                    const isInCurrentTeam = currentTeam?.members.includes(student.code);
+                    const otherTeam = teams.find(t => t.teamId !== teamForMemberModal && t.members.includes(student.code));
+                    const isInOtherTeam = !!otherTeam;
+                    const isMarkedForAdd = membersToAdd.includes(student.code);
+
+                    // 현재 팀에 있으면 표시 안함
+                    if (isInCurrentTeam) return null;
+
+                    return (
+                      <button
+                        key={student.code}
+                        onClick={() => {
+                          if (isInOtherTeam) return;
+                          if (isMarkedForAdd) {
+                            setMembersToAdd(prev => prev.filter(c => c !== student.code));
+                          } else {
+                            setMembersToAdd(prev => [...prev, student.code]);
+                          }
+                        }}
+                        disabled={isInOtherTeam}
+                        className={`px-2 py-1 rounded text-xs flex items-center gap-1 transition-all ${
+                          isInOtherTeam
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : isMarkedForAdd
+                            ? 'bg-green-500 text-white'
+                            : 'bg-white border border-green-200 hover:bg-green-100'
+                        }`}
+                        title={isInOtherTeam ? `${otherTeam?.flag} ${otherTeam?.teamName} 소속` : ''}
+                      >
+                        <span>{getEmojiFromCode(student.profile.emojiCode) || '👤'}</span>
+                        <span>{student.name}</span>
+                        {isInOtherTeam && <span className="text-[10px]">({otherTeam?.flag})</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* 푸터 - 적용 버튼 */}
+            {(() => {
+              const currentTeam = teams.find(t => t.teamId === teamForMemberModal);
+              const hasNameChange = editingTeamName !== currentTeam?.teamName;
+              const hasFlagChange = editingTeamFlag !== currentTeam?.flag;
+              const hasChanges = membersToAdd.length > 0 || membersToRemove.length > 0 || hasNameChange || hasFlagChange;
+
+              if (!hasChanges) return null;
+
+              return (
+                <div className="p-3 border-t bg-gray-50 flex items-center justify-between">
+                  <div className="text-xs text-gray-500 space-x-1">
+                    {(hasNameChange || hasFlagChange) && <span className="text-blue-600">팀정보 수정</span>}
+                    {membersToAdd.length > 0 && <span className="text-green-600">+{membersToAdd.length}명</span>}
+                    {membersToRemove.length > 0 && <span className="text-red-600">-{membersToRemove.length}명</span>}
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      if (!user || !selectedClass || !teamForMemberModal) return;
+                      // 팀 이름/이모지 수정
+                      if (hasNameChange || hasFlagChange) {
+                        await updateTeam(user.uid, selectedClass, teamForMemberModal, {
+                          teamName: editingTeamName,
+                          flag: editingTeamFlag
+                        });
+                      }
+                      // 멤버 제거
+                      for (const code of membersToRemove) {
+                        await removeTeamMember(user.uid, selectedClass, teamForMemberModal, code);
+                      }
+                      // 멤버 추가
+                      for (const code of membersToAdd) {
+                        await addTeamMember(user.uid, selectedClass, teamForMemberModal, code);
+                      }
+                      await loadTeams();
+                      toast.success('팀이 수정되었습니다!');
+                      setShowTeamMemberModal(false);
+                      setTeamForMemberModal(null);
+                      setMembersToAdd([]);
+                      setMembersToRemove([]);
+                      setEditingTeamName('');
+                      setEditingTeamFlag('');
+                    }}
+                    className="bg-green-500 hover:bg-green-600"
+                  >
+                    적용하기
+                  </Button>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* 쿠키 상점 신청 처리 모달 */}
+      {showCookieRequestModal && selectedCookieRequest && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowCookieRequestModal(false)}>
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold mb-4">📋 신청 처리</h3>
+
+            <div className="space-y-3 mb-4">
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="font-medium">{selectedCookieRequest.studentName} ({selectedCookieRequest.studentNumber}번)</p>
+                <p className="text-sm text-gray-600">{selectedCookieRequest.itemName} x{selectedCookieRequest.quantity}</p>
+                <p className="text-sm text-amber-600 font-medium">총 {selectedCookieRequest.totalPrice} 쿠키 차감</p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-600 block mb-1">답변 메시지 (선택)</label>
+                <Input
+                  placeholder="학생에게 전달할 메시지를 입력하세요"
+                  value={teacherResponse}
+                  onChange={(e) => setTeacherResponse(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={() => handleCookieRequestResponse('approved')}
+                className="flex-1 bg-green-500 hover:bg-green-600"
+              >
+                ✅ 승인
+              </Button>
+              <Button
+                onClick={() => handleCookieRequestResponse('rejected')}
+                variant="outline"
+                className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+              >
+                ❌ 거절
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowCookieRequestModal(false);
+                  setSelectedCookieRequest(null);
+                  setTeacherResponse('');
+                }}
+                variant="outline"
+              >
+                취소
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 물품 요청 모달 */}
+      {showItemSuggestionsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-xl flex flex-col">
+            <div className="p-4 bg-amber-50 border-b border-amber-200 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-lg font-bold text-amber-800">💡 학생 물품 요청</h3>
+                <p className="text-sm text-amber-600 mt-1">학생들이 상점에 추가됐으면 하는 물품 요청 목록입니다.</p>
+              </div>
+              <button
+                onClick={() => setShowItemSuggestionsModal(false)}
+                className="p-2 text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {selectedItemSuggestion ? (
+                // 선택된 요청 처리 화면
+                <div className="space-y-4">
+                  <button
+                    onClick={() => {
+                      setSelectedItemSuggestion(null);
+                      setSuggestionResponseMessage('');
+                    }}
+                    className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                  >
+                    ← 목록으로
+                  </button>
+                  <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                    <h4 className="font-bold text-lg mb-2">{selectedItemSuggestion.itemName}</h4>
+                    {selectedItemSuggestion.description && (
+                      <p className="text-sm text-gray-600 mb-2">{selectedItemSuggestion.description}</p>
+                    )}
+                    <p className="text-xs text-gray-500">
+                      요청자: {selectedItemSuggestion.studentName} · {selectedItemSuggestion.createdAt?.toDate?.()?.toLocaleDateString('ko-KR') || ''}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">학생에게 보낼 메시지</label>
+                    <textarea
+                      value={suggestionResponseMessage}
+                      onChange={(e) => setSuggestionResponseMessage(e.target.value)}
+                      placeholder="예: 다음 달에 추가할게요! / 가격이 너무 비싸서 어려워요"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleSuggestionResponse(selectedItemSuggestion, 'approved', suggestionResponseMessage)}
+                      className="flex-1 py-2 bg-green-500 text-white rounded-lg font-medium hover:bg-green-600"
+                    >
+                      ✅ 승인
+                    </button>
+                    <button
+                      onClick={() => handleSuggestionResponse(selectedItemSuggestion, 'rejected', suggestionResponseMessage)}
+                      className="flex-1 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600"
+                    >
+                      ❌ 거절
+                    </button>
+                  </div>
+                </div>
+              ) : itemSuggestions.length === 0 ? (
+                <p className="text-center py-12 text-gray-500">물품 요청이 없습니다.</p>
+              ) : (
+                <div className="space-y-3">
+                  {itemSuggestions.map((suggestion) => (
+                    <div
+                      key={suggestion.id}
+                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md ${
+                        suggestion.status === 'pending'
+                          ? 'border-amber-300 bg-amber-50'
+                          : suggestion.status === 'approved'
+                          ? 'border-green-300 bg-green-50'
+                          : 'border-red-300 bg-red-50'
+                      }`}
+                      onClick={() => suggestion.status === 'pending' && setSelectedItemSuggestion(suggestion)}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-bold text-lg">{suggestion.itemName}</span>
+                            <span className={`px-2 py-0.5 text-xs rounded-full ${
+                              suggestion.status === 'pending' ? 'bg-amber-200 text-amber-800' :
+                              suggestion.status === 'approved' ? 'bg-green-200 text-green-800' :
+                              'bg-red-200 text-red-800'
+                            }`}>
+                              {suggestion.status === 'pending' ? '대기중' :
+                               suggestion.status === 'approved' ? '승인됨' : '거절됨'}
+                            </span>
+                          </div>
+                          {suggestion.description && (
+                            <p className="text-sm text-gray-600 mb-2">{suggestion.description}</p>
+                          )}
+                          <p className="text-xs text-gray-400">
+                            요청자: {suggestion.studentName} · {suggestion.createdAt?.toDate?.()?.toLocaleDateString('ko-KR') || ''}
+                          </p>
+                          {suggestion.teacherMessage && (
+                            <p className="mt-2 text-sm text-gray-700 bg-white p-2 rounded">
+                              💬 내 답변: {suggestion.teacherMessage}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteSuggestion(suggestion.id);
+                          }}
+                          className="px-2 py-1 text-gray-400 hover:text-red-500"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-4 bg-gray-50 border-t shrink-0">
+              <Button
+                onClick={() => {
+                  setShowItemSuggestionsModal(false);
+                  setSelectedItemSuggestion(null);
+                  setSuggestionResponseMessage('');
+                }}
+                className="w-full"
+                variant="outline"
+              >
+                닫기
               </Button>
             </div>
           </div>
