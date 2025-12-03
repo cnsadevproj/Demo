@@ -1639,7 +1639,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 const today = new Date();
                 const todayDayOfWeek = today.getDay();
 
-                // endDate: 표시할 마지막 날 (오늘이 주중이면 오늘, 주말이면 지난주 금요일)
+                // endDate: 오늘이 주중이면 오늘, 주말이면 지난주 금요일
                 let endDate = new Date(today);
                 if (todayDayOfWeek === 0) {
                   // 일요일이면 지난주 금요일
@@ -1650,15 +1650,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 }
                 // else: 월~금이면 오늘 그대로
 
-                // endDate가 속한 주의 금요일을 실제 끝으로
-                const endDayOfWeek = endDate.getDay();
-                if (endDayOfWeek < 5) {
-                  // 월~목이면 그 주의 금요일로
-                  endDate.setDate(endDate.getDate() + (5 - endDayOfWeek));
-                }
-                // 금요일이면 그대로
-
-                // 끝 날짜(금요일)로부터 WEEKS_COUNT 주 전의 월요일을 시작일로
+                // 끝 날짜로부터 WEEKS_COUNT 주 전의 월요일을 시작일로
                 const startDate = new Date(endDate);
                 startDate.setDate(startDate.getDate() - (WEEKS_COUNT * 7 - 1));
                 // 월요일로 조정 (0=일, 1=월, ..., 6=토)
@@ -1726,6 +1718,18 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                             const dateStr = getKoreanDateString(date);
                             // endDate를 기준으로 미래 날짜 판단
                             const isFuture = date > endDate;
+
+                            // 미래 날짜는 빈 div로 (투명, 보이지 않음)
+                            if (isFuture) {
+                              return (
+                                <div
+                                  key={dayIndex}
+                                  style={{ width: `${CELL_SIZE}px`, height: `${CELL_SIZE}px`, minWidth: `${CELL_SIZE}px`, minHeight: `${CELL_SIZE}px` }}
+                                  className="bg-transparent"
+                                />
+                              );
+                            }
+
                             const grassRecord = grassData.find((g) => g.date === dateStr);
                             const cookieChange = grassRecord?.cookieChange || 0;
                             const refreshCount = grassRecord?.count || 0;
@@ -1735,12 +1739,8 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                               <div
                                 key={dayIndex}
                                 style={{ width: `${CELL_SIZE}px`, height: `${CELL_SIZE}px`, minWidth: `${CELL_SIZE}px`, minHeight: `${CELL_SIZE}px` }}
-                                className={`rounded ${
-                                  isFuture
-                                    ? 'bg-gray-100'
-                                    : getGrassColor(cookieChange)
-                                } ${isToday ? 'ring-2 ring-blue-400' : ''}`}
-                                title={isFuture ? '미래' : `${dateStr} (${DAY_NAMES[dayIndex]}): +${cookieChange}쿠키 (${refreshCount}회 기록)`}
+                                className={`rounded ${getGrassColor(cookieChange)} ${isToday ? 'ring-2 ring-blue-400' : ''}`}
+                                title={`${dateStr} (${DAY_NAMES[dayIndex]}): +${cookieChange}쿠키 (${refreshCount}회 기록)`}
                               />
                             );
                           })}
