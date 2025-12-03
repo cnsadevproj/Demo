@@ -1637,23 +1637,28 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 const DAY_NAMES = ['월', '화', '수', '목', '금'];
 
                 const today = new Date();
-
-                // 오늘이 주말이면 이번주 금요일을 기준으로
                 const todayDayOfWeek = today.getDay();
+
+                // endDate: 표시할 마지막 날 (오늘이 주중이면 오늘, 주말이면 지난주 금요일)
                 let endDate = new Date(today);
                 if (todayDayOfWeek === 0) {
                   // 일요일이면 지난주 금요일
                   endDate.setDate(endDate.getDate() - 2);
                 } else if (todayDayOfWeek === 6) {
-                  // 토요일이면 금요일
+                  // 토요일이면 어제 금요일
                   endDate.setDate(endDate.getDate() - 1);
-                } else if (todayDayOfWeek < 5) {
-                  // 월~목이면 이번주 금요일로
-                  endDate.setDate(endDate.getDate() + (5 - todayDayOfWeek));
                 }
-                // else: 금요일이면 그대로
+                // else: 월~금이면 오늘 그대로
 
-                // 끝 날짜로부터 WEEKS_COUNT 주 전의 월요일을 시작일로
+                // endDate가 속한 주의 금요일을 실제 끝으로
+                const endDayOfWeek = endDate.getDay();
+                if (endDayOfWeek < 5) {
+                  // 월~목이면 그 주의 금요일로
+                  endDate.setDate(endDate.getDate() + (5 - endDayOfWeek));
+                }
+                // 금요일이면 그대로
+
+                // 끝 날짜(금요일)로부터 WEEKS_COUNT 주 전의 월요일을 시작일로
                 const startDate = new Date(endDate);
                 startDate.setDate(startDate.getDate() - (WEEKS_COUNT * 7 - 1));
                 // 월요일로 조정 (0=일, 1=월, ..., 6=토)
