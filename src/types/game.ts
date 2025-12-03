@@ -323,7 +323,7 @@ export const TEAM_NOUN_EMOJI_MAP: { noun: string; emoji: string }[] = [
   { noun: '플라밍고', emoji: '🦩' },
   { noun: '피콕', emoji: '🦚' },
   { noun: '돌핀', emoji: '🐬' },
-  { noun: '호크', emoji: '🦅' },
+  { noun: '호크', emoji: '🪶' },
   { noun: '코브라', emoji: '🐍' },
   { noun: '펭귄', emoji: '🐧' },
   // 자연/우주
@@ -335,7 +335,7 @@ export const TEAM_NOUN_EMOJI_MAP: { noun: string; emoji: string }[] = [
   { noun: '문', emoji: '🌙' },
   { noun: '플래닛', emoji: '🪐' },
   { noun: '블로썸', emoji: '🌸' },
-  { noun: '플레임', emoji: '🔥' },
+  { noun: '플레임', emoji: '🌋' },
   { noun: '스톰', emoji: '🌪️' },
   // 특별/물건
   { noun: '크라운', emoji: '👑' },

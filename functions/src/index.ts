@@ -5,6 +5,7 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import * as nodemailer from 'nodemailer';
 
 // Firebase Admin 초기화
 admin.initializeApp();
@@ -280,6 +281,353 @@ export const manualCookieRefresh = functions.https.onRequest(async (req, res) =>
     });
   } catch (error) {
     console.error('Manual refresh failed:', error);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ============================================================
+// 쿠키 상점 신청 이메일 발송 기능
+// ============================================================
+
+interface CookieShopRequestData {
+  id: string;
+  itemId: string;
+  itemName: string;
+  itemPrice: number;
+  studentCode: string;
+  studentName: string;
+  studentNumber: number;
+  classId: string;
+  className: string;
+  quantity: number;
+  totalPrice: number;
+  status: string;
+  createdAt: admin.firestore.Timestamp;
+}
+
+// 교사별 대기 중인 쿠키 상점 신청 가져오기
+async function getPendingRequestsForTeacher(teacherId: string): Promise<{
+  requests: CookieShopRequestData[];
+  teacherEmail: string | null;
+  teacherName: string | null;
+}> {
+  const teacherRef = db.collection('teachers').doc(teacherId);
+  const teacherSnap = await teacherRef.get();
+
+  if (!teacherSnap.exists) {
+    return { requests: [], teacherEmail: null, teacherName: null };
+  }
+
+  const teacherData = teacherSnap.data();
+  const teacherEmail = teacherData?.email || null;
+  const teacherName = teacherData?.name || teacherData?.displayName || '선생님';
+
+  // 모든 학급의 대기 중인 신청 가져오기
+  const classesSnap = await teacherRef.collection('classes').get();
+  const requests: CookieShopRequestData[] = [];
+
+  for (const classDoc of classesSnap.docs) {
+    const classId = classDoc.id;
+    const className = classDoc.data()?.name || classId;
+
+    const requestsSnap = await teacherRef
+      .collection('classes')
+      .doc(classId)
+      .collection('cookieShopRequests')
+      .where('status', '==', 'pending')
+      .get();
+
+    for (const reqDoc of requestsSnap.docs) {
+      const data = reqDoc.data();
+      requests.push({
+        id: reqDoc.id,
+        itemId: data.itemId,
+        itemName: data.itemName,
+        itemPrice: data.itemPrice,
+        studentCode: data.studentCode,
+        studentName: data.studentName,
+        studentNumber: data.studentNumber || 0,
+        classId: classId,
+        className: className,
+        quantity: data.quantity || 1,
+        totalPrice: data.totalPrice,
+        status: data.status,
+        createdAt: data.createdAt
+      });
+    }
+  }
+
+  return { requests, teacherEmail, teacherName };
+}
+
+// 이메일 HTML 생성
+function generateEmailHtml(
+  teacherName: string,
+  requests: CookieShopRequestData[]
+): string {
+  // 학급별로 그룹화
+  const byClass: Record<string, CookieShopRequestData[]> = {};
+  for (const req of requests) {
+    if (!byClass[req.className]) {
+      byClass[req.className] = [];
+    }
+    byClass[req.className].push(req);
+  }
+
+  let classTablesHtml = '';
+  let totalCookies = 0;
+
+  for (const [className, classRequests] of Object.entries(byClass)) {
+    // 학생별로 정렬
+    classRequests.sort((a, b) => a.studentNumber - b.studentNumber);
+
+    let rowsHtml = '';
+    let classTotalCookies = 0;
+
+    for (const req of classRequests) {
+      classTotalCookies += req.totalPrice;
+      rowsHtml += `
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ddd;">${req.studentNumber}</td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${req.studentName}</td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${req.itemName}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${req.quantity}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">🍪 ${req.totalPrice}</td>
+        </tr>
+      `;
+    }
+
+    totalCookies += classTotalCookies;
+
+    classTablesHtml += `
+      <h3 style="color: #1976d2; margin-top: 24px;">${className}</h3>
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+        <thead>
+          <tr style="background-color: #f5f5f5;">
+            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">번호</th>
+            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">이름</th>
+            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">상품</th>
+            <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">수량</th>
+            <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">쿠키</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+          <tr style="background-color: #fff3e0; font-weight: bold;">
+            <td colspan="4" style="padding: 8px; border: 1px solid #ddd; text-align: right;">소계</td>
+            <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">🍪 ${classTotalCookies}</td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+  }
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>다했니? 쿠키 상점 신청 현황</title>
+    </head>
+    <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px;">
+      <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 24px; border-radius: 12px; margin-bottom: 24px;">
+        <h1 style="margin: 0;">🍪 쿠키 상점 신청 현황</h1>
+        <p style="margin: 8px 0 0 0; opacity: 0.9;">다했니? 주간 신청 요약</p>
+      </div>
+
+      <p style="font-size: 16px; color: #333;">
+        안녕하세요, <strong>${teacherName}</strong>님!<br>
+        이번 주 쿠키 상점에 <strong>${requests.length}건</strong>의 신청이 있습니다.
+      </p>
+
+      ${classTablesHtml}
+
+      <div style="background-color: #e3f2fd; padding: 16px; border-radius: 8px; margin-top: 24px;">
+        <h3 style="margin: 0 0 8px 0; color: #1565c0;">📊 총 요약</h3>
+        <p style="margin: 0; font-size: 18px;">
+          총 신청: <strong>${requests.length}건</strong><br>
+          총 차감 쿠키: <strong>🍪 ${totalCookies}</strong>
+        </p>
+      </div>
+
+      <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0;">
+
+      <p style="color: #666; font-size: 14px;">
+        이 메일은 다했니? 서비스에서 매주 목요일 오전 8시에 자동 발송됩니다.<br>
+        신청 처리는 다했니? 대시보드의 상점 탭에서 확인하세요.
+      </p>
+    </body>
+    </html>
+  `;
+}
+
+// 이메일 발송 함수
+async function sendCookieShopEmail(
+  toEmail: string,
+  teacherName: string,
+  requests: CookieShopRequestData[]
+): Promise<boolean> {
+  // Gmail SMTP 설정 (Firebase 환경변수에서 가져오기)
+  const gmailUser = functions.config().gmail?.user;
+  const gmailPass = functions.config().gmail?.pass;
+
+  if (!gmailUser || !gmailPass) {
+    console.error('Gmail credentials not configured. Set using: firebase functions:config:set gmail.user="your@gmail.com" gmail.pass="your-app-password"');
+    return false;
+  }
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: gmailUser,
+      pass: gmailPass
+    }
+  });
+
+  const mailOptions = {
+    from: `"다했니? 알림" <${gmailUser}>`,
+    to: toEmail,
+    subject: `[다했니?] 🍪 쿠키 상점 신청 현황 (${requests.length}건)`,
+    html: generateEmailHtml(teacherName, requests)
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Email sent to ${toEmail}`);
+    return true;
+  } catch (error) {
+    console.error(`Failed to send email to ${toEmail}:`, error);
+    return false;
+  }
+}
+
+/**
+ * 매주 목요일 오전 8시(KST)에 쿠키 상점 신청 이메일 발송
+ * Cron: "0 8 * * 4" (매주 목요일 8시)
+ */
+export const scheduledCookieShopEmail = functions
+  .runWith({
+    timeoutSeconds: 300,
+    memory: '256MB'
+  })
+  .pubsub.schedule('0 8 * * 4')
+  .timeZone('Asia/Seoul')
+  .onRun(async (context) => {
+    console.log('Starting scheduled cookie shop email at', new Date().toISOString());
+
+    let totalTeachers = 0;
+    let emailsSent = 0;
+
+    try {
+      const teachersSnap = await db.collection('teachers').get();
+
+      for (const teacherDoc of teachersSnap.docs) {
+        const teacherId = teacherDoc.id;
+        totalTeachers++;
+
+        const { requests, teacherEmail, teacherName } = await getPendingRequestsForTeacher(teacherId);
+
+        // 대기 중인 신청이 있고 이메일이 설정된 경우에만 발송
+        if (requests.length > 0 && teacherEmail) {
+          console.log(`Sending email to ${teacherEmail} with ${requests.length} requests`);
+
+          const success = await sendCookieShopEmail(
+            teacherEmail,
+            teacherName || '선생님',
+            requests
+          );
+
+          if (success) {
+            emailsSent++;
+          }
+        } else if (requests.length > 0 && !teacherEmail) {
+          console.log(`Teacher ${teacherId} has ${requests.length} pending requests but no email configured`);
+        }
+      }
+
+      console.log('Cookie shop email completed:', {
+        teachers: totalTeachers,
+        emailsSent
+      });
+
+      // 실행 로그 저장
+      await db.collection('system').doc('logs').collection('cookieShopEmail').add({
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        teachers: totalTeachers,
+        emailsSent,
+        status: 'success'
+      });
+
+    } catch (error) {
+      console.error('Cookie shop email failed:', error);
+
+      await db.collection('system').doc('logs').collection('cookieShopEmail').add({
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        error: String(error),
+        status: 'error'
+      });
+    }
+
+    return null;
+  });
+
+/**
+ * HTTP 트리거 - 수동으로 쿠키 상점 이메일 발송 (테스트용)
+ * 사용법: https://<region>-<project-id>.cloudfunctions.net/manualCookieShopEmail?teacherId=xxx
+ */
+export const manualCookieShopEmail = functions.https.onRequest(async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+
+  if (req.method === 'OPTIONS') {
+    res.set('Access-Control-Allow-Methods', 'GET, POST');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.status(204).send('');
+    return;
+  }
+
+  const teacherId = req.query.teacherId as string;
+
+  if (!teacherId) {
+    res.status(400).json({ error: 'teacherId is required' });
+    return;
+  }
+
+  console.log(`Manual cookie shop email requested for teacher ${teacherId}`);
+
+  try {
+    const { requests, teacherEmail, teacherName } = await getPendingRequestsForTeacher(teacherId);
+
+    if (!teacherEmail) {
+      res.status(400).json({ error: 'Teacher email not configured' });
+      return;
+    }
+
+    if (requests.length === 0) {
+      res.json({
+        success: true,
+        message: 'No pending requests to send',
+        requestCount: 0
+      });
+      return;
+    }
+
+    const success = await sendCookieShopEmail(
+      teacherEmail,
+      teacherName || '선생님',
+      requests
+    );
+
+    if (success) {
+      res.json({
+        success: true,
+        message: `Email sent to ${teacherEmail}`,
+        requestCount: requests.length
+      });
+    } else {
+      res.status(500).json({ error: 'Failed to send email' });
+    }
+  } catch (error) {
+    console.error('Manual cookie shop email failed:', error);
     res.status(500).json({ error: String(error) });
   }
 });

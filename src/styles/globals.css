@@ -1758,3 +1758,502 @@ button {
 .bg-green-600 {
   background-color: rgb(22 163 74);
 }
+
+/* ========================================
+   게임센터 버튼 색상 - Teal & Indigo
+   ======================================== */
+
+/* Teal colors - 소수결게임 */
+.bg-teal-50 {
+  background-color: rgb(240 253 250);
+}
+
+.bg-teal-100 {
+  background-color: rgb(204 251 241);
+}
+
+.bg-teal-300 {
+  background-color: rgb(94 234 212);
+}
+
+.bg-teal-400 {
+  background-color: rgb(45 212 191);
+}
+
+.bg-teal-600 {
+  background-color: rgb(13 148 136);
+}
+
+.bg-teal-700 {
+  background-color: rgb(15 118 110);
+}
+
+.hover\:bg-teal-700:hover {
+  background-color: rgb(15 118 110);
+}
+
+.text-teal-600 {
+  color: rgb(13 148 136);
+}
+
+.text-teal-700 {
+  color: rgb(15 118 110);
+}
+
+.text-teal-800 {
+  color: rgb(17 94 89);
+}
+
+.border-teal-200 {
+  border-color: rgb(153 246 228);
+}
+
+.border-teal-300 {
+  border-color: rgb(94 234 212);
+}
+
+.border-teal-400 {
+  border-color: rgb(45 212 191);
+}
+
+.from-teal-50 {
+  --tw-gradient-from: rgb(240 253 250);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(240 253 250 / 0));
+}
+
+.from-teal-100 {
+  --tw-gradient-from: rgb(204 251 241);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(204 251 241 / 0));
+}
+
+.to-cyan-50 {
+  --tw-gradient-to: rgb(236 254 255);
+}
+
+.to-cyan-100 {
+  --tw-gradient-to: rgb(207 250 254);
+}
+
+/* Cyan colors */
+.bg-cyan-50 {
+  background-color: rgb(236 254 255);
+}
+
+.text-cyan-600 {
+  color: rgb(8 145 178);
+}
+
+.text-cyan-800 {
+  color: rgb(21 94 117);
+}
+
+/* Indigo colors - 총알피하기 */
+.bg-indigo-50 {
+  background-color: rgb(238 242 255);
+}
+
+.bg-indigo-100 {
+  background-color: rgb(224 231 255);
+}
+
+.bg-indigo-300 {
+  background-color: rgb(165 180 252);
+}
+
+.bg-indigo-400 {
+  background-color: rgb(129 140 248);
+}
+
+.bg-indigo-600 {
+  background-color: rgb(79 70 229);
+}
+
+.bg-indigo-700 {
+  background-color: rgb(67 56 202);
+}
+
+.bg-indigo-900 {
+  background-color: rgb(49 46 129);
+}
+
+.hover\:bg-indigo-700:hover {
+  background-color: rgb(67 56 202);
+}
+
+.text-indigo-600 {
+  color: rgb(79 70 229);
+}
+
+.text-indigo-800 {
+  color: rgb(55 48 163);
+}
+
+.border-indigo-200 {
+  border-color: rgb(199 210 254);
+}
+
+.border-indigo-300 {
+  border-color: rgb(165 180 252);
+}
+
+.border-indigo-400 {
+  border-color: rgb(129 140 248);
+}
+
+.from-indigo-50 {
+  --tw-gradient-from: rgb(238 242 255);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(238 242 255 / 0));
+}
+
+.from-indigo-100 {
+  --tw-gradient-from: rgb(224 231 255);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(224 231 255 / 0));
+}
+
+.from-indigo-900 {
+  --tw-gradient-from: rgb(49 46 129);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(49 46 129 / 0));
+}
+
+.to-purple-50 {
+  --tw-gradient-to: rgb(250 245 255);
+}
+
+.to-purple-900 {
+  --tw-gradient-to: rgb(88 28 135);
+}
+
+/* Violet colors - 숫자야구 보라 계열 */
+.from-purple-50 {
+  --tw-gradient-from: rgb(250 245 255);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(250 245 255 / 0));
+}
+
+.from-violet-50 {
+  --tw-gradient-from: rgb(245 243 255);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(245 243 255 / 0));
+}
+
+.to-violet-50 {
+  --tw-gradient-to: rgb(245 243 255);
+}
+
+.to-violet-100 {
+  --tw-gradient-to: rgb(237 233 254);
+}
+
+.border-violet-200 {
+  border-color: rgb(221 214 254);
+}
+
+/* Purple button hover */
+.hover\:bg-purple-700:hover {
+  background-color: rgb(126 34 206);
+}
+
+/* Red button colors */
+.bg-red-600\/20 {
+  background-color: rgb(220 38 38 / 0.2);
+}
+
+.hover\:bg-red-600\/30:hover {
+  background-color: rgb(220 38 38 / 0.3);
+}
+
+.text-red-300 {
+  color: rgb(252 165 165);
+}
+
+/* White with opacity */
+.bg-white\/5 {
+  background-color: rgb(255 255 255 / 0.05);
+}
+
+.bg-white\/10 {
+  background-color: rgb(255 255 255 / 0.1);
+}
+
+.border-white\/20 {
+  border-color: rgb(255 255 255 / 0.2);
+}
+
+.border-white\/30 {
+  border-color: rgb(255 255 255 / 0.3);
+}
+
+.text-white\/50 {
+  color: rgb(255 255 255 / 0.5);
+}
+
+.text-white\/70 {
+  color: rgb(255 255 255 / 0.7);
+}
+
+.text-white\/80 {
+  color: rgb(255 255 255 / 0.8);
+}
+
+/* Amber with opacity */
+.bg-amber-500\/20 {
+  background-color: rgb(245 158 11 / 0.2);
+}
+
+.text-amber-200 {
+  color: rgb(253 230 138);
+}
+
+.text-amber-400 {
+  color: rgb(251 191 36);
+}
+
+/* Gray with opacity */
+.bg-gray-400\/20 {
+  background-color: rgb(156 163 175 / 0.2);
+}
+
+.border-gray-400\/30 {
+  border-color: rgb(156 163 175 / 0.3);
+}
+
+/* Orange with opacity */
+.bg-orange-600\/20 {
+  background-color: rgb(234 88 12 / 0.2);
+}
+
+.border-orange-600\/30 {
+  border-color: rgb(234 88 12 / 0.3);
+}
+
+/* Green button variations */
+.bg-green-600\/20 {
+  background-color: rgb(22 163 74 / 0.2);
+}
+
+.hover\:bg-green-700:hover {
+  background-color: rgb(21 128 61);
+}
+
+/* Amber button variations */
+.hover\:bg-amber-700:hover {
+  background-color: rgb(180 83 9);
+}
+
+/* Backdrop blur */
+.backdrop-blur {
+  backdrop-filter: blur(8px);
+}
+
+.backdrop-blur-lg {
+  backdrop-filter: blur(16px);
+}
+
+/* Max height utilities */
+.max-h-40 {
+  max-height: 10rem;
+}
+
+.max-h-96 {
+  max-height: 24rem;
+}
+
+/* Scale transforms */
+.hover\:scale-105:hover {
+  transform: scale(1.05);
+}
+
+.hover\:scale-\[0\.98\]:hover {
+  transform: scale(0.98);
+}
+
+/* Border purple for game cards */
+.border-purple-300 {
+  border-color: rgb(216 180 254);
+}
+
+.border-purple-400 {
+  border-color: rgb(192 132 252);
+}
+
+/* ========================================
+   Black & Dark Gray backgrounds (게임용)
+   ======================================== */
+
+.bg-black {
+  background-color: rgb(0 0 0);
+}
+
+.bg-gray-900 {
+  background-color: rgb(17 24 39);
+}
+
+.bg-gray-950 {
+  background-color: rgb(3 7 18);
+}
+
+.border-gray-800 {
+  border-color: rgb(31 41 55);
+}
+
+.text-yellow-400 {
+  color: rgb(250 204 21);
+}
+
+.bg-black\/80 {
+  background-color: rgb(0 0 0 / 0.8);
+}
+
+.bg-black\/90 {
+  background-color: rgb(0 0 0 / 0.9);
+}
+
+.shadow-white\/50 {
+  --tw-shadow-color: rgb(255 255 255 / 0.5);
+}
+
+.shadow-red-500\/50 {
+  --tw-shadow-color: rgb(239 68 68 / 0.5);
+}
+
+.tracking-widest {
+  letter-spacing: 0.1em;
+}
+
+/* ========================================
+   Emerald colors - 가위바위보 버튼
+   ======================================== */
+
+.from-emerald-50 {
+  --tw-gradient-from: rgb(236 253 245);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(236 253 245 / 0));
+}
+
+.from-emerald-100 {
+  --tw-gradient-from: rgb(209 250 229);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(209 250 229 / 0));
+}
+
+.to-emerald-50 {
+  --tw-gradient-to: rgb(236 253 245);
+}
+
+.to-emerald-100 {
+  --tw-gradient-to: rgb(209 250 229);
+}
+
+.border-emerald-200 {
+  border-color: rgb(167 243 208);
+}
+
+.border-emerald-400 {
+  border-color: rgb(52 211 153);
+}
+
+/* ========================================
+   Rose colors - 끝말잇기 버튼
+   ======================================== */
+
+.from-rose-50 {
+  --tw-gradient-from: rgb(255 241 242);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(255 241 242 / 0));
+}
+
+.to-rose-50 {
+  --tw-gradient-to: rgb(255 241 242);
+}
+
+.text-rose-800 {
+  color: rgb(159 18 57);
+}
+
+.text-rose-600 {
+  color: rgb(225 29 72);
+}
+
+/* ========================================
+   추가 누락 클래스들
+   ======================================== */
+
+/* Purple 100 gradient */
+.from-purple-100 {
+  --tw-gradient-from: rgb(243 232 255);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(243 232 255 / 0));
+}
+
+/* Violet 100 gradient */
+.from-violet-100 {
+  --tw-gradient-from: rgb(237 233 254);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(237 233 254 / 0));
+}
+
+/* Purple borders */
+.border-purple-200 {
+  border-color: rgb(233 213 255);
+}
+
+/* Green borders */
+.border-green-200 {
+  border-color: rgb(187 247 208);
+}
+
+/* Pink borders */
+.border-pink-200 {
+  border-color: rgb(251 207 232);
+}
+
+/* Red borders */
+.border-red-200 {
+  border-color: rgb(254 202 202);
+}
+
+/* Yellow borders */
+.border-yellow-200 {
+  border-color: rgb(254 240 138);
+}
+
+/* Blue borders */
+.border-blue-200 {
+  border-color: rgb(191 219 254);
+}
+
+/* Orange borders */
+.border-orange-200 {
+  border-color: rgb(254 215 170);
+}
+
+/* Amber borders */
+.border-amber-200 {
+  border-color: rgb(253 230 138);
+}
+
+/* Cyan colors */
+.from-cyan-50 {
+  --tw-gradient-from: rgb(236 254 255);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(236 254 255 / 0));
+}
+
+.from-cyan-100 {
+  --tw-gradient-from: rgb(207 250 254);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(207 250 254 / 0));
+}
+
+/* Indigo to */
+.to-indigo-50 {
+  --tw-gradient-to: rgb(238 242 255);
+}
+
+.to-indigo-100 {
+  --tw-gradient-to: rgb(224 231 255);
+}
+
+.to-purple-50 {
+  --tw-gradient-to: rgb(250 245 255);
+}
+
+/* Text pink colors */
+.text-pink-800 {
+  color: rgb(157 23 77);
+}
+
+.text-pink-600 {
+  color: rgb(219 39 119);
+}

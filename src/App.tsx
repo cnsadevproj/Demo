@@ -13,21 +13,50 @@ import { Loading } from './pages/Loading';
 
 // Games
 import { NumberBaseball } from './games/NumberBaseball';
+import { NumberBaseballTeacher } from './games/NumberBaseballTeacher';
+import { MinorityGame } from './games/MinorityGame';
+import { MinorityGameTeacher } from './games/MinorityGameTeacher';
+import { BulletDodge } from './games/BulletDodge';
+import { BulletDodgeTeacher } from './games/BulletDodgeTeacher';
+import { RockPaperScissors } from './games/RockPaperScissors';
+import { RockPaperScissorsTeacher } from './games/RockPaperScissorsTeacher';
 
 // URL 경로 기반 라우팅
 function getRoutePath(): string {
   const path = window.location.pathname;
   const search = window.location.search;
+  const params = new URLSearchParams(search);
 
   // /game/baseball 경로 체크
   if (path === '/game/baseball' || path.startsWith('/game/baseball')) {
     return 'game-baseball';
   }
 
-  // 쿼리 파라미터로도 게임 접근 가능 (?game=baseball)
-  const params = new URLSearchParams(search);
-  if (params.get('game') === 'baseball') {
+  // 쿼리 파라미터로 게임 접근
+  const gameType = params.get('game');
+  if (gameType === 'baseball') {
     return 'game-baseball';
+  }
+  if (gameType === 'baseball-teacher') {
+    return 'game-baseball-teacher';
+  }
+  if (gameType === 'minority') {
+    return 'game-minority';
+  }
+  if (gameType === 'minority-teacher') {
+    return 'game-minority-teacher';
+  }
+  if (gameType === 'bullet-dodge') {
+    return 'game-bullet-dodge';
+  }
+  if (gameType === 'bullet-dodge-teacher') {
+    return 'game-bullet-dodge-teacher';
+  }
+  if (gameType === 'rps') {
+    return 'game-rps';
+  }
+  if (gameType === 'rps-teacher') {
+    return 'game-rps-teacher';
   }
 
   return 'main';
@@ -41,6 +70,27 @@ function AppContent() {
   // 게임 페이지 (인증 불필요 - URL 파라미터로 검증)
   if (routePath === 'game-baseball') {
     return <NumberBaseball />;
+  }
+  if (routePath === 'game-baseball-teacher') {
+    return <NumberBaseballTeacher />;
+  }
+  if (routePath === 'game-minority') {
+    return <MinorityGame />;
+  }
+  if (routePath === 'game-minority-teacher') {
+    return <MinorityGameTeacher />;
+  }
+  if (routePath === 'game-bullet-dodge') {
+    return <BulletDodge />;
+  }
+  if (routePath === 'game-bullet-dodge-teacher') {
+    return <BulletDodgeTeacher />;
+  }
+  if (routePath === 'game-rps') {
+    return <RockPaperScissors />;
+  }
+  if (routePath === 'game-rps-teacher') {
+    return <RockPaperScissorsTeacher />;
   }
 
   // 로딩 중

@@ -7,6 +7,9 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
+  updateEmail,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
   User
 } from 'firebase/auth';
 import { auth } from '../services/firebase';
@@ -15,6 +18,7 @@ import {
   createTeacher,
   findStudentByCode,
   getClasses,
+  updateTeacher,
   Teacher,
   Student,
   ClassInfo
@@ -46,6 +50,8 @@ interface AuthContextType {
     dahandinApiKey: string
   ) => Promise<{ success: boolean; message: string }>;
   refreshClasses: () => Promise<void>;
+  updateTeacherEmail: (newEmail: string, currentPassword: string) => Promise<{ success: boolean; message: string }>;
+  refreshTeacher: () => Promise<void>;
 
   // 학생용
   student: Student | null;
@@ -272,6 +278,58 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  // 교사 정보 새로고침
+  const refreshTeacher = async () => {
+    if (user) {
+      const teacherData = await getTeacher(user.uid);
+      if (teacherData) {
+        setTeacher(teacherData);
+      }
+    }
+  };
+
+  // 이메일 변경
+  const updateTeacherEmail = async (
+    newEmail: string,
+    currentPassword: string
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      if (!user || !teacher) {
+        return { success: false, message: '로그인이 필요합니다.' };
+      }
+
+      // 현재 비밀번호로 재인증
+      const credential = EmailAuthProvider.credential(user.email!, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+
+      // Firebase Auth 이메일 업데이트
+      await updateEmail(user, newEmail);
+
+      // Firestore 교사 정보 업데이트
+      await updateTeacher(user.uid, { email: newEmail });
+
+      // 로컬 상태 업데이트
+      setTeacher({ ...teacher, email: newEmail });
+
+      return { success: true, message: '이메일이 성공적으로 변경되었습니다.' };
+    } catch (error: any) {
+      console.error('Update email error:', error);
+
+      let message = '이메일 변경에 실패했습니다.';
+      if (error.code === 'auth/wrong-password') {
+        message = '현재 비밀번호가 올바르지 않습니다.';
+      } else if (error.code === 'auth/invalid-email') {
+        message = '유효하지 않은 이메일 형식입니다.';
+      } else if (error.code === 'auth/email-already-in-use') {
+        message = '이미 사용 중인 이메일입니다.';
+      } else if (error.code === 'auth/requires-recent-login') {
+        message = '보안을 위해 다시 로그인 후 시도해주세요.';
+      }
+
+      return { success: false, message };
+    }
+  };
+
   const value: AuthContextType = {
     // 공통
     role,
@@ -288,6 +346,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     loginAsTeacher,
     registerAsTeacher,
     refreshClasses,
+    updateTeacherEmail,
+    refreshTeacher,
 
     // 학생용
     student,

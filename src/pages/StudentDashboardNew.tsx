@@ -25,9 +25,18 @@ import {
   Wish,
   ShopItem,
   Team,
-  Badge
+  Badge,
+  CookieShopItem,
+  CookieShopRequest,
+  getCookieShopItems,
+  createCookieShopRequest,
+  getStudentCookieShopRequests,
+  createItemSuggestion,
+  getStudentItemSuggestions,
+  ItemSuggestion
 } from '../services/firestoreApi';
 import { getItemByCode, ALL_SHOP_ITEMS } from '../types/shop';
+import { getKoreanDateString } from '../utils/dateUtils';
 
 // 이모지 코드를 실제 이모지로 변환 (없으면 빈 값 반환)
 const getEmojiFromCode = (code: string | undefined): string => {
@@ -75,6 +84,24 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [shopCategory, setShopCategory] = useState<'all' | 'emoji' | 'titlePermit' | 'titleColor' | 'nameEffect' | 'animation' | 'buttonBorder' | 'buttonFill'>('all');
   const [previewItem, setPreviewItem] = useState<ShopItem | null>(null);
 
+  // 상점 모드 (캔디/쿠키)
+  const [shopMode, setShopMode] = useState<'candy' | 'cookie'>('candy');
+
+  // 쿠키 상점
+  const [cookieShopItems, setCookieShopItems] = useState<CookieShopItem[]>([]);
+  const [cookieShopRequests, setCookieShopRequests] = useState<CookieShopRequest[]>([]);
+  const [isLoadingCookieShop, setIsLoadingCookieShop] = useState(false);
+  const [requestQuantity, setRequestQuantity] = useState(1);
+  const [showMyRequests, setShowMyRequests] = useState(false);
+
+  // 물품 요청 (상점에 추가됐으면 하는 물품)
+  const [showItemSuggestionModal, setShowItemSuggestionModal] = useState(false);
+  const [suggestionItemName, setSuggestionItemName] = useState('');
+  const [suggestionDescription, setSuggestionDescription] = useState('');
+  const [isSubmittingSuggestion, setIsSubmittingSuggestion] = useState(false);
+  const [myItemSuggestions, setMyItemSuggestions] = useState<ItemSuggestion[]>([]);
+  const [showMyItemSuggestions, setShowMyItemSuggestions] = useState(false);
+
   // 팀
   const [myTeam, setMyTeam] = useState<Team | null>(null);
   const [teamMembers, setTeamMembers] = useState<Student[]>([]);
@@ -108,10 +135,57 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     createdAt: any;
     completedCount: number;
     className?: string;
+    entryFee?: number; // 참가비
   }
 
   const [activeBaseballGame, setActiveBaseballGame] = useState<BaseballGame | null>(null);
   const [isJoiningGame, setIsJoiningGame] = useState(false);
+
+  // 소수결게임 상태
+  interface MinorityGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    status: 'waiting' | 'question' | 'result' | 'finished';
+    currentRound: number;
+    className?: string;
+    createdAt: any;
+    entryFee?: number;
+  }
+
+  const [activeMinorityGame, setActiveMinorityGame] = useState<MinorityGame | null>(null);
+  const [isJoiningMinorityGame, setIsJoiningMinorityGame] = useState(false);
+
+  // 총알피하기 상태
+  interface BulletDodgeGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    status: 'waiting' | 'playing' | 'finished';
+    className?: string;
+    createdAt: any;
+    entryFee?: number;
+  }
+
+  const [activeBulletDodgeGame, setActiveBulletDodgeGame] = useState<BulletDodgeGame | null>(null);
+  const [isJoiningBulletDodge, setIsJoiningBulletDodge] = useState(false);
+
+  // 가위바위보 상태
+  type RPSGameMode = 'survivor' | 'candy15' | 'candy12';
+  interface RPSGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    status: 'waiting' | 'selecting' | 'result' | 'finished';
+    gameMode: RPSGameMode;
+    round: number;
+    className?: string;
+    createdAt: any;
+    entryFee?: number;
+  }
+
+  const [activeRpsGame, setActiveRpsGame] = useState<RPSGame | null>(null);
+  const [isJoiningRps, setIsJoiningRps] = useState(false);
 
   // 숫자야구 활성 게임 구독
   useEffect(() => {
@@ -126,8 +200,11 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
 
       snapshot.docs.forEach(docSnap => {
         const data = docSnap.data();
-        // 현재 학생의 선생님이 만든 게임 중 waiting 상태인 것 찾기
-        if (data.teacherId === studentTeacherId && data.status === 'waiting') {
+        // 현재 학생의 선생님이 만든 게임 중 같은 클래스이고 waiting 상태인 것 찾기
+        if (data.teacherId === studentTeacherId &&
+            data.classId === student.classId &&
+            data.status === 'waiting' &&
+            docSnap.id.startsWith('baseball_')) {
           activeGame = { id: docSnap.id, ...data } as BaseballGame;
         }
       });
@@ -140,10 +217,27 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
 
   // 숫자야구 게임 참가
   const joinBaseballGame = async () => {
-    if (!activeBaseballGame || !student || !currentStudent) return;
+    if (!activeBaseballGame || !student || !currentStudent || !studentTeacherId) return;
+
+    const entryFee = activeBaseballGame.entryFee || 0;
+    const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
+
+    // 참가비 확인
+    if (entryFee > 0 && currentJelly < entryFee) {
+      toast.error(`참가비가 부족합니다. (필요: ${entryFee}🍭, 보유: ${currentJelly}🍭)`);
+      return;
+    }
 
     setIsJoiningGame(true);
     try {
+      // 참가비 차감
+      if (entryFee > 0) {
+        const studentRef = doc(db, 'teachers', studentTeacherId, 'students', student.code);
+        await updateDoc(studentRef, {
+          jelly: currentJelly - entryFee
+        });
+      }
+
       // 플레이어로 등록
       const playerRef = doc(db, 'games', activeBaseballGame.id, 'players', student.code);
       await setDoc(playerRef, {
@@ -151,11 +245,85 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
         joinedAt: serverTimestamp(),
         solvedAt: null,
         rank: null,
-        attempts: 0
+        attempts: 0,
+        entryFeePaid: entryFee // 지불한 참가비 기록
       });
 
       // 새 탭으로 게임 열기
       const gameUrl = `${window.location.origin}?game=baseball&gameId=${activeBaseballGame.id}&studentCode=${student.code}&studentName=${encodeURIComponent(currentStudent.name)}`;
+      window.open(gameUrl, '_blank');
+
+      toast.success(entryFee > 0 ? `${entryFee}🍭 참가비를 지불하고 게임에 참가했습니다!` : '게임에 참가했습니다! 새 창을 확인하세요.');
+    } catch (error) {
+      console.error('Failed to join game:', error);
+      toast.error('게임 참가에 실패했습니다.');
+    }
+    setIsJoiningGame(false);
+  };
+
+  // 소수결게임 활성 게임 구독
+  useEffect(() => {
+    if (!studentTeacherId || !student) {
+      setActiveMinorityGame(null);
+      return;
+    }
+
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: MinorityGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        // 현재 학생의 선생님이 만든 소수결게임 중 같은 클래스이고 waiting 상태인 것 찾기
+        if (data.teacherId === studentTeacherId &&
+            data.classId === student.classId &&
+            data.status === 'waiting' &&
+            docSnap.id.startsWith('minority_')) {
+          activeGame = { id: docSnap.id, ...data } as MinorityGame;
+        }
+      });
+
+      setActiveMinorityGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [studentTeacherId, student]);
+
+  // 소수결게임 참가
+  const joinMinorityGame = async () => {
+    if (!activeMinorityGame || !student || !currentStudent || !studentTeacherId) return;
+
+    const entryFee = activeMinorityGame.entryFee || 0;
+    const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
+
+    // 참가비 확인
+    if (entryFee > 0 && currentJelly < entryFee) {
+      toast.error(`참가비가 부족합니다. (필요: ${entryFee}🍭, 보유: ${currentJelly}🍭)`);
+      return;
+    }
+
+    setIsJoiningMinorityGame(true);
+    try {
+      // 참가비 차감
+      if (entryFee > 0) {
+        const studentRef = doc(db, 'teachers', studentTeacherId, 'students', student.code);
+        await updateDoc(studentRef, {
+          jelly: currentJelly - entryFee
+        });
+      }
+
+      // 플레이어로 등록
+      const playerRef = doc(db, 'games', activeMinorityGame.id, 'players', student.code);
+      await setDoc(playerRef, {
+        name: currentStudent.name,
+        joinedAt: serverTimestamp(),
+        isAlive: true,
+        currentChoice: null,
+        survivedRounds: 0
+      });
+
+      // 새 탭으로 게임 열기
+      const gameUrl = `${window.location.origin}?game=minority&gameId=${activeMinorityGame.id}&studentCode=${student.code}&studentName=${encodeURIComponent(currentStudent.name)}`;
       window.open(gameUrl, '_blank');
 
       toast.success('게임에 참가했습니다! 새 창을 확인하세요.');
@@ -163,7 +331,155 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
       console.error('Failed to join game:', error);
       toast.error('게임 참가에 실패했습니다.');
     }
-    setIsJoiningGame(false);
+    setIsJoiningMinorityGame(false);
+  };
+
+  // 총알피하기 활성 게임 구독
+  useEffect(() => {
+    if (!studentTeacherId || !student) {
+      setActiveBulletDodgeGame(null);
+      return;
+    }
+
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: BulletDodgeGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        // 현재 학생의 선생님이 만든 총알피하기 게임 중 같은 클래스이고 waiting 또는 playing 상태인 것 찾기
+        if (data.teacherId === studentTeacherId &&
+            data.classId === student.classId &&
+            (data.status === 'waiting' || data.status === 'playing') &&
+            docSnap.id.startsWith('bulletdodge_')) {
+          activeGame = { id: docSnap.id, ...data } as BulletDodgeGame;
+        }
+      });
+
+      setActiveBulletDodgeGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [studentTeacherId, student]);
+
+  // 총알피하기 참가
+  const joinBulletDodgeGame = async () => {
+    if (!activeBulletDodgeGame || !student || !currentStudent || !studentTeacherId) return;
+
+    const entryFee = activeBulletDodgeGame.entryFee || 0;
+    const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
+
+    // 참가비 확인
+    if (entryFee > 0 && currentJelly < entryFee) {
+      toast.error(`참가비가 부족합니다. (필요: ${entryFee}🍭, 보유: ${currentJelly}🍭)`);
+      return;
+    }
+
+    setIsJoiningBulletDodge(true);
+    try {
+      // 참가비 차감
+      if (entryFee > 0) {
+        const studentRef = doc(db, 'teachers', studentTeacherId, 'students', student.code);
+        await updateDoc(studentRef, {
+          jelly: currentJelly - entryFee
+        });
+      }
+
+      // 플레이어로 등록
+      const playerRef = doc(db, 'games', activeBulletDodgeGame.id, 'players', student.code);
+      await setDoc(playerRef, {
+        name: currentStudent.name,
+        lastScore: 0,
+        highScore: 0,
+        lastPlayedAt: serverTimestamp()
+      }, { merge: true });
+
+      // 새 탭으로 게임 열기
+      const gameUrl = `${window.location.origin}?game=bullet-dodge&gameId=${activeBulletDodgeGame.id}&studentCode=${student.code}&studentName=${encodeURIComponent(currentStudent.name)}`;
+      window.open(gameUrl, '_blank');
+
+      toast.success('게임에 참가했습니다! 새 창을 확인하세요.');
+    } catch (error) {
+      console.error('Failed to join game:', error);
+      toast.error('게임 참가에 실패했습니다.');
+    }
+    setIsJoiningBulletDodge(false);
+  };
+
+  // 가위바위보 활성 게임 구독
+  useEffect(() => {
+    if (!studentTeacherId || !student) {
+      setActiveRpsGame(null);
+      return;
+    }
+
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: RPSGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        // 현재 학생의 선생님이 만든 가위바위보 게임 중 같은 클래스이고 waiting 상태인 것만 찾기 (게임 시작 후 중간 입장 불가)
+        if (data.teacherId === studentTeacherId &&
+            data.classId === student.classId &&
+            data.status === 'waiting' &&
+            docSnap.id.startsWith('rps_')) {
+          activeGame = { id: docSnap.id, ...data } as RPSGame;
+        }
+      });
+
+      setActiveRpsGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [studentTeacherId, student]);
+
+  // 가위바위보 참가
+  const joinRpsGame = async () => {
+    if (!activeRpsGame || !student || !currentStudent || !studentTeacherId) return;
+
+    const entryFee = activeRpsGame.entryFee || 0;
+    const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
+
+    // 참가비 확인
+    if (entryFee > 0 && currentJelly < entryFee) {
+      toast.error(`참가비가 부족합니다. (필요: ${entryFee}🍭, 보유: ${currentJelly}🍭)`);
+      return;
+    }
+
+    setIsJoiningRps(true);
+    try {
+      // 참가비 차감
+      if (entryFee > 0) {
+        const studentRef = doc(db, 'teachers', studentTeacherId, 'students', student.code);
+        await updateDoc(studentRef, {
+          jelly: currentJelly - entryFee
+        });
+      }
+
+      // 플레이어로 등록 (참가비 차감 후 캔디 잔액 포함)
+      const playerRef = doc(db, 'games', activeRpsGame.id, 'players', student.code);
+      const myCandy = currentJelly - entryFee; // 참가비 차감 후 잔액
+      await setDoc(playerRef, {
+        name: currentStudent.name,
+        choice: null,
+        eliminated: false,
+        candyBet: 0,
+        result: null,
+        candyWon: 0,
+        myCandy: myCandy // 현재 캔디 잔액
+      }, { merge: true });
+
+      // 새 탭으로 게임 열기
+      const gameUrl = `${window.location.origin}?game=rps&gameId=${activeRpsGame.id}&studentCode=${student.code}&studentName=${encodeURIComponent(currentStudent.name)}`;
+      window.open(gameUrl, '_blank');
+
+      toast.success('게임에 참가했습니다! 새 창을 확인하세요.');
+    } catch (error) {
+      console.error('Failed to join game:', error);
+      toast.error('게임 참가에 실패했습니다.');
+    }
+    setIsJoiningRps(false);
   };
 
   // 데이터 로드
@@ -212,30 +528,56 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
       // 같은 반 학생 목록 (프로필 보기용)
       const allStudents = await getClassStudents(studentTeacherId, student.classId);
       setClassmates(allStudents.filter(s => s.code !== student.code));
+
+      // 내 물품 요청 목록
+      const suggestions = await getStudentItemSuggestions(studentTeacherId, student.code);
+      setMyItemSuggestions(suggestions);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
   };
 
-  // 쿠키 새로고침
+  // 전체 동기화 (쿠키, 인벤토리, 모든 요청 등)
   const refreshCookie = async () => {
     if (!studentTeacherId || !student) return;
 
     setIsRefreshingCookie(true);
     try {
+      // 최신 학생 정보 (쿠키, 캔디, 인벤토리 포함)
       const updatedStudent = await getStudent(studentTeacherId, student.code);
       if (updatedStudent) {
         setCurrentStudent(updatedStudent);
-
-        // 잔디 데이터도 함께 새로고침
-        const grass = await getGrassData(studentTeacherId, student.classId, student.code);
-        setGrassData(grass.map(g => ({ date: g.date, cookieChange: g.cookieChange, count: g.count || 1 })));
-
-        toast.success('쿠키 정보를 새로고침했습니다! 🍪');
+        setSelectedEmoji(updatedStudent.profile.emojiCode);
+        setSelectedBadge(updatedStudent.profile.profileBadgeKey || '');
+        setSelectedTitle(updatedStudent.profile.title || '');
+        setSelectedBtnBorder(updatedStudent.profile.buttonBorderCode || 'gray-300');
+        setSelectedBtnFill(updatedStudent.profile.buttonFillCode || 'none');
+        setSelectedTitleColor(updatedStudent.profile.titleColorCode || '0');
+        setSelectedNameEffect(updatedStudent.profile.nameEffectCode || 'none');
+        setSelectedBackground(updatedStudent.profile.backgroundCode || 'none');
+        setSelectedAnimation(updatedStudent.profile.animationCode || 'none');
       }
+
+      // 잔디 데이터
+      const grass = await getGrassData(studentTeacherId, student.classId, student.code);
+      setGrassData(grass.map(g => ({ date: g.date, cookieChange: g.cookieChange, count: g.count || 1 })));
+
+      // 쿠키 상점 요청
+      const requests = await getStudentCookieShopRequests(studentTeacherId, student.code);
+      setCookieShopRequests(requests);
+
+      // 물품 요청 현황
+      const suggestions = await getStudentItemSuggestions(studentTeacherId, student.code);
+      setMyItemSuggestions(suggestions);
+
+      // 소원 목록
+      const wishesData = await getWishes(studentTeacherId, student.classId);
+      setWishes(wishesData);
+
+      toast.success('모든 데이터를 동기화했습니다! 🔄');
     } catch (error) {
-      console.error('Failed to refresh cookie:', error);
-      toast.error('새로고침에 실패했습니다.');
+      console.error('Failed to sync data:', error);
+      toast.error('동기화에 실패했습니다.');
     }
     setIsRefreshingCookie(false);
   };
@@ -337,6 +679,87 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
       toast.error('칭호권 활성화에 실패했습니다.');
     }
     setIsPurchasing(false);
+  };
+
+  // 쿠키 상점 로드 (전체 클래스 공유)
+  const loadCookieShopData = async () => {
+    if (!studentTeacherId || !currentStudent) return;
+    setIsLoadingCookieShop(true);
+    try {
+      const items = await getCookieShopItems(studentTeacherId);
+      setCookieShopItems(items.filter(item => item.isActive));
+      const requests = await getStudentCookieShopRequests(studentTeacherId, currentStudent.code);
+      setCookieShopRequests(requests);
+    } catch (error) {
+      console.error('Failed to load cookie shop data:', error);
+    }
+    setIsLoadingCookieShop(false);
+  };
+
+  // 쿠키 상점 신청 (전체 클래스 공유)
+  const handleCookieShopRequest = async (item: CookieShopItem) => {
+    if (!studentTeacherId || !currentStudent) return;
+
+    const totalPrice = item.price * requestQuantity;
+    if (currentStudent.cookie < totalPrice) {
+      toast.error('다했니 쿠키가 부족합니다! 🍪');
+      return;
+    }
+
+    try {
+      await createCookieShopRequest(studentTeacherId, {
+        itemId: item.id,
+        itemName: item.name,
+        itemPrice: item.price,
+        studentCode: currentStudent.code,
+        studentName: currentStudent.name,
+        studentNumber: currentStudent.number,
+        classId: student?.classId || '',
+        className: '', // TODO: add class name
+        quantity: requestQuantity,
+        totalPrice: totalPrice
+      });
+      await loadCookieShopData();
+      setRequestQuantity(1);
+      toast.success(`${item.name} 신청이 완료되었습니다! 🎉`);
+    } catch (error) {
+      toast.error('신청에 실패했습니다.');
+    }
+  };
+
+  // 물품 요청 제출 (상점에 추가됐으면 하는 물품)
+  const handleSubmitItemSuggestion = async () => {
+    if (!studentTeacherId || !currentStudent) return;
+    if (!suggestionItemName.trim()) {
+      toast.error('물품 이름을 입력해주세요.');
+      return;
+    }
+
+    setIsSubmittingSuggestion(true);
+    try {
+      const suggestionData: any = {
+        studentCode: currentStudent.code,
+        studentName: currentStudent.name,
+        classId: student?.classId || '',
+        itemName: suggestionItemName.trim()
+      };
+      // description이 있을 때만 추가 (undefined 방지)
+      if (suggestionDescription.trim()) {
+        suggestionData.description = suggestionDescription.trim();
+      }
+      await createItemSuggestion(studentTeacherId, suggestionData);
+      setSuggestionItemName('');
+      setSuggestionDescription('');
+      setShowItemSuggestionModal(false);
+      // 요청 목록 새로고침
+      const suggestions = await getStudentItemSuggestions(studentTeacherId, currentStudent.code);
+      setMyItemSuggestions(suggestions);
+      toast.success('물품 요청이 제출되었습니다! 선생님이 검토 후 상점에 추가할 수 있어요. 💡');
+    } catch (error) {
+      console.error('Failed to submit item suggestion:', error);
+      toast.error('요청 제출에 실패했습니다.');
+    }
+    setIsSubmittingSuggestion(false);
   };
 
   // 프로필 저장
@@ -775,7 +1198,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
             </div>
           </div>
         </div>
-        {/* 새로고침 버튼 */}
+        {/* 전체 동기화 버튼 */}
         <div className="text-center mt-3">
           <button
             onClick={refreshCookie}
@@ -783,9 +1206,9 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
             className="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-full text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2 mx-auto"
           >
             <span className={isRefreshingCookie ? 'animate-spin' : ''}>🔄</span>
-            {isRefreshingCookie ? '동기화 중...' : '다했니 동기화'}
+            {isRefreshingCookie ? '동기화 중...' : '전체 동기화'}
           </button>
-          <p className="text-xs text-gray-400 mt-1">쿠키 증가분이 캔디에 추가됩니다</p>
+          <p className="text-xs text-gray-400 mt-1">쿠키, 인벤토리, 모든 요청을 동기화합니다</p>
         </div>
       </div>
 
@@ -870,7 +1293,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 : 'text-gray-500'
             }`}
           >
-            🎮 게임센터
+            🎮 게임
           </button>
         </div>
       </div>
@@ -909,6 +1332,20 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
               >
                 <span className="text-2xl">🌱</span>
                 <span className="text-sm font-medium text-green-700">내 잔디</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('gameCenter')}
+                className="flex-1 min-w-[120px] p-3 rounded-xl bg-pink-100 hover:bg-pink-200 transition-colors flex items-center gap-2"
+              >
+                <span className="text-2xl">🎮</span>
+                <span className="text-sm font-medium text-pink-700">게임센터</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('classmates')}
+                className="flex-1 min-w-[120px] p-3 rounded-xl bg-indigo-100 hover:bg-indigo-200 transition-colors flex items-center gap-2"
+              >
+                <span className="text-2xl">👥</span>
+                <span className="text-sm font-medium text-indigo-700">친구들</span>
               </button>
             </div>
 
@@ -988,15 +1425,15 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                     <span className="text-2xl">{myTeam.flag}</span>
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm truncate">{myTeam.teamName}</p>
-                      <p className="text-xs text-pink-600">
+                      <p className="text-xs text-amber-600">
                         {(() => {
-                          // 팀원들의 캔디 합계 계산
+                          // 팀원들의 쿠키 합계 계산
                           const allStudents = [currentStudent, ...classmates];
                           return myTeam.members.reduce((sum, code) => {
                             const member = allStudents.find(s => s?.code === code);
-                            return sum + (member?.jelly ?? member?.cookie ?? 0);
+                            return sum + (member?.cookie ?? 0);
                           }, 0);
-                        })()} 🍭 · {myTeam.members.length}명
+                        })()} 🍪 · {myTeam.members.length}명
                       </p>
                     </div>
                   </div>
@@ -1233,11 +1670,11 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 } else if (todayDayOfWeek === 6) {
                   displayToday.setDate(displayToday.getDate() - 1);
                 }
-                const displayTodayStr = displayToday.toISOString().split('T')[0];
+                const displayTodayStr = getKoreanDateString(displayToday);
 
                 return (
-                  <div className="w-full flex justify-center">
-                    <div>
+                  <div className="w-full overflow-x-auto">
+                    <div className="inline-block min-w-fit">
                       {/* 월 표시 - 각 주 위치에 맞춤 */}
                       <div className="flex mb-2 ml-7" style={{ gap: `${GAP}px` }}>
                         {Array.from({ length: WEEKS_COUNT }).map((_, weekIdx) => {
@@ -1268,7 +1705,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                             // 주의 월요일 + dayIndex (0=월, 1=화, ..., 4=금)
                             const date = new Date(startDate);
                             date.setDate(date.getDate() + weekIndex * 7 + dayIndex);
-                            const dateStr = date.toISOString().split('T')[0];
+                            const dateStr = getKoreanDateString(date);
                             const isFuture = date > today;
                             const grassRecord = grassData.find((g) => g.date === dateStr);
                             const cookieChange = grassRecord?.cookieChange || 0;
@@ -1314,201 +1751,325 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
           </Card>
         )}
 
-        {/* 상점 탭 - 카테고리별 */}
+        {/* 상점 탭 - 토글 (캔디/쿠키) */}
         {activeTab === 'shop' && (
           <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">🏪 상점</CardTitle>
-                <CardDescription>캔디로 아이템을 구매해보세요!</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center mb-4 p-3 bg-pink-50 rounded-lg">
-                  <span className="text-gray-600">보유 캔디: </span>
-                  <span className="font-bold text-pink-600 text-xl">{currentStudent.jelly ?? currentStudent.cookie} 🍭</span>
-                </div>
+            {/* 상점 모드 토글 */}
+            <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
+              <button
+                onClick={() => setShopMode('candy')}
+                className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  shopMode === 'candy'
+                    ? 'bg-white text-pink-600 shadow-sm'
+                    : 'text-gray-600'
+                }`}
+              >
+                🍭 캔디 상점
+              </button>
+              <button
+                onClick={() => {
+                  setShopMode('cookie');
+                  loadCookieShopData();
+                }}
+                className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  shopMode === 'cookie'
+                    ? 'bg-white text-amber-600 shadow-sm'
+                    : 'text-gray-600'
+                }`}
+              >
+                🍪 쿠키 상점
+              </button>
+            </div>
 
-                {/* 카테고리 탭 */}
-                <div className="flex flex-wrap gap-2 mb-4 pb-2">
-                  {[
-                    { key: 'all', label: '전체', icon: '📦' },
-                    { key: 'emoji', label: '이모지', icon: '😊' },
-                    { key: 'titlePermit', label: '칭호권', icon: '🏷️' },
-                    { key: 'titleColor', label: '칭호색상', icon: '🎨' },
-                    { key: 'nameEffect', label: '이름효과', icon: '✨' },
-                    { key: 'animation', label: '애니메이션', icon: '🎬' },
-                    { key: 'buttonBorder', label: '버튼테두리', icon: '🔲' },
-                    { key: 'buttonFill', label: '버튼채우기', icon: '🎨' },
-                  ].map((cat) => {
-                    const count = cat.key === 'all'
-                      ? shopItems.filter((item: ShopItem) => item.price >= 5).length
-                      : shopItems.filter((item: ShopItem) => item.category === cat.key && item.price >= 5).length;
-                    return (
-                      <button
-                        key={cat.key}
-                        onClick={() => setShopCategory(cat.key as typeof shopCategory)}
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
-                          shopCategory === cat.key
-                            ? 'bg-amber-500 text-white'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        <span>{cat.icon}</span>
-                        <span>{cat.label}</span>
-                        <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs ${
-                          shopCategory === cat.key ? 'bg-amber-600' : 'bg-gray-200'
-                        }`}>
-                          {count}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+            {/* 캔디 상점 (프로필 아이템) */}
+            {shopMode === 'candy' && (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">🍭 캔디 상점</CardTitle>
+                    <CardDescription>캔디로 프로필 아이템을 구매해보세요!</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center mb-4 p-3 bg-pink-50 rounded-lg">
+                      <span className="text-gray-600">보유 캔디: </span>
+                      <span className="font-bold text-pink-600 text-xl">{currentStudent.jelly ?? currentStudent.cookie} 🍭</span>
+                    </div>
 
-                {isLoadingShop ? (
-                  <p className="text-center py-8 text-gray-500">로딩 중...</p>
-                ) : (
-                  <div className="space-y-3">
-                    {shopItems
-                      .filter((item: ShopItem) => {
-                        // 카테고리 필터링
-                        if (shopCategory === 'all') return true;
-                        return item.category === shopCategory;
-                      })
-                      .filter((item: ShopItem) => item.price >= 5) // 최소 5캔디
-                      .map((item: ShopItem) => {
-                        const isOwned = currentStudent.ownedItems.includes(item.code);
-                        const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
-                        const canAfford = currentJelly >= item.price;
-
-                        // 카테고리별 아이콘
-                        const getCategoryIcon = () => {
-                          switch (item.category) {
-                            case 'emoji': return item.value || '😊';
-                            case 'titlePermit': return '🏷️';
-                            case 'titleColor': return '🎨';
-                            case 'nameEffect': return '✨';
-                            case 'animation': return '🎬';
-                            case 'buttonBorder': return '🔲';
-                            case 'buttonFill': return '🎨';
-                            default: return '📦';
-                          }
-                        };
-
-                        // 카테고리별 한글 이름
-                        const getCategoryName = () => {
-                          switch (item.category) {
-                            case 'emoji': return '이모지';
-                            case 'titlePermit': return '칭호권';
-                            case 'titleColor': return '칭호색상';
-                            case 'nameEffect': return '이름 효과';
-                            case 'animation': return '애니메이션';
-                            case 'buttonBorder': return '버튼 테두리';
-                            case 'buttonFill': return '버튼 채우기';
-                            default: return item.category;
-                          }
-                        };
-
+                    {/* 카테고리 탭 */}
+                    <div className="flex flex-wrap gap-2 mb-4 pb-2">
+                      {[
+                        { key: 'all', label: '전체', icon: '📦' },
+                        { key: 'emoji', label: '이모지', icon: '😊' },
+                        { key: 'titlePermit', label: '칭호권', icon: '🏷️' },
+                        { key: 'titleColor', label: '칭호색상', icon: '🎨' },
+                        { key: 'nameEffect', label: '이름효과', icon: '✨' },
+                        { key: 'animation', label: '애니메이션', icon: '🎬' },
+                        { key: 'buttonBorder', label: '버튼테두리', icon: '🔲' },
+                        { key: 'buttonFill', label: '버튼채우기', icon: '🎨' },
+                      ].map((cat) => {
+                        const count = cat.key === 'all'
+                          ? shopItems.filter((item: ShopItem) => item.price >= 5).length
+                          : shopItems.filter((item: ShopItem) => item.category === cat.key && item.price >= 5).length;
                         return (
-                          <div
-                            key={item.code}
-                            className={`p-4 rounded-xl border-2 ${isOwned ? 'bg-green-50 border-green-300' : 'bg-white border-gray-200'}`}
+                          <button
+                            key={cat.key}
+                            onClick={() => setShopCategory(cat.key as typeof shopCategory)}
+                            className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                              shopCategory === cat.key
+                                ? 'bg-amber-500 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                {/* 아이템 썸네일 */}
-                                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center text-2xl">
-                                  {getCategoryIcon()}
-                                </div>
-                                <div>
-                                  <p className="font-medium">{item.name}</p>
-                                  <p className="text-xs text-gray-500">{getCategoryName()}</p>
-                                </div>
-                              </div>
-                              <div className="text-right flex flex-col gap-1">
-                                <p className="font-bold text-pink-600 text-lg">{item.price} 🍭</p>
-                                <div className="flex gap-1">
-                                  {/* 미리보기 버튼 */}
-                                  <button
-                                    onClick={() => setPreviewItem(item)}
-                                    className="px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600"
-                                  >
-                                    👁️ 미리보기
-                                  </button>
-                                  {isOwned ? (
-                                    item.category === 'titlePermit' ? (
-                                      hasTitlePermit() ? (
-                                        <span className="inline-flex items-center gap-1 text-xs text-green-600 bg-green-100 px-2 py-1 rounded-lg">
-                                          ✅ 활성화됨
-                                        </span>
-                                      ) : (
+                            <span>{cat.icon}</span>
+                            <span>{cat.label}</span>
+                            <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs ${
+                              shopCategory === cat.key ? 'bg-amber-600' : 'bg-gray-200'
+                            }`}>
+                              {count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {isLoadingShop ? (
+                      <p className="text-center py-8 text-gray-500">로딩 중...</p>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+                        {shopItems
+                          .filter((item: ShopItem) => {
+                            if (shopCategory === 'all') return true;
+                            return item.category === shopCategory;
+                          })
+                          .filter((item: ShopItem) => item.price >= 5)
+                          .map((item: ShopItem) => {
+                            const isOwned = currentStudent.ownedItems.includes(item.code);
+                            const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
+                            const canAfford = currentJelly >= item.price;
+
+                            const getCategoryIcon = () => {
+                              switch (item.category) {
+                                case 'emoji': return item.value || '😊';
+                                case 'titlePermit': return '🏷️';
+                                case 'titleColor': return '🎨';
+                                case 'nameEffect': return '✨';
+                                case 'animation': return '🎬';
+                                case 'buttonBorder': return '🔲';
+                                case 'buttonFill': return '🎨';
+                                default: return '📦';
+                              }
+                            };
+
+                            return (
+                              <div
+                                key={item.code}
+                                onClick={() => setPreviewItem(item)}
+                                className={`p-2 rounded-lg border-2 cursor-pointer hover:shadow-md transition-all ${isOwned ? 'bg-green-50 border-green-300' : 'bg-white border-gray-200'}`}
+                              >
+                                <div className="text-center">
+                                  <div className="text-2xl mb-1">
+                                    {getCategoryIcon()}
+                                  </div>
+                                  <p className="text-xs font-medium truncate mb-1">{item.name}</p>
+                                  <p className="text-xs font-bold text-pink-600">{item.price} 🍭</p>
+                                  <div className="mt-1">
+                                    {isOwned ? (
+                                      item.category === 'titlePermit' && !hasTitlePermit() ? (
                                         <button
-                                          onClick={handleActivateTitlePermit}
+                                          onClick={(e) => { e.stopPropagation(); handleActivateTitlePermit(); }}
                                           disabled={isPurchasing}
-                                          className="px-2 py-1 rounded-lg text-xs font-medium bg-purple-500 hover:bg-purple-600 text-white"
+                                          className="w-full px-1 py-0.5 rounded text-xs font-medium bg-purple-500 hover:bg-purple-600 text-white"
                                         >
-                                          {isPurchasing ? '...' : '🏷️ 활성화'}
+                                          활성화
                                         </button>
+                                      ) : (
+                                        <span className="text-xs text-green-600">보유</span>
                                       )
                                     ) : (
-                                      <span className="inline-flex items-center gap-1 text-xs text-green-600 bg-green-100 px-2 py-1 rounded-lg">
-                                        ✅ 보유
-                                      </span>
-                                    )
-                                  ) : (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handlePurchase(item); }}
+                                        disabled={!canAfford || isPurchasing}
+                                        className={`w-full px-1 py-0.5 rounded text-xs font-medium ${
+                                          canAfford
+                                            ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                                            : 'bg-gray-200 text-gray-400'
+                                        }`}
+                                      >
+                                        {canAfford ? '구매' : '🔒'}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        {shopItems
+                          .filter((item: ShopItem) => item.category === shopCategory)
+                          .filter((item: ShopItem) => item.price >= 5).length === 0 && (
+                          <p className="text-center py-8 text-gray-500">이 카테고리에 상품이 없어요</p>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 보유 아이템 요약 */}
+                {currentStudent.ownedItems.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">🎒 내 아이템 ({currentStudent.ownedItems.length}개)</CardTitle>
+                      <CardDescription>프로필 탭에서 아이템을 장착할 수 있어요!</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {currentStudent.ownedItems.slice(0, 10).map((itemCode: string) => {
+                          const item = shopItems.find((i: ShopItem) => i.code === itemCode);
+                          return (
+                            <span key={itemCode} className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm">
+                              {item?.name || itemCode}
+                            </span>
+                          );
+                        })}
+                        {currentStudent.ownedItems.length > 10 && (
+                          <span className="px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-sm">
+                            +{currentStudent.ownedItems.length - 10}개 더
+                          </span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
+
+            {/* 쿠키 상점 (실물 교환) */}
+            {shopMode === 'cookie' && (
+              <>
+                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-amber-800 font-medium">🍪 쿠키 상점 안내</p>
+                      <p className="text-xs text-amber-600 mt-1">실물 상품을 신청하면 다했니 쿠키가 차감됩니다.</p>
+                    </div>
+                    <button
+                      onClick={() => setShowItemSuggestionModal(true)}
+                      className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-medium hover:bg-amber-600 transition-all shrink-0"
+                    >
+                      💡 물품 요청
+                    </button>
+                  </div>
+                  {/* 물품 요청 현황 버튼 */}
+                  <button
+                    onClick={() => setShowMyItemSuggestions(true)}
+                    className="w-full mt-2 px-3 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-all flex items-center justify-center gap-2"
+                  >
+                    📋 내 물품 요청 현황 {myItemSuggestions.length > 0 && <span className="bg-white text-blue-600 rounded-full px-2 py-0.5 text-xs">{myItemSuggestions.length}건</span>}
+                  </button>
+                </div>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-lg">📦 실물 상품</CardTitle>
+                      <CardDescription>보유 쿠키: <span className="font-bold text-amber-600">{currentStudent.cookie} 🍪</span></CardDescription>
+                    </div>
+                    <button
+                      onClick={() => setShowMyRequests(!showMyRequests)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1 ${
+                        showMyRequests
+                          ? 'bg-amber-500 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      📋 내 신청 ({cookieShopRequests.length})
+                    </button>
+                  </CardHeader>
+                  <CardContent>
+                    {showMyRequests ? (
+                      // 내 신청 내역
+                      <div className="space-y-3">
+                        {cookieShopRequests.length === 0 ? (
+                          <p className="text-center py-8 text-gray-500">신청 내역이 없습니다.</p>
+                        ) : (
+                          cookieShopRequests.map((request) => (
+                            <div
+                              key={request.id}
+                              className={`p-4 rounded-xl border-2 ${
+                                request.status === 'pending' ? 'border-amber-300 bg-amber-50' :
+                                request.status === 'approved' ? 'border-green-300 bg-green-50' :
+                                request.status === 'rejected' ? 'border-red-300 bg-red-50' :
+                                'border-gray-300 bg-gray-50'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="font-medium">{request.itemName} x{request.quantity}</p>
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                  request.status === 'pending' ? 'bg-amber-200 text-amber-800' :
+                                  request.status === 'approved' ? 'bg-green-200 text-green-800' :
+                                  request.status === 'rejected' ? 'bg-red-200 text-red-800' :
+                                  'bg-gray-200 text-gray-800'
+                                }`}>
+                                  {request.status === 'pending' ? '대기중' :
+                                   request.status === 'approved' ? '승인됨' :
+                                   request.status === 'rejected' ? '거절됨' : '완료'}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-600">{request.totalPrice} 쿠키</p>
+                              {request.teacherResponse && (
+                                <p className="mt-2 text-sm text-gray-700 bg-white p-2 rounded">
+                                  💬 선생님: {request.teacherResponse}
+                                </p>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    ) : (
+                      // 상품 목록
+                      isLoadingCookieShop ? (
+                        <p className="text-center py-8 text-gray-500">로딩 중...</p>
+                      ) : cookieShopItems.length === 0 ? (
+                        <p className="text-center py-8 text-gray-500">등록된 상품이 없습니다.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {cookieShopItems.map((item) => {
+                            const canAfford = currentStudent.cookie >= item.price;
+                            return (
+                              <div
+                                key={item.id}
+                                className="p-4 rounded-xl border-2 bg-white border-gray-200"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="font-medium">{item.name}</p>
+                                    {item.description && (
+                                      <p className="text-xs text-gray-500">{item.description}</p>
+                                    )}
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="font-bold text-amber-600">{item.price} 🍪</p>
                                     <button
-                                      onClick={() => handlePurchase(item)}
-                                      disabled={!canAfford || isPurchasing}
-                                      className={`px-2 py-1 rounded-lg text-xs font-medium ${
+                                      onClick={() => handleCookieShopRequest(item)}
+                                      disabled={!canAfford}
+                                      className={`mt-1 px-3 py-1 rounded-lg text-xs font-medium ${
                                         canAfford
                                           ? 'bg-amber-500 hover:bg-amber-600 text-white'
                                           : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                                       }`}
                                     >
-                                      {isPurchasing ? '...' : canAfford ? '🛒 구매' : '🔒'}
+                                      {canAfford ? '📝 신청' : '🔒 쿠키 부족'}
                                     </button>
-                                  )}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    {shopItems
-                      .filter((item: ShopItem) => item.category === shopCategory)
-                      .filter((item: ShopItem) => item.price >= 5).length === 0 && (
-                      <p className="text-center py-8 text-gray-500">이 카테고리에 상품이 없어요</p>
+                            );
+                          })}
+                        </div>
+                      )
                     )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* 보유 아이템 요약 */}
-            {currentStudent.ownedItems.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">🎒 내 아이템 ({currentStudent.ownedItems.length}개)</CardTitle>
-                  <CardDescription>프로필 탭에서 아이템을 장착할 수 있어요!</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {currentStudent.ownedItems.slice(0, 10).map((itemCode: string) => {
-                      const item = shopItems.find((i: ShopItem) => i.code === itemCode);
-                      return (
-                        <span key={itemCode} className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm">
-                          {item?.name || itemCode}
-                        </span>
-                      );
-                    })}
-                    {currentStudent.ownedItems.length > 10 && (
-                      <span className="px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-sm">
-                        +{currentStudent.ownedItems.length - 10}개 더
-                      </span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </>
             )}
           </div>
         )}
@@ -1947,8 +2508,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                   <div className="flex-1">
                     <h2 className="text-lg font-bold text-amber-800">{myTeam.teamName}</h2>
                     <div className="flex gap-3 mt-1 text-sm flex-wrap">
-                      <span className="text-amber-600">{teamMembers.reduce((sum, m) => sum + (m.cookie || 0), 0)} 🍪</span>
-                      <span className="text-pink-600 font-medium">{teamMembers.reduce((sum, m) => sum + (m.jelly ?? m.cookie ?? 0), 0)} 🍭</span>
+                      <span className="text-amber-600 font-medium">{teamMembers.reduce((sum, m) => sum + (m.cookie || 0), 0)} 🍪</span>
                       <span className="text-blue-600">{myTeam.members.length}명</span>
                     </div>
                   </div>
@@ -1971,7 +2531,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                       for (let i = 6; i >= 0; i--) {
                         const d = new Date(today);
                         d.setDate(d.getDate() - i);
-                        const dateStr = d.toISOString().split('T')[0];
+                        const dateStr = getKoreanDateString(d);
                         const dayData = memberGrass.find(g => g.date === dateStr);
                         recentDays.push({
                           date: dateStr,
@@ -1979,8 +2539,11 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         });
                       }
 
-                      // 총 획득량
-                      const totalGain = memberGrass.reduce((sum, g) => sum + (g.cookieChange > 0 ? g.cookieChange : 0), 0);
+                      // 팀 결성일 이후 획득량 (팀 결성일이 없으면 전체 합산)
+                      const teamCreatedDate = myTeam?.createdAt?.toDate ? getKoreanDateString(myTeam.createdAt.toDate()) : null;
+                      const totalGain = memberGrass
+                        .filter(g => !teamCreatedDate || g.date >= teamCreatedDate)
+                        .reduce((sum, g) => sum + (g.cookieChange > 0 ? g.cookieChange : 0), 0);
 
                       return (
                         <div
@@ -2012,10 +2575,10 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                                 <p className={`text-xs ${getTitleColorClass(member.profile.titleColorCode)}`}>{member.profile.title}</p>
                               )}
                             </div>
-                            {/* 쿠키/캔디 */}
+                            {/* 보유 쿠키 / 획득 쿠키 */}
                             <div className="text-right text-sm shrink-0">
-                              <p className="text-amber-600">{member.cookie} 🍪</p>
-                              <p className="font-bold text-pink-600">{member.jelly ?? member.cookie} 🍭</p>
+                              <p className="text-amber-600 font-medium">{member.cookie} 🍪</p>
+                              <p className="text-green-600 text-xs">+{totalGain} 획득</p>
                             </div>
                           </div>
                           {/* 최근 7일 잔디 */}
@@ -2076,73 +2639,8 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
               )}
             </div>
 
-            {/* 게임 목록 그리드 */}
+            {/* 게임 목록 그리드 - 교사 순서와 동기화 */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {/* 쿠키 배틀 */}
-              <button
-                disabled
-                className="p-5 rounded-2xl bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
-              >
-                <div className="text-4xl mb-2">⚔️</div>
-                <h3 className="font-bold text-red-800 text-sm">쿠키 배틀</h3>
-                <p className="text-xs text-red-600 mt-1">팀 대결</p>
-                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
-                  준비중
-                </span>
-              </button>
-
-              {/* 스피드 퀴즈 */}
-              <button
-                disabled
-                className="p-5 rounded-2xl bg-gradient-to-br from-yellow-50 to-amber-50 border-2 border-yellow-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
-              >
-                <div className="text-4xl mb-2">⚡</div>
-                <h3 className="font-bold text-yellow-800 text-sm">스피드 퀴즈</h3>
-                <p className="text-xs text-yellow-600 mt-1">개인전</p>
-                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
-                  준비중
-                </span>
-              </button>
-
-              {/* 홀짝 게임 */}
-              <button
-                disabled
-                className="p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
-              >
-                <div className="text-4xl mb-2">🎲</div>
-                <h3 className="font-bold text-blue-800 text-sm">홀짝 게임</h3>
-                <p className="text-xs text-blue-600 mt-1">개인전</p>
-                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
-                  준비중
-                </span>
-              </button>
-
-              {/* 가위바위보 */}
-              <button
-                disabled
-                className="p-5 rounded-2xl bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
-              >
-                <div className="text-4xl mb-2">✊</div>
-                <h3 className="font-bold text-green-800 text-sm">가위바위보</h3>
-                <p className="text-xs text-green-600 mt-1">개인전</p>
-                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
-                  준비중
-                </span>
-              </button>
-
-              {/* 끝말잇기 */}
-              <button
-                disabled
-                className="p-5 rounded-2xl bg-gradient-to-br from-pink-50 to-rose-50 border-2 border-pink-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
-              >
-                <div className="text-4xl mb-2">💬</div>
-                <h3 className="font-bold text-pink-800 text-sm">끝말잇기</h3>
-                <p className="text-xs text-pink-600 mt-1">실시간</p>
-                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
-                  준비중
-                </span>
-              </button>
-
               {/* 숫자야구 - 활성화! */}
               {activeBaseballGame ? (
                 <button
@@ -2170,6 +2668,145 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                   </span>
                 </button>
               )}
+
+              {/* 소수결게임 */}
+              {activeMinorityGame ? (
+                <button
+                  onClick={joinMinorityGame}
+                  disabled={isJoiningMinorityGame}
+                  className="p-5 rounded-2xl bg-gradient-to-br from-teal-100 to-cyan-100 border-2 border-teal-400 transition-all hover:scale-105 hover:shadow-lg animate-pulse"
+                >
+                  <div className="text-4xl mb-2">⚖️</div>
+                  <h3 className="font-bold text-teal-800 text-sm">소수결게임</h3>
+                  <p className="text-xs text-teal-600 mt-1">서바이벌</p>
+                  <span className="inline-block mt-2 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">
+                    {isJoiningMinorityGame ? '참가중...' : '🎮 참가하기!'}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  disabled
+                  className="p-5 rounded-2xl bg-gradient-to-br from-teal-50 to-cyan-50 border-2 border-teal-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+                >
+                  <div className="text-4xl mb-2">⚖️</div>
+                  <h3 className="font-bold text-teal-800 text-sm">소수결게임</h3>
+                  <p className="text-xs text-teal-600 mt-1">서바이벌</p>
+                  <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                    대기중
+                  </span>
+                </button>
+              )}
+
+              {/* 총알피하기 */}
+              {activeBulletDodgeGame ? (
+                <button
+                  onClick={joinBulletDodgeGame}
+                  disabled={isJoiningBulletDodge}
+                  className="p-5 rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 border-2 border-indigo-400 transition-all hover:scale-105 hover:shadow-lg animate-pulse"
+                >
+                  <div className="text-4xl mb-2">🚀</div>
+                  <h3 className="font-bold text-indigo-800 text-sm">총알피하기</h3>
+                  <p className="text-xs text-indigo-600 mt-1">점수 도전</p>
+                  <span className="inline-block mt-2 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">
+                    {isJoiningBulletDodge ? '참가중...' : '🎮 참가하기!'}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  disabled
+                  className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+                >
+                  <div className="text-4xl mb-2">🚀</div>
+                  <h3 className="font-bold text-indigo-800 text-sm">총알피하기</h3>
+                  <p className="text-xs text-indigo-600 mt-1">점수 도전</p>
+                  <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                    대기중
+                  </span>
+                </button>
+              )}
+
+              {/* 가위바위보 */}
+              {activeRpsGame ? (
+                <button
+                  onClick={joinRpsGame}
+                  disabled={isJoiningRps}
+                  className="p-5 rounded-2xl bg-gradient-to-br from-green-100 to-emerald-100 border-2 border-green-400 transition-all hover:scale-105 hover:shadow-lg animate-pulse"
+                >
+                  <div className="text-4xl mb-2">✊✋✌️</div>
+                  <h3 className="font-bold text-green-800 text-sm">가위바위보</h3>
+                  <p className="text-xs text-green-600 mt-1">
+                    {activeRpsGame.gameMode === 'survivor' ? '서바이벌' :
+                     activeRpsGame.gameMode === 'candy15' ? '1.5배' : '1.2배'}
+                  </p>
+                  <span className="inline-block mt-2 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">
+                    {isJoiningRps ? '참가중...' : '🎮 참가하기!'}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  disabled
+                  className="p-5 rounded-2xl bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+                >
+                  <div className="text-4xl mb-2">✊</div>
+                  <h3 className="font-bold text-green-800 text-sm">가위바위보</h3>
+                  <p className="text-xs text-green-600 mt-1">개인전</p>
+                  <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                    대기중
+                  </span>
+                </button>
+              )}
+
+              {/* 쿠키 배틀 - 준비중 */}
+              <button
+                disabled
+                className="p-5 rounded-2xl bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+              >
+                <div className="text-4xl mb-2">⚔️</div>
+                <h3 className="font-bold text-red-800 text-sm">쿠키 배틀</h3>
+                <p className="text-xs text-red-600 mt-1">팀 대결</p>
+                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                  준비중
+                </span>
+              </button>
+
+              {/* 스피드 퀴즈 - 준비중 */}
+              <button
+                disabled
+                className="p-5 rounded-2xl bg-gradient-to-br from-yellow-50 to-amber-50 border-2 border-yellow-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+              >
+                <div className="text-4xl mb-2">⚡</div>
+                <h3 className="font-bold text-yellow-800 text-sm">스피드 퀴즈</h3>
+                <p className="text-xs text-yellow-600 mt-1">개인전</p>
+                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                  준비중
+                </span>
+              </button>
+
+              {/* 홀짝 게임 - 준비중 */}
+              <button
+                disabled
+                className="p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+              >
+                <div className="text-4xl mb-2">🎲</div>
+                <h3 className="font-bold text-blue-800 text-sm">홀짝 게임</h3>
+                <p className="text-xs text-blue-600 mt-1">개인전</p>
+                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                  준비중
+                </span>
+              </button>
+
+              {/* 끝말잇기 - 준비중 */}
+              <button
+                disabled
+                className="p-5 rounded-2xl bg-gradient-to-br from-pink-50 to-rose-50 border-2 border-pink-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+              >
+                <div className="text-4xl mb-2">💬</div>
+                <h3 className="font-bold text-pink-800 text-sm">끝말잇기</h3>
+                <p className="text-xs text-pink-600 mt-1">실시간</p>
+                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                  준비중
+                </span>
+              </button>
             </div>
 
             {/* 활성 게임 안내 */}
@@ -2189,6 +2826,78 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                     className="px-4 py-2 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-all"
                   >
                     {isJoiningGame ? '...' : '참가'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 소수결게임 안내 */}
+            {activeMinorityGame && (
+              <div className="bg-gradient-to-r from-teal-100 to-cyan-100 rounded-2xl p-4 border-2 border-teal-300">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl animate-bounce">⚖️</span>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-teal-800">소수결게임 대기중!</h3>
+                    <p className="text-sm text-teal-600">
+                      선생님이 소수결게임을 열었어요. 소수파가 승리하는 서바이벌!
+                    </p>
+                  </div>
+                  <button
+                    onClick={joinMinorityGame}
+                    disabled={isJoiningMinorityGame}
+                    className="px-4 py-2 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all"
+                  >
+                    {isJoiningMinorityGame ? '...' : '참가'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 총알피하기 안내 */}
+            {activeBulletDodgeGame && (
+              <div className="bg-gradient-to-r from-indigo-100 to-purple-100 rounded-2xl p-4 border-2 border-indigo-300">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl animate-bounce">🚀</span>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-indigo-800">총알피하기 {activeBulletDodgeGame.status === 'playing' ? '진행중!' : '대기중!'}</h3>
+                    <p className="text-sm text-indigo-600">
+                      우주선을 조종해 총알을 피하세요! 생존 시간이 점수입니다!
+                    </p>
+                  </div>
+                  <button
+                    onClick={joinBulletDodgeGame}
+                    disabled={isJoiningBulletDodge}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all"
+                  >
+                    {isJoiningBulletDodge ? '...' : '참가'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 가위바위보 안내 */}
+            {activeRpsGame && (
+              <div className="bg-gradient-to-r from-green-100 to-emerald-100 rounded-2xl p-4 border-2 border-green-300">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl animate-bounce">✊✋✌️</span>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-green-800">
+                      가위바위보 {activeRpsGame.status === 'selecting' ? '진행중!' : '대기중!'}
+                    </h3>
+                    <p className="text-sm text-green-600">
+                      {activeRpsGame.gameMode === 'survivor'
+                        ? '최후의 1인이 될 때까지! 지금 참가하세요!'
+                        : activeRpsGame.gameMode === 'candy15'
+                          ? '이기면 캔디 1.5배! 지금 참가하세요!'
+                          : '이기면 캔디 1.2배! 지금 참가하세요!'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={joinRpsGame}
+                    disabled={isJoiningRps}
+                    className="px-4 py-2 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition-all"
+                  >
+                    {isJoiningRps ? '...' : '참가'}
                   </button>
                 </div>
               </div>
@@ -2392,7 +3101,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                             {Array.from({ length: 5 }).map((_, dayIndex) => {
                               const date = new Date(startDate);
                               date.setDate(date.getDate() + weekIndex * 7 + dayIndex);
-                              const dateStr = date.toISOString().split('T')[0];
+                              const dateStr = getKoreanDateString(date);
                               const isFuture = date > today;
                               const grassRecord = selectedClassmateGrass.find((g) => g.date === dateStr);
                               const cookieChange = grassRecord?.cookieChange || 0;
@@ -2631,6 +3340,142 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                     🔒 캔디가 부족합니다 (보유: {currentStudent.jelly ?? currentStudent.cookie}🍭)
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 물품 요청 모달 */}
+        {showItemSuggestionModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-xl">
+              <div className="p-4 bg-amber-50 border-b border-amber-200">
+                <h3 className="text-lg font-bold text-amber-800">💡 상점에 물품 요청하기</h3>
+                <p className="text-sm text-amber-600 mt-1">상점에 추가됐으면 하는 물품을 요청해보세요!</p>
+              </div>
+              <div className="p-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">물품 이름 *</label>
+                  <input
+                    type="text"
+                    value={suggestionItemName}
+                    onChange={(e) => setSuggestionItemName(e.target.value)}
+                    placeholder="예: 연필, 지우개, 간식 등"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                    maxLength={50}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">추가 설명 (선택)</label>
+                  <textarea
+                    value={suggestionDescription}
+                    onChange={(e) => setSuggestionDescription(e.target.value)}
+                    placeholder="물품에 대한 설명이나 희망 가격 등"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none"
+                    rows={3}
+                    maxLength={200}
+                  />
+                </div>
+              </div>
+              <div className="p-4 bg-gray-50 flex gap-2">
+                <button
+                  onClick={() => {
+                    setShowItemSuggestionModal(false);
+                    setSuggestionItemName('');
+                    setSuggestionDescription('');
+                  }}
+                  className="flex-1 py-2 px-4 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-all"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleSubmitItemSuggestion}
+                  disabled={isSubmittingSuggestion || !suggestionItemName.trim()}
+                  className="flex-1 py-2 px-4 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmittingSuggestion ? '제출 중...' : '요청하기'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 내 물품 요청 현황 모달 */}
+        {showMyItemSuggestions && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-xl max-h-[80vh] flex flex-col">
+              <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-800">📋 내 물품 요청 현황</h3>
+                  <p className="text-sm text-gray-600 mt-1">요청한 물품의 승인/거절 상태를 확인하세요</p>
+                </div>
+                <button
+                  onClick={() => setShowMyItemSuggestions(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="p-4 overflow-y-auto flex-1">
+                {myItemSuggestions.length === 0 ? (
+                  <p className="text-center py-8 text-gray-500">요청 내역이 없습니다.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {myItemSuggestions.map((suggestion) => (
+                      <div
+                        key={suggestion.id}
+                        className={`p-4 rounded-xl border-2 ${
+                          suggestion.status === 'pending' ? 'border-amber-300 bg-amber-50' :
+                          suggestion.status === 'approved' ? 'border-green-300 bg-green-50' :
+                          'border-red-300 bg-red-50'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-gray-800">{suggestion.itemName}</span>
+                              <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                                suggestion.status === 'pending' ? 'bg-amber-200 text-amber-800' :
+                                suggestion.status === 'approved' ? 'bg-green-200 text-green-800' :
+                                'bg-red-200 text-red-800'
+                              }`}>
+                                {suggestion.status === 'pending' ? '검토 중' :
+                                 suggestion.status === 'approved' ? '승인됨' : '거절됨'}
+                              </span>
+                            </div>
+                            {suggestion.description && (
+                              <p className="text-sm text-gray-600 mt-1">{suggestion.description}</p>
+                            )}
+                            <p className="text-xs text-gray-400 mt-2">
+                              {suggestion.createdAt?.toDate?.().toLocaleDateString('ko-KR') || '날짜 없음'}
+                            </p>
+                          </div>
+                        </div>
+                        {/* 선생님 메시지 */}
+                        {suggestion.teacherMessage && (
+                          <div className={`mt-3 p-3 rounded-lg ${
+                            suggestion.status === 'approved' ? 'bg-green-100' : 'bg-red-100'
+                          }`}>
+                            <p className="text-xs text-gray-500 mb-1">선생님 메시지:</p>
+                            <p className={`text-sm ${
+                              suggestion.status === 'approved' ? 'text-green-800' : 'text-red-800'
+                            }`}>
+                              {suggestion.teacherMessage}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="p-4 bg-gray-50 border-t border-gray-200">
+                <button
+                  onClick={() => setShowMyItemSuggestions(false)}
+                  className="w-full py-2 px-4 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-all"
+                >
+                  닫기
+                </button>
               </div>
             </div>
           </div>
