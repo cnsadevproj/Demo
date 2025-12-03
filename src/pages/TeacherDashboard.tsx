@@ -1071,16 +1071,26 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
     setIsCreatingCookieBattle(true);
     try {
+      // 팀 데이터 새로고침
+      const freshTeams = await getTeams(user.uid, selectedClass);
+      setTeams(freshTeams);
+
+      if (freshTeams.length < 2) {
+        toast.error('쿠키 배틀은 최소 2개 이상의 팀이 필요합니다.');
+        setIsCreatingCookieBattle(false);
+        return;
+      }
+
       const gameId = `cookiebattle_${user.uid}_${Date.now()}`;
       const currentClassName = classes?.find(c => c.id === selectedClass)?.name || '';
-      const today = getKoreanDateString();
+      const today = getKoreanDateString(new Date());
 
       // 자원 계산을 위한 학생 쿠키 맵
       const studentDataMap = new Map<string, { name: string; number: number; jelly: number; hasReflected: boolean }>();
 
       // 축적 기간 시작일 (가장 오래된 팀 결성일)
       let accumulationStartDate = today;
-      teams.forEach(team => {
+      freshTeams.forEach(team => {
         if (team.createdAt) {
           const teamDate = team.createdAt.toDate ?
             team.createdAt.toDate().toISOString().split('T')[0] :
@@ -1132,7 +1142,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       await setDoc(doc(db, 'games', gameId), gameData);
 
       // 각 팀을 subcollection으로 생성
-      for (const team of teams) {
+      for (const team of freshTeams) {
         // 자원 모드에 따른 초기 자원 계산
         let initialResources = 0;
         if (selectedCookieBattleResourceMode === 'memberCount') {
@@ -1164,7 +1174,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
       // 학생 정보도 subcollection으로 저장 (성찰 여부 포함)
       for (const [code, data] of studentDataMap) {
-        const teamId = teams.find(t => t.members.includes(code))?.teamId || '';
+        const teamId = freshTeams.find(t => t.members.includes(code))?.teamId || '';
         if (teamId) {
           await setDoc(doc(db, 'games', gameId, 'studentInfo', code), {
             name: data.name,
