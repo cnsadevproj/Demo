@@ -44,20 +44,47 @@ export function NumberBaseball() {
   const [isSolved, setIsSolved] = useState(false);
   const [myRank, setMyRank] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [closeCountdown, setCloseCountdown] = useState<number | null>(null);
 
-  // 게임 데이터 구독
+  // 게임 데이터 구독 및 자동 종료 감지
   useEffect(() => {
     if (!gameId) return;
 
     const gameRef = doc(db, 'games', gameId);
     const unsubscribe = onSnapshot(gameRef, (snapshot) => {
       if (snapshot.exists()) {
-        setGameData(snapshot.data() as GameData);
+        const data = snapshot.data() as GameData;
+        setGameData(data);
+
+        // 교사가 게임을 종료했을 때 카운트다운 시작
+        if (data.status === 'finished' && closeCountdown === null) {
+          setCloseCountdown(5);
+        }
+      } else {
+        // 게임이 삭제됨 - 즉시 창 닫기
+        alert('게임이 종료되었습니다.');
+        window.close();
       }
     });
 
     return () => unsubscribe();
-  }, [gameId]);
+  }, [gameId, closeCountdown]);
+
+  // 카운트다운 및 자동 종료
+  useEffect(() => {
+    if (closeCountdown === null) return;
+
+    if (closeCountdown <= 0) {
+      window.close();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setCloseCountdown(closeCountdown - 1);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [closeCountdown]);
 
   // 플레이어 데이터 구독
   useEffect(() => {
@@ -141,24 +168,32 @@ export function NumberBaseball() {
         const gameSnap = await getDoc(gameRef);
         const currentRank = (gameSnap.data()?.completedCount || 0) + 1;
 
-        // 게임 문서 업데이트 (완료 수 증가)
-        await updateDoc(gameRef, {
-          completedCount: currentRank
-        });
-
-        // 플레이어 상태 업데이트
+        // 플레이어 상태 먼저 업데이트 (인증 없이 가능)
+        console.log('[NumberBaseball] Updating player with rank:', currentRank);
         await updateDoc(playerRef, {
           solvedAt: serverTimestamp(),
-          rank: currentRank
+          rank: currentRank,
+          attempts: (playerData?.attempts || 0) + 1
         });
+        console.log('[NumberBaseball] Player update successful');
 
         setMyRank(currentRank);
 
-        // 10등이면 게임 종료
-        if (currentRank >= 10) {
+        // 게임 문서 업데이트 시도 (실패해도 플레이어 상태는 이미 저장됨)
+        try {
           await updateDoc(gameRef, {
-            status: 'finished'
+            completedCount: currentRank
           });
+
+          // 10등이면 게임 종료
+          if (currentRank >= 10) {
+            await updateDoc(gameRef, {
+              status: 'finished'
+            });
+          }
+        } catch (gameUpdateError) {
+          console.warn('Game document update failed (may require auth):', gameUpdateError);
+          // 게임 문서 업데이트 실패해도 플레이어 상태는 저장되었으므로 계속 진행
         }
       }
 
@@ -260,9 +295,14 @@ export function NumberBaseball() {
             <p className="text-gray-700">정답: <span className="font-bold text-purple-600">{gameData.answer}</span></p>
             <p className="text-sm text-gray-500 mt-1">시도 횟수: {playerData?.attempts || 0}회</p>
           </div>
+          {closeCountdown !== null && (
+            <p className="text-sm text-amber-600 mt-4">
+              ⏰ {closeCountdown}초 후 자동으로 닫힙니다
+            </p>
+          )}
           <button
             onClick={() => window.close()}
-            className="mt-6 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+            className="mt-4 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
           >
             창 닫기
           </button>
@@ -291,9 +331,15 @@ export function NumberBaseball() {
             <p className="text-green-700">정답: <span className="font-bold">{gameData.answer}</span></p>
             <p className="text-sm text-green-600 mt-1">시도 횟수: {guessHistory.length}회</p>
           </div>
-          <p className="text-sm text-gray-500 mt-4">
-            선생님이 보상을 지급할 때까지 기다려주세요!
-          </p>
+          {closeCountdown !== null ? (
+            <p className="text-sm text-amber-600 mt-4">
+              ⏰ {closeCountdown}초 후 자동으로 닫힙니다
+            </p>
+          ) : (
+            <p className="text-sm text-gray-500 mt-4">
+              선생님이 보상을 지급할 때까지 기다려주세요!
+            </p>
+          )}
           <button
             onClick={() => window.close()}
             className="mt-4 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"

@@ -207,7 +207,7 @@ export interface PastGrassData {
   sheetName: string; // 어떤 시트에서 왔는지 (디버깅용)
 }
 
-// 과거 잔디 XLSX 파일 파싱 (n회차 시트들에서 A열=이름, B열=제출시각, D열=쿠키)
+// 과거 잔디 XLSX 파일 파싱 (모든 시트에서 A열=이름, B열=제출시각, D열=쿠키)
 export function parsePastGrassXlsx(file: File, year?: number): Promise<PastGrassData[]> {
   const targetYear = year || new Date().getFullYear();
 
@@ -221,11 +221,8 @@ export function parsePastGrassXlsx(file: File, year?: number): Promise<PastGrass
 
         const results: PastGrassData[] = [];
 
-        // "n회차" 패턴의 시트들만 처리
-        const roundSheetPattern = /^(\d+)회차$/;
-
+        // 모든 시트 처리 (n회차, Sheet1, Sheet2 등)
         for (const sheetName of workbook.SheetNames) {
-          if (!roundSheetPattern.test(sheetName)) continue;
 
           const worksheet = workbook.Sheets[sheetName];
           const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
@@ -263,7 +260,7 @@ export function parsePastGrassXlsx(file: File, year?: number): Promise<PastGrass
         }
 
         if (results.length === 0) {
-          reject(new Error('유효한 잔디 데이터가 없습니다. "n회차" 시트에 A열(이름), B열(제출시각), D열(쿠키)이 있는지 확인해주세요.'));
+          reject(new Error('유효한 잔디 데이터가 없습니다. A열(이름), B열(제출시각: MM-DD 형식), D열(쿠키)이 있는지 확인해주세요.'));
           return;
         }
 

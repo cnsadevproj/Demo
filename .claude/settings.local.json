@@ -19,7 +19,14 @@
       "Bash(firebase deploy:*)",
       "Bash(if not exist \"c:\\Users\\신도경\\Documents\\Demo\\src\\games\" mkdir \"c:\\Users\\신도경\\Documents\\Demo\\src\\games\")",
       "Bash(if not exist \"c:\\Users\\신도경\\Documents\\Demo\\functions\" mkdir \"c:\\Users\\신도경\\Documents\\Demo\\functions\")",
-      "Bash(if not exist \"c:\\Users\\신도경\\Documents\\Demo\\functions\\src\" mkdir \"c:\\Users\\신도경\\Documents\\Demo\\functions\\src\")"
+      "Bash(if not exist \"c:\\Users\\신도경\\Documents\\Demo\\functions\\src\" mkdir \"c:\\Users\\신도경\\Documents\\Demo\\functions\\src\")",
+      "Bash(del package-lock.json)",
+      "Bash(firebase firestore:rules:list:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(xargs ls:*)",
+      "Bash(sort:*)",
+      "Bash(if not exist \"c:\\Users\\신도경\\Documents\\Demo\\src\\components\\teacher\" mkdir \"c:\\Users\\신도경\\Documents\\Demo\\src\\components\\teacher\")",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

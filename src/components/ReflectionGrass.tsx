@@ -3,6 +3,7 @@ import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { ReflectionKing, ReflectionRecord } from '../types/game';
 import { Crown, Calendar, TrendingUp, Flame, Award } from 'lucide-react';
+import { getKoreanDateString } from '../utils/dateUtils';
 
 interface ReflectionGrassProps {
   reflectionKings: ReflectionKing[];
@@ -66,7 +67,7 @@ export function ReflectionGrass({
 
       // 평일만 (월~금)
       if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = getKoreanDateString(date);
         result.unshift(dateData.get(dateStr) || {
           date: dateStr,
           count: 0,
@@ -159,12 +160,30 @@ export function ReflectionGrass({
   const selectedDayData = selectedDate ? dateData.get(selectedDate) : null;
 
   if (mini) {
+    // 미니 뷰: 최근 40일(평일)을 5행으로 표시 - 오른쪽이 최신
+    const miniDays = recentDays.slice(-40);
+    const rows = 5;
+    const cols = Math.ceil(miniDays.length / rows);
+
+    // 열 단위로 재배열 (아래에서 위로, 왼쪽에서 오른쪽으로)
+    const columns: DayData[][] = [];
+    for (let c = 0; c < cols; c++) {
+      const column: DayData[] = [];
+      for (let r = 0; r < rows; r++) {
+        const index = c * rows + r;
+        if (index < miniDays.length) {
+          column.push(miniDays[index]);
+        }
+      }
+      columns.push(column);
+    }
+
     return (
       <div className="flex flex-col gap-1">
         <div className={`flex ${gap}`}>
-          {weeks.slice(-8).map((week, weekIndex) => (
-            <div key={weekIndex} className={`flex flex-col ${gap}`}>
-              {week.map((day) => (
+          {columns.map((column, colIndex) => (
+            <div key={colIndex} className={`flex flex-col ${gap}`}>
+              {column.map((day) => (
                 <div
                   key={day.date}
                   className={`${cellSize} ${getColor(day.count)} rounded-sm`}
@@ -174,7 +193,7 @@ export function ReflectionGrass({
             </div>
           ))}
         </div>
-        <p className="text-xs text-gray-500 mt-1">최근 8주 성찰 기록</p>
+        <p className="text-xs text-gray-500 mt-1">최근 {miniDays.length}일 성찰 기록</p>
       </div>
     );
   }
@@ -236,9 +255,9 @@ export function ReflectionGrass({
       )}
 
       {/* 잔디 캘린더 */}
-      <Card className="p-6">
-        <h3 className="mb-6 font-medium">성찰 기록</h3>
-        <div className="w-full overflow-x-auto">
+      <Card className="p-4 sm:p-6 overflow-hidden">
+        <h3 className="mb-4 sm:mb-6 font-medium">성찰 기록</h3>
+        <div className="w-full overflow-x-auto -mx-1 px-1">
           <div className="inline-flex flex-col gap-2 min-w-fit">
             {/* 월 라벨 */}
             <div className="flex gap-1 ml-8">

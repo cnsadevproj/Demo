@@ -212,7 +212,7 @@ export function Shop({ onBack }: ShopProps) {
                 로딩 중...
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-4 gap-2">
                 {categoryItems.map(item => {
                   const { owned, canBuy } = getItemStatus(item);
                   const localItem = getItemByCode(item.code);
@@ -221,7 +221,7 @@ export function Shop({ onBack }: ShopProps) {
                   return (
                     <div
                       key={item.code}
-                      className={`relative p-4 rounded-xl border-2 transition-all ${
+                      className={`relative p-2 rounded-lg border-2 transition-all ${
                         owned
                           ? 'border-green-300 bg-green-50'
                           : canBuy
@@ -238,13 +238,13 @@ export function Shop({ onBack }: ShopProps) {
                       )}
 
                       {/* 아이템 미리보기 */}
-                      <div className="text-center mb-3">
+                      <div className="text-center mb-2">
                         {selectedCategory === 'emoji' && (
-                          <span className="text-4xl">{displayValue}</span>
+                          <span className="text-2xl">{displayValue}</span>
                         )}
                         {selectedCategory === 'border' && (
                           <div
-                            className={`w-16 h-16 mx-auto rounded-lg border-4 ${
+                            className={`w-10 h-10 mx-auto rounded-lg border-4 ${
                               displayValue === 'none'
                                 ? 'border-transparent bg-gray-100'
                                 : displayValue === 'solid'
@@ -265,7 +265,7 @@ export function Shop({ onBack }: ShopProps) {
                         )}
                         {selectedCategory === 'nameEffect' && (
                           <span
-                            className={`text-xl font-bold ${
+                            className={`text-sm font-bold ${
                               displayValue === 'none'
                                 ? ''
                                 : displayValue.includes('rainbow')
@@ -284,7 +284,7 @@ export function Shop({ onBack }: ShopProps) {
                         )}
                         {selectedCategory === 'background' && (
                           <div
-                            className={`w-16 h-16 mx-auto rounded-lg ${
+                            className={`w-10 h-10 mx-auto rounded-lg ${
                               displayValue === 'none'
                                 ? 'bg-white border'
                                 : displayValue === 'dots'
@@ -322,7 +322,7 @@ export function Shop({ onBack }: ShopProps) {
                         )}
                         {selectedCategory === 'buttonBorder' && (
                           <div
-                            className="w-16 h-16 mx-auto rounded-lg border-4 bg-white"
+                            className="w-10 h-10 mx-auto rounded-lg border-4 bg-white"
                             style={{
                               borderColor: displayValue === 'gradient'
                                 ? undefined
@@ -342,7 +342,7 @@ export function Shop({ onBack }: ShopProps) {
                         )}
                         {selectedCategory === 'buttonFill' && (
                           <div
-                            className={`w-16 h-16 mx-auto rounded-lg border-2 border-gray-300 ${
+                            className={`w-10 h-10 mx-auto rounded-lg border-2 border-gray-300 ${
                               displayValue === 'gradient'
                                 ? 'bg-gradient-to-r from-amber-100 via-pink-100 to-purple-100'
                                 : displayValue === 'white'
@@ -362,37 +362,39 @@ export function Shop({ onBack }: ShopProps) {
                       </div>
 
                       {/* 아이템 이름 */}
-                      <p className="text-center font-medium text-sm mb-2">{item.name}</p>
+                      <p className="text-center font-medium text-xs mb-1 truncate">{item.name}</p>
 
                       {/* 가격 / 구매 버튼 */}
                       {owned ? (
-                        <div className="text-center text-sm text-green-600">
-                          보유 중
+                        <div className="text-center text-xs text-green-600">
+                          보유
                         </div>
                       ) : item.price === 0 ? (
-                        <div className="text-center text-sm text-gray-500">무료</div>
+                        <div className="text-center text-xs text-gray-500">무료</div>
                       ) : (
-                        <Button
-                          size="sm"
-                          className="w-full"
-                          variant={canBuy ? 'default' : 'outline'}
+                        <button
+                          className={`w-full text-xs py-1 px-1 rounded font-medium flex items-center justify-center gap-0.5 ${
+                            canBuy
+                              ? 'bg-purple-600 text-white hover:bg-purple-700'
+                              : 'bg-gray-200 text-gray-500'
+                          }`}
                           disabled={!canBuy || purchasing === item.code}
                           onClick={() => handlePurchase(item.code)}
                         >
                           {purchasing === item.code ? (
-                            '구매 중...'
+                            '...'
                           ) : canBuy ? (
                             <>
-                              <Cookie className="w-3 h-3 mr-1" />
+                              <Cookie className="w-3 h-3" />
                               {item.price}
                             </>
                           ) : (
                             <>
-                              <Lock className="w-3 h-3 mr-1" />
+                              <Lock className="w-3 h-3" />
                               {item.price}
                             </>
                           )}
-                        </Button>
+                        </button>
                       )}
                     </div>
                   );
