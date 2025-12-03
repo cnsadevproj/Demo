@@ -1650,16 +1650,13 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 }
                 // else: 월~금이면 오늘 그대로
 
-                // 끝 날짜로부터 WEEKS_COUNT 주 전의 월요일을 시작일로
+                // endDate가 속한 주의 월요일부터 WEEKS_COUNT 주를 표시
                 const startDate = new Date(endDate);
-                startDate.setDate(startDate.getDate() - (WEEKS_COUNT * 7 - 1));
-                // 월요일로 조정 (0=일, 1=월, ..., 6=토)
-                const startDayOfWeek = startDate.getDay();
-                if (startDayOfWeek === 0) {
-                  startDate.setDate(startDate.getDate() + 1); // 일요일 -> 월요일
-                } else if (startDayOfWeek !== 1) {
-                  startDate.setDate(startDate.getDate() - (startDayOfWeek - 1)); // 다른 요일 -> 월요일
-                }
+                // endDate가 속한 주의 월요일 찾기
+                const endDateDayOfWeek = endDate.getDay();
+                const daysFromMonday = endDateDayOfWeek === 0 ? 6 : endDateDayOfWeek - 1; // 일요일이면 6, 아니면 요일-1
+                startDate.setDate(startDate.getDate() - daysFromMonday); // 이번주 월요일로
+                startDate.setDate(startDate.getDate() - (WEEKS_COUNT - 1) * 7); // 거기서 (WEEKS_COUNT-1)주 전으로
 
                 // 각 주의 시작 날짜로 월 레이블 계산
                 const monthLabels: { weekIdx: number; month: number }[] = [];
