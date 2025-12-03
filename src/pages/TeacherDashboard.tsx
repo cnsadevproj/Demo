@@ -1063,20 +1063,15 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       return;
     }
 
-    // 팀이 2개 이상 있어야 함
-    if (teams.length < 2) {
-      toast.error('쿠키 배틀은 최소 2개 이상의 팀이 필요합니다.');
-      return;
-    }
-
     setIsCreatingCookieBattle(true);
     try {
-      // 팀 데이터 새로고침
+      // 팀 데이터 새로고침 (버튼 클릭 시 항상 최신 팀 데이터 로드)
       const freshTeams = await getTeams(user.uid, selectedClass);
       setTeams(freshTeams);
 
+      // 팀이 2개 이상 있어야 함
       if (freshTeams.length < 2) {
-        toast.error('쿠키 배틀은 최소 2개 이상의 팀이 필요합니다.');
+        toast.error(`쿠키 배틀은 최소 2개 이상의 팀이 필요합니다. (현재 ${freshTeams.length}개)`);
         setIsCreatingCookieBattle(false);
         return;
       }
@@ -4426,16 +4421,16 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     {!cookieBattleGame && (
                       <Button
                         onClick={createCookieBattleGame}
-                        disabled={isCreatingCookieBattle || teams.length < 2}
+                        disabled={isCreatingCookieBattle}
                         className="bg-red-600 hover:bg-red-700"
                       >
-                        {isCreatingCookieBattle ? '생성 중...' : teams.length < 2 ? '팀 2개 이상 필요' : '⚔️ 게임 생성'}
+                        {isCreatingCookieBattle ? '팀 확인 중...' : '⚔️ 게임 생성'}
                       </Button>
                     )}
                   </div>
 
                   {/* 게임 모드 선택 (게임 없을 때만) */}
-                  {!cookieBattleGame && teams.length >= 2 && (
+                  {!cookieBattleGame && (
                     <div className="mt-4 p-3 bg-white/50 rounded-lg">
                       <p className="text-xs font-medium text-red-700 mb-2">🎯 손실 모드 선택</p>
                       <div className="grid grid-cols-3 gap-2">
