@@ -1,9 +1,69 @@
 import { StoredStudent } from '../services/firestoreApi';
+import * as XLSX from 'xlsx';
 
 // UTF-8 BOM (한글 깨짐 방지)
 const UTF8_BOM = '\uFEFF';
 
-// CSV 템플릿 생성 및 다운로드
+// 다했니 XLSX 파일에서 학생 정보 추출 (이름 + 코드)
+export interface StudentCodeData {
+  name: string;
+  code: string;
+}
+
+// XLSX 파일 파싱 (다했니 웹에서 다운로드한 파일 - B열이 이름, D열이 학생코드)
+export function parseXlsxFile(file: File): Promise<StudentCodeData[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'array' });
+
+        // 첫 번째 시트 사용
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+
+        // 시트를 JSON으로 변환 (헤더 없이 배열로)
+        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
+
+        const studentCodes: StudentCodeData[] = [];
+
+        // 첫 번째 행은 헤더이므로 스킵, B열(인덱스 1)에서 이름, D열(인덱스 3)에서 학생코드 추출
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (row && row.length > 3) {
+            const name = String(row[1] || '').trim();
+            const code = String(row[3] || '').trim();
+            if (code && code.length > 0) {
+              studentCodes.push({
+                name: name || `학생${i}`,  // 이름이 없으면 기본값
+                code: code.toUpperCase()
+              });
+            }
+          }
+        }
+
+        if (studentCodes.length === 0) {
+          reject(new Error('유효한 학생코드가 없습니다. D열에 학생코드가 있는지 확인해주세요.'));
+          return;
+        }
+
+        resolve(studentCodes);
+      } catch (error) {
+        reject(new Error('XLSX 파일 파싱 중 오류가 발생했습니다.'));
+      }
+    };
+
+    reader.onerror = () => {
+      reject(new Error('파일을 읽는 중 오류가 발생했습니다.'));
+    };
+
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// CSV 템플릿 생성 및 다운로드 (기존 호환용)
 export function downloadCsvTemplate(className: string) {
   const header = '번호,이름,학생코드';
   const example1 = '1,홍길동,ABC123XYZ';
@@ -23,7 +83,7 @@ export function downloadCsvTemplate(className: string) {
   URL.revokeObjectURL(url);
 }
 
-// CSV 파일 파싱
+// CSV 파일 파싱 (기존 호환용)
 export function parseCsvFile(file: File): Promise<StoredStudent[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -137,6 +197,85 @@ function parseLine(line: string): StoredStudent | null {
     name: name.trim(),
     code: code.trim().toUpperCase(),
   };
+}
+
+// 과거 잔디 데이터 파싱 결과
+export interface PastGrassData {
+  name: string;
+  date: string; // YYYY-MM-DD 형식
+  cookies: number;
+  sheetName: string; // 어떤 시트에서 왔는지 (디버깅용)
+}
+
+// 과거 잔디 XLSX 파일 파싱 (모든 시트에서 A열=이름, B열=제출시각, D열=쿠키)
+export function parsePastGrassXlsx(file: File, year?: number): Promise<PastGrassData[]> {
+  const targetYear = year || new Date().getFullYear();
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'array' });
+
+        const results: PastGrassData[] = [];
+
+        // 모든 시트 처리 (n회차, Sheet1, Sheet2 등)
+        for (const sheetName of workbook.SheetNames) {
+
+          const worksheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
+
+          // 첫 번째 행은 헤더이므로 스킵
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length < 4) continue;
+
+            const name = String(row[0] || '').trim(); // A열 (인덱스 0)
+            const timeStr = String(row[1] || '').trim(); // B열 (인덱스 1)
+            const cookieStr = String(row[3] || '').trim(); // D열 (인덱스 3)
+
+            if (!name || !timeStr) continue;
+
+            // 쿠키 파싱
+            const cookies = parseInt(cookieStr, 10);
+            if (isNaN(cookies) || cookies <= 0) continue;
+
+            // 날짜 파싱: "08-25 (월) 21:53" -> "YYYY-08-25"
+            const dateMatch = timeStr.match(/^(\d{2})-(\d{2})/);
+            if (!dateMatch) continue;
+
+            const month = dateMatch[1];
+            const day = dateMatch[2];
+            const dateStr = `${targetYear}-${month}-${day}`;
+
+            results.push({
+              name,
+              date: dateStr,
+              cookies,
+              sheetName
+            });
+          }
+        }
+
+        if (results.length === 0) {
+          reject(new Error('유효한 잔디 데이터가 없습니다. A열(이름), B열(제출시각: MM-DD 형식), D열(쿠키)이 있는지 확인해주세요.'));
+          return;
+        }
+
+        resolve(results);
+      } catch (error) {
+        reject(new Error('XLSX 파일 파싱 중 오류가 발생했습니다.'));
+      }
+    };
+
+    reader.onerror = () => {
+      reject(new Error('파일을 읽는 중 오류가 발생했습니다.'));
+    };
+
+    reader.readAsArrayBuffer(file);
+  });
 }
 
 // 학생 목록을 CSV로 내보내기

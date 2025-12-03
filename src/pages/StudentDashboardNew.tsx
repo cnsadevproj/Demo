@@ -5,6 +5,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { toast } from 'sonner';
+import { db } from '../services/firebase';
+import { collection, onSnapshot, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import {
   getStudent,
   getWishes,
@@ -23,9 +25,18 @@ import {
   Wish,
   ShopItem,
   Team,
-  Badge
+  Badge,
+  CookieShopItem,
+  CookieShopRequest,
+  getCookieShopItems,
+  createCookieShopRequest,
+  getStudentCookieShopRequests,
+  createItemSuggestion,
+  getStudentItemSuggestions,
+  ItemSuggestion
 } from '../services/firestoreApi';
 import { getItemByCode, ALL_SHOP_ITEMS } from '../types/shop';
+import { getKoreanDateString } from '../utils/dateUtils';
 
 // 이모지 코드를 실제 이모지로 변환 (없으면 빈 값 반환)
 const getEmojiFromCode = (code: string | undefined): string => {
@@ -49,12 +60,16 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [currentStudent, setCurrentStudent] = useState<Student | null>(student);
   const [wishes, setWishes] = useState<Wish[]>([]);
   const [grassData, setGrassData] = useState<Array<{ date: string; cookieChange: number; count: number }>>([]);
-  const [activeTab, setActiveTab] = useState<'home' | 'wish' | 'grass' | 'shop' | 'profile' | 'classmates' | 'team'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'wish' | 'grass' | 'shop' | 'profile' | 'classmates' | 'team' | 'gameCenter'>('home');
 
   // 새 소원 작성
   const [newWishContent, setNewWishContent] = useState('');
   const [isSubmittingWish, setIsSubmittingWish] = useState(false);
   const [hasWrittenTodayWish, setHasWrittenTodayWish] = useState(false);
+
+  // 소원 페이지네이션
+  const [wishPage, setWishPage] = useState(1);
+  const WISHES_PER_PAGE = 20;
 
   // 다른 학생들 (프로필 보기용)
   const [classmates, setClassmates] = useState<Student[]>([]);
@@ -68,6 +83,24 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [shopCategory, setShopCategory] = useState<'all' | 'emoji' | 'titlePermit' | 'titleColor' | 'nameEffect' | 'animation' | 'buttonBorder' | 'buttonFill'>('all');
   const [previewItem, setPreviewItem] = useState<ShopItem | null>(null);
+
+  // 상점 모드 (캔디/쿠키)
+  const [shopMode, setShopMode] = useState<'candy' | 'cookie'>('candy');
+
+  // 쿠키 상점
+  const [cookieShopItems, setCookieShopItems] = useState<CookieShopItem[]>([]);
+  const [cookieShopRequests, setCookieShopRequests] = useState<CookieShopRequest[]>([]);
+  const [isLoadingCookieShop, setIsLoadingCookieShop] = useState(false);
+  const [requestQuantity, setRequestQuantity] = useState(1);
+  const [showMyRequests, setShowMyRequests] = useState(false);
+
+  // 물품 요청 (상점에 추가됐으면 하는 물품)
+  const [showItemSuggestionModal, setShowItemSuggestionModal] = useState(false);
+  const [suggestionItemName, setSuggestionItemName] = useState('');
+  const [suggestionDescription, setSuggestionDescription] = useState('');
+  const [isSubmittingSuggestion, setIsSubmittingSuggestion] = useState(false);
+  const [myItemSuggestions, setMyItemSuggestions] = useState<ItemSuggestion[]>([]);
+  const [showMyItemSuggestions, setShowMyItemSuggestions] = useState(false);
 
   // 팀
   const [myTeam, setMyTeam] = useState<Team | null>(null);
@@ -90,6 +123,364 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
 
   // 인벤토리 탭
   const [inventoryTab, setInventoryTab] = useState<'all' | 'emoji' | 'nameEffect' | 'titleColor' | 'animation' | 'titlePermit' | 'buttonBorder' | 'buttonFill'>('all');
+
+  // 숫자야구 게임 상태
+  interface BaseballGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    digits: 4 | 5;
+    answer: string;
+    status: 'waiting' | 'playing' | 'finished';
+    createdAt: any;
+    completedCount: number;
+    className?: string;
+    entryFee?: number; // 참가비
+  }
+
+  const [activeBaseballGame, setActiveBaseballGame] = useState<BaseballGame | null>(null);
+  const [isJoiningGame, setIsJoiningGame] = useState(false);
+
+  // 소수결게임 상태
+  interface MinorityGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    status: 'waiting' | 'question' | 'result' | 'finished';
+    currentRound: number;
+    className?: string;
+    createdAt: any;
+    entryFee?: number;
+  }
+
+  const [activeMinorityGame, setActiveMinorityGame] = useState<MinorityGame | null>(null);
+  const [isJoiningMinorityGame, setIsJoiningMinorityGame] = useState(false);
+
+  // 총알피하기 상태
+  interface BulletDodgeGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    status: 'waiting' | 'playing' | 'finished';
+    className?: string;
+    createdAt: any;
+    entryFee?: number;
+  }
+
+  const [activeBulletDodgeGame, setActiveBulletDodgeGame] = useState<BulletDodgeGame | null>(null);
+  const [isJoiningBulletDodge, setIsJoiningBulletDodge] = useState(false);
+
+  // 가위바위보 상태
+  type RPSGameMode = 'survivor' | 'candy15' | 'candy12';
+  interface RPSGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    status: 'waiting' | 'selecting' | 'result' | 'finished';
+    gameMode: RPSGameMode;
+    round: number;
+    className?: string;
+    createdAt: any;
+    entryFee?: number;
+  }
+
+  const [activeRpsGame, setActiveRpsGame] = useState<RPSGame | null>(null);
+  const [isJoiningRps, setIsJoiningRps] = useState(false);
+
+  // 숫자야구 활성 게임 구독
+  useEffect(() => {
+    if (!studentTeacherId || !student) {
+      setActiveBaseballGame(null);
+      return;
+    }
+
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: BaseballGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        // 현재 학생의 선생님이 만든 게임 중 같은 클래스이고 waiting 상태인 것 찾기
+        if (data.teacherId === studentTeacherId &&
+            data.classId === student.classId &&
+            data.status === 'waiting' &&
+            docSnap.id.startsWith('baseball_')) {
+          activeGame = { id: docSnap.id, ...data } as BaseballGame;
+        }
+      });
+
+      setActiveBaseballGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [studentTeacherId, student]);
+
+  // 숫자야구 게임 참가
+  const joinBaseballGame = async () => {
+    if (!activeBaseballGame || !student || !currentStudent || !studentTeacherId) return;
+
+    const entryFee = activeBaseballGame.entryFee || 0;
+    const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
+
+    // 참가비 확인
+    if (entryFee > 0 && currentJelly < entryFee) {
+      toast.error(`참가비가 부족합니다. (필요: ${entryFee}🍭, 보유: ${currentJelly}🍭)`);
+      return;
+    }
+
+    setIsJoiningGame(true);
+    try {
+      // 참가비 차감
+      if (entryFee > 0) {
+        const studentRef = doc(db, 'teachers', studentTeacherId, 'students', student.code);
+        await updateDoc(studentRef, {
+          jelly: currentJelly - entryFee
+        });
+      }
+
+      // 플레이어로 등록
+      const playerRef = doc(db, 'games', activeBaseballGame.id, 'players', student.code);
+      await setDoc(playerRef, {
+        name: currentStudent.name,
+        joinedAt: serverTimestamp(),
+        solvedAt: null,
+        rank: null,
+        attempts: 0,
+        entryFeePaid: entryFee // 지불한 참가비 기록
+      });
+
+      // 새 탭으로 게임 열기
+      const gameUrl = `${window.location.origin}?game=baseball&gameId=${activeBaseballGame.id}&studentCode=${student.code}&studentName=${encodeURIComponent(currentStudent.name)}`;
+      window.open(gameUrl, '_blank');
+
+      toast.success(entryFee > 0 ? `${entryFee}🍭 참가비를 지불하고 게임에 참가했습니다!` : '게임에 참가했습니다! 새 창을 확인하세요.');
+    } catch (error) {
+      console.error('Failed to join game:', error);
+      toast.error('게임 참가에 실패했습니다.');
+    }
+    setIsJoiningGame(false);
+  };
+
+  // 소수결게임 활성 게임 구독
+  useEffect(() => {
+    if (!studentTeacherId || !student) {
+      setActiveMinorityGame(null);
+      return;
+    }
+
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: MinorityGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        // 현재 학생의 선생님이 만든 소수결게임 중 같은 클래스이고 waiting 상태인 것 찾기
+        if (data.teacherId === studentTeacherId &&
+            data.classId === student.classId &&
+            data.status === 'waiting' &&
+            docSnap.id.startsWith('minority_')) {
+          activeGame = { id: docSnap.id, ...data } as MinorityGame;
+        }
+      });
+
+      setActiveMinorityGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [studentTeacherId, student]);
+
+  // 소수결게임 참가
+  const joinMinorityGame = async () => {
+    if (!activeMinorityGame || !student || !currentStudent || !studentTeacherId) return;
+
+    const entryFee = activeMinorityGame.entryFee || 0;
+    const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
+
+    // 참가비 확인
+    if (entryFee > 0 && currentJelly < entryFee) {
+      toast.error(`참가비가 부족합니다. (필요: ${entryFee}🍭, 보유: ${currentJelly}🍭)`);
+      return;
+    }
+
+    setIsJoiningMinorityGame(true);
+    try {
+      // 참가비 차감
+      if (entryFee > 0) {
+        const studentRef = doc(db, 'teachers', studentTeacherId, 'students', student.code);
+        await updateDoc(studentRef, {
+          jelly: currentJelly - entryFee
+        });
+      }
+
+      // 플레이어로 등록
+      const playerRef = doc(db, 'games', activeMinorityGame.id, 'players', student.code);
+      await setDoc(playerRef, {
+        name: currentStudent.name,
+        joinedAt: serverTimestamp(),
+        isAlive: true,
+        currentChoice: null,
+        survivedRounds: 0
+      });
+
+      // 새 탭으로 게임 열기
+      const gameUrl = `${window.location.origin}?game=minority&gameId=${activeMinorityGame.id}&studentCode=${student.code}&studentName=${encodeURIComponent(currentStudent.name)}`;
+      window.open(gameUrl, '_blank');
+
+      toast.success('게임에 참가했습니다! 새 창을 확인하세요.');
+    } catch (error) {
+      console.error('Failed to join game:', error);
+      toast.error('게임 참가에 실패했습니다.');
+    }
+    setIsJoiningMinorityGame(false);
+  };
+
+  // 총알피하기 활성 게임 구독
+  useEffect(() => {
+    if (!studentTeacherId || !student) {
+      setActiveBulletDodgeGame(null);
+      return;
+    }
+
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: BulletDodgeGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        // 현재 학생의 선생님이 만든 총알피하기 게임 중 같은 클래스이고 waiting 또는 playing 상태인 것 찾기
+        if (data.teacherId === studentTeacherId &&
+            data.classId === student.classId &&
+            (data.status === 'waiting' || data.status === 'playing') &&
+            docSnap.id.startsWith('bulletdodge_')) {
+          activeGame = { id: docSnap.id, ...data } as BulletDodgeGame;
+        }
+      });
+
+      setActiveBulletDodgeGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [studentTeacherId, student]);
+
+  // 총알피하기 참가
+  const joinBulletDodgeGame = async () => {
+    if (!activeBulletDodgeGame || !student || !currentStudent || !studentTeacherId) return;
+
+    const entryFee = activeBulletDodgeGame.entryFee || 0;
+    const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
+
+    // 참가비 확인
+    if (entryFee > 0 && currentJelly < entryFee) {
+      toast.error(`참가비가 부족합니다. (필요: ${entryFee}🍭, 보유: ${currentJelly}🍭)`);
+      return;
+    }
+
+    setIsJoiningBulletDodge(true);
+    try {
+      // 참가비 차감
+      if (entryFee > 0) {
+        const studentRef = doc(db, 'teachers', studentTeacherId, 'students', student.code);
+        await updateDoc(studentRef, {
+          jelly: currentJelly - entryFee
+        });
+      }
+
+      // 플레이어로 등록
+      const playerRef = doc(db, 'games', activeBulletDodgeGame.id, 'players', student.code);
+      await setDoc(playerRef, {
+        name: currentStudent.name,
+        lastScore: 0,
+        highScore: 0,
+        lastPlayedAt: serverTimestamp()
+      }, { merge: true });
+
+      // 새 탭으로 게임 열기
+      const gameUrl = `${window.location.origin}?game=bullet-dodge&gameId=${activeBulletDodgeGame.id}&studentCode=${student.code}&studentName=${encodeURIComponent(currentStudent.name)}`;
+      window.open(gameUrl, '_blank');
+
+      toast.success('게임에 참가했습니다! 새 창을 확인하세요.');
+    } catch (error) {
+      console.error('Failed to join game:', error);
+      toast.error('게임 참가에 실패했습니다.');
+    }
+    setIsJoiningBulletDodge(false);
+  };
+
+  // 가위바위보 활성 게임 구독
+  useEffect(() => {
+    if (!studentTeacherId || !student) {
+      setActiveRpsGame(null);
+      return;
+    }
+
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: RPSGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        // 현재 학생의 선생님이 만든 가위바위보 게임 중 같은 클래스이고 waiting 상태인 것만 찾기 (게임 시작 후 중간 입장 불가)
+        if (data.teacherId === studentTeacherId &&
+            data.classId === student.classId &&
+            data.status === 'waiting' &&
+            docSnap.id.startsWith('rps_')) {
+          activeGame = { id: docSnap.id, ...data } as RPSGame;
+        }
+      });
+
+      setActiveRpsGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [studentTeacherId, student]);
+
+  // 가위바위보 참가
+  const joinRpsGame = async () => {
+    if (!activeRpsGame || !student || !currentStudent || !studentTeacherId) return;
+
+    const entryFee = activeRpsGame.entryFee || 0;
+    const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
+
+    // 참가비 확인
+    if (entryFee > 0 && currentJelly < entryFee) {
+      toast.error(`참가비가 부족합니다. (필요: ${entryFee}🍭, 보유: ${currentJelly}🍭)`);
+      return;
+    }
+
+    setIsJoiningRps(true);
+    try {
+      // 참가비 차감
+      if (entryFee > 0) {
+        const studentRef = doc(db, 'teachers', studentTeacherId, 'students', student.code);
+        await updateDoc(studentRef, {
+          jelly: currentJelly - entryFee
+        });
+      }
+
+      // 플레이어로 등록 (참가비 차감 후 캔디 잔액 포함)
+      const playerRef = doc(db, 'games', activeRpsGame.id, 'players', student.code);
+      const myCandy = currentJelly - entryFee; // 참가비 차감 후 잔액
+      await setDoc(playerRef, {
+        name: currentStudent.name,
+        choice: null,
+        eliminated: false,
+        candyBet: 0,
+        result: null,
+        candyWon: 0,
+        myCandy: myCandy // 현재 캔디 잔액
+      }, { merge: true });
+
+      // 새 탭으로 게임 열기
+      const gameUrl = `${window.location.origin}?game=rps&gameId=${activeRpsGame.id}&studentCode=${student.code}&studentName=${encodeURIComponent(currentStudent.name)}`;
+      window.open(gameUrl, '_blank');
+
+      toast.success('게임에 참가했습니다! 새 창을 확인하세요.');
+    } catch (error) {
+      console.error('Failed to join game:', error);
+      toast.error('게임 참가에 실패했습니다.');
+    }
+    setIsJoiningRps(false);
+  };
 
   // 데이터 로드
   useEffect(() => {
@@ -137,30 +528,56 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
       // 같은 반 학생 목록 (프로필 보기용)
       const allStudents = await getClassStudents(studentTeacherId, student.classId);
       setClassmates(allStudents.filter(s => s.code !== student.code));
+
+      // 내 물품 요청 목록
+      const suggestions = await getStudentItemSuggestions(studentTeacherId, student.code);
+      setMyItemSuggestions(suggestions);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
   };
 
-  // 쿠키 새로고침
+  // 전체 동기화 (쿠키, 인벤토리, 모든 요청 등)
   const refreshCookie = async () => {
     if (!studentTeacherId || !student) return;
 
     setIsRefreshingCookie(true);
     try {
+      // 최신 학생 정보 (쿠키, 캔디, 인벤토리 포함)
       const updatedStudent = await getStudent(studentTeacherId, student.code);
       if (updatedStudent) {
         setCurrentStudent(updatedStudent);
-
-        // 잔디 데이터도 함께 새로고침
-        const grass = await getGrassData(studentTeacherId, student.classId, student.code);
-        setGrassData(grass.map(g => ({ date: g.date, cookieChange: g.cookieChange, count: g.count || 1 })));
-
-        toast.success('쿠키 정보를 새로고침했습니다! 🍪');
+        setSelectedEmoji(updatedStudent.profile.emojiCode);
+        setSelectedBadge(updatedStudent.profile.profileBadgeKey || '');
+        setSelectedTitle(updatedStudent.profile.title || '');
+        setSelectedBtnBorder(updatedStudent.profile.buttonBorderCode || 'gray-300');
+        setSelectedBtnFill(updatedStudent.profile.buttonFillCode || 'none');
+        setSelectedTitleColor(updatedStudent.profile.titleColorCode || '0');
+        setSelectedNameEffect(updatedStudent.profile.nameEffectCode || 'none');
+        setSelectedBackground(updatedStudent.profile.backgroundCode || 'none');
+        setSelectedAnimation(updatedStudent.profile.animationCode || 'none');
       }
+
+      // 잔디 데이터
+      const grass = await getGrassData(studentTeacherId, student.classId, student.code);
+      setGrassData(grass.map(g => ({ date: g.date, cookieChange: g.cookieChange, count: g.count || 1 })));
+
+      // 쿠키 상점 요청
+      const requests = await getStudentCookieShopRequests(studentTeacherId, student.code);
+      setCookieShopRequests(requests);
+
+      // 물품 요청 현황
+      const suggestions = await getStudentItemSuggestions(studentTeacherId, student.code);
+      setMyItemSuggestions(suggestions);
+
+      // 소원 목록
+      const wishesData = await getWishes(studentTeacherId, student.classId);
+      setWishes(wishesData);
+
+      toast.success('모든 데이터를 동기화했습니다! 🔄');
     } catch (error) {
-      console.error('Failed to refresh cookie:', error);
-      toast.error('새로고침에 실패했습니다.');
+      console.error('Failed to sync data:', error);
+      toast.error('동기화에 실패했습니다.');
     }
     setIsRefreshingCookie(false);
   };
@@ -223,12 +640,13 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     setIsLoadingTeamStatus(false);
   };
 
-  // 아이템 구매
+  // 아이템 구매 (캔디 사용)
   const handlePurchase = async (item: ShopItem) => {
     if (!studentTeacherId || !currentStudent) return;
 
-    if (currentStudent.cookie < item.price) {
-      toast.error('쿠키가 부족합니다!');
+    const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
+    if (currentJelly < item.price) {
+      toast.error('캔디가 부족합니다! 🍭');
       return;
     }
 
@@ -261,6 +679,87 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
       toast.error('칭호권 활성화에 실패했습니다.');
     }
     setIsPurchasing(false);
+  };
+
+  // 쿠키 상점 로드 (전체 클래스 공유)
+  const loadCookieShopData = async () => {
+    if (!studentTeacherId || !currentStudent) return;
+    setIsLoadingCookieShop(true);
+    try {
+      const items = await getCookieShopItems(studentTeacherId);
+      setCookieShopItems(items.filter(item => item.isActive));
+      const requests = await getStudentCookieShopRequests(studentTeacherId, currentStudent.code);
+      setCookieShopRequests(requests);
+    } catch (error) {
+      console.error('Failed to load cookie shop data:', error);
+    }
+    setIsLoadingCookieShop(false);
+  };
+
+  // 쿠키 상점 신청 (전체 클래스 공유)
+  const handleCookieShopRequest = async (item: CookieShopItem) => {
+    if (!studentTeacherId || !currentStudent) return;
+
+    const totalPrice = item.price * requestQuantity;
+    if (currentStudent.cookie < totalPrice) {
+      toast.error('다했니 쿠키가 부족합니다! 🍪');
+      return;
+    }
+
+    try {
+      await createCookieShopRequest(studentTeacherId, {
+        itemId: item.id,
+        itemName: item.name,
+        itemPrice: item.price,
+        studentCode: currentStudent.code,
+        studentName: currentStudent.name,
+        studentNumber: currentStudent.number,
+        classId: student?.classId || '',
+        className: '', // TODO: add class name
+        quantity: requestQuantity,
+        totalPrice: totalPrice
+      });
+      await loadCookieShopData();
+      setRequestQuantity(1);
+      toast.success(`${item.name} 신청이 완료되었습니다! 🎉`);
+    } catch (error) {
+      toast.error('신청에 실패했습니다.');
+    }
+  };
+
+  // 물품 요청 제출 (상점에 추가됐으면 하는 물품)
+  const handleSubmitItemSuggestion = async () => {
+    if (!studentTeacherId || !currentStudent) return;
+    if (!suggestionItemName.trim()) {
+      toast.error('물품 이름을 입력해주세요.');
+      return;
+    }
+
+    setIsSubmittingSuggestion(true);
+    try {
+      const suggestionData: any = {
+        studentCode: currentStudent.code,
+        studentName: currentStudent.name,
+        classId: student?.classId || '',
+        itemName: suggestionItemName.trim()
+      };
+      // description이 있을 때만 추가 (undefined 방지)
+      if (suggestionDescription.trim()) {
+        suggestionData.description = suggestionDescription.trim();
+      }
+      await createItemSuggestion(studentTeacherId, suggestionData);
+      setSuggestionItemName('');
+      setSuggestionDescription('');
+      setShowItemSuggestionModal(false);
+      // 요청 목록 새로고침
+      const suggestions = await getStudentItemSuggestions(studentTeacherId, currentStudent.code);
+      setMyItemSuggestions(suggestions);
+      toast.success('물품 요청이 제출되었습니다! 선생님이 검토 후 상점에 추가할 수 있어요. 💡');
+    } catch (error) {
+      console.error('Failed to submit item suggestion:', error);
+      toast.error('요청 제출에 실패했습니다.');
+    }
+    setIsSubmittingSuggestion(false);
   };
 
   // 프로필 저장
@@ -405,68 +904,68 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     return fillMap[value] || 'bg-transparent';
   };
 
-  // 테두리 색상값 (inline style용) - 모든 Tailwind 색상 지원
+  // 테두리 색상값 (inline style용) - 파스텔톤
   const getBorderColor = (value: string | undefined): string => {
     if (!value) return 'rgb(209 213 219)'; // gray-300
     const colorMap: Record<string, string> = {
       'gray-300': 'rgb(209 213 219)',
       'gray-800': 'rgb(31 41 55)',
-      'border-blue-500': 'rgb(59 130 246)',
-      'border-red-500': 'rgb(239 68 68)',
-      'border-green-500': 'rgb(34 197 94)',
-      'border-yellow-500': 'rgb(234 179 8)',
-      'border-purple-500': 'rgb(168 85 247)',
-      'border-pink-500': 'rgb(236 72 153)',
-      'border-amber-400': 'rgb(251 191 36)',
+      'border-blue-500': 'rgb(147 197 253)',      // 파스텔 블루
+      'border-red-500': 'rgb(252 165 165)',       // 파스텔 레드
+      'border-green-500': 'rgb(134 239 172)',     // 파스텔 그린
+      'border-yellow-500': 'rgb(253 224 71)',     // 파스텔 옐로우
+      'border-purple-500': 'rgb(196 181 253)',    // 파스텔 퍼플
+      'border-pink-500': 'rgb(249 168 212)',      // 파스텔 핑크
+      'border-amber-400': 'rgb(252 211 77)',      // 파스텔 앰버
       'border-gray-800': 'rgb(31 41 55)',
-      'border-orange-500': 'rgb(249 115 22)',
-      'border-cyan-500': 'rgb(6 182 212)',
-      'border-teal-500': 'rgb(20 184 166)',
-      'border-indigo-500': 'rgb(99 102 241)',
+      'border-orange-500': 'rgb(253 186 116)',    // 파스텔 오렌지
+      'border-cyan-500': 'rgb(103 232 249)',      // 파스텔 시안
+      'border-teal-500': 'rgb(94 234 212)',       // 파스텔 틸
+      'border-indigo-500': 'rgb(165 180 252)',    // 파스텔 인디고
       // 색상 이름 직접 지원
-      'blue': 'rgb(59 130 246)',
-      'red': 'rgb(239 68 68)',
-      'green': 'rgb(34 197 94)',
-      'yellow': 'rgb(234 179 8)',
-      'purple': 'rgb(168 85 247)',
-      'pink': 'rgb(236 72 153)',
-      'amber': 'rgb(251 191 36)',
-      'orange': 'rgb(249 115 22)',
+      'blue': 'rgb(147 197 253)',
+      'red': 'rgb(252 165 165)',
+      'green': 'rgb(134 239 172)',
+      'yellow': 'rgb(253 224 71)',
+      'purple': 'rgb(196 181 253)',
+      'pink': 'rgb(249 168 212)',
+      'amber': 'rgb(252 211 77)',
+      'orange': 'rgb(253 186 116)',
     };
     return colorMap[value] || 'rgb(209 213 219)';
   };
 
-  // 배경 색상값 (inline style용) - 모든 Tailwind 색상 지원
+  // 배경 색상값 (inline style용) - 파스텔톤
   const getFillColor = (value: string | undefined): string => {
     if (!value || value === 'none') return 'transparent';
     const colorMap: Record<string, string> = {
       'none': 'transparent',
       'transparent': 'transparent',
       'white': 'rgb(255 255 255)',
-      'bg-blue-500': 'rgb(59 130 246)',
-      'bg-red-500': 'rgb(239 68 68)',
-      'bg-green-500': 'rgb(34 197 94)',
+      'bg-blue-500': 'rgb(191 219 254)',          // 파스텔 블루
+      'bg-red-500': 'rgb(254 202 202)',           // 파스텔 레드
+      'bg-green-500': 'rgb(187 247 208)',         // 파스텔 그린
       'bg-green-200': 'rgb(187 247 208)',
       'bg-green-300': 'rgb(134 239 172)',
-      'bg-yellow-500': 'rgb(234 179 8)',
-      'bg-purple-500': 'rgb(168 85 247)',
-      'bg-pink-500': 'rgb(236 72 153)',
-      'bg-amber-400': 'rgb(251 191 36)',
+      'bg-yellow-500': 'rgb(254 240 138)',        // 파스텔 옐로우
+      'bg-purple-500': 'rgb(221 214 254)',        // 파스텔 퍼플
+      'bg-pink-500': 'rgb(251 207 232)',          // 파스텔 핑크
+      'bg-amber-400': 'rgb(253 230 138)',         // 파스텔 앰버
       'bg-gray-800': 'rgb(31 41 55)',
-      'bg-orange-500': 'rgb(249 115 22)',
-      'bg-cyan-500': 'rgb(6 182 212)',
-      'bg-teal-500': 'rgb(20 184 166)',
-      'bg-indigo-500': 'rgb(99 102 241)',
+      'bg-orange-500': 'rgb(254 215 170)',        // 파스텔 오렌지
+      'bg-cyan-500': 'rgb(165 243 252)',          // 파스텔 시안
+      'bg-teal-500': 'rgb(153 246 228)',          // 파스텔 틸
+      'bg-indigo-500': 'rgb(199 210 254)',        // 파스텔 인디고
       // 색상 이름 직접 지원
-      'blue': 'rgb(59 130 246)',
-      'red': 'rgb(239 68 68)',
-      'green': 'rgb(34 197 94)',
-      'light-green': 'rgb(187 247 208)',
-      'yellow': 'rgb(234 179 8)',
-      'purple': 'rgb(168 85 247)',
-      'pink': 'rgb(236 72 153)',
-      'amber': 'rgb(251 191 36)',
-      'orange': 'rgb(249 115 22)',
+      'blue': 'rgb(191 219 254)',
+      'red': 'rgb(254 202 202)',
+      'green': 'rgb(187 247 208)',
+      'light-green': 'rgb(220 252 231)',
+      'yellow': 'rgb(254 240 138)',
+      'purple': 'rgb(221 214 254)',
+      'pink': 'rgb(251 207 232)',
+      'amber': 'rgb(253 230 138)',
+      'orange': 'rgb(254 215 170)',
     };
     return colorMap[value] || 'transparent';
   };
@@ -477,18 +976,25 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     return value.startsWith('gradient-') || value === 'bg-gradient-to-r from-pink-500 to-purple-500';
   };
 
-  // 그라데이션 CSS 값 가져오기
+  // 그라데이션 CSS 값 가져오기 - 파스텔톤
   const getGradientStyle = (value: string | undefined): string => {
     const gradientMap: Record<string, string> = {
-      'gradient-rainbow': 'linear-gradient(to right, rgb(239 68 68), rgb(234 179 8), rgb(34 197 94), rgb(59 130 246), rgb(168 85 247))',
-      'gradient-fire': 'linear-gradient(to right, rgb(239 68 68), rgb(249 115 22), rgb(234 179 8))',
-      'gradient-ocean': 'linear-gradient(to right, rgb(6 182 212), rgb(59 130 246), rgb(99 102 241))',
-      'gradient-sunset': 'linear-gradient(to right, rgb(249 115 22), rgb(236 72 153), rgb(168 85 247))',
-      'gradient-aurora': 'linear-gradient(to right, rgb(34 197 94), rgb(6 182 212), rgb(168 85 247))',
-      'gradient-pink-purple': 'linear-gradient(to right, rgb(236 72 153), rgb(168 85 247))',
-      'gradient-mint': 'linear-gradient(to right, rgb(6 182 212), rgb(20 184 166))',
-      'gradient-orange': 'linear-gradient(to right, rgb(234 179 8), rgb(249 115 22))',
-      'bg-gradient-to-r from-pink-500 to-purple-500': 'linear-gradient(to right, rgb(236 72 153), rgb(168 85 247))',
+      // 부드러운 파스텔 그라데이션
+      'gradient-rainbow': 'linear-gradient(to right, rgb(254 202 202), rgb(254 240 138), rgb(187 247 208), rgb(191 219 254), rgb(221 214 254))',
+      'gradient-fire': 'linear-gradient(to right, rgb(254 202 202), rgb(254 215 170), rgb(254 240 138))',
+      'gradient-ocean': 'linear-gradient(to right, rgb(165 243 252), rgb(191 219 254), rgb(199 210 254))',
+      'gradient-sunset': 'linear-gradient(to right, rgb(254 215 170), rgb(251 207 232), rgb(221 214 254))',
+      'gradient-aurora': 'linear-gradient(to right, rgb(187 247 208), rgb(165 243 252), rgb(221 214 254))',
+      'gradient-pink-purple': 'linear-gradient(to right, rgb(251 207 232), rgb(221 214 254))',
+      'gradient-mint': 'linear-gradient(to right, rgb(165 243 252), rgb(153 246 228))',
+      'gradient-orange': 'linear-gradient(to right, rgb(254 240 138), rgb(254 215 170))',
+      // 추가 파스텔 그라데이션
+      'gradient-cotton-candy': 'linear-gradient(to right, rgb(251 207 232), rgb(191 219 254))',
+      'gradient-peach': 'linear-gradient(to right, rgb(254 215 170), rgb(251 207 232))',
+      'gradient-lavender': 'linear-gradient(to right, rgb(221 214 254), rgb(251 207 232))',
+      'gradient-spring': 'linear-gradient(to right, rgb(187 247 208), rgb(254 240 138))',
+      'gradient-sky': 'linear-gradient(to right, rgb(191 219 254), rgb(165 243 252))',
+      'bg-gradient-to-r from-pink-500 to-purple-500': 'linear-gradient(to right, rgb(251 207 232), rgb(221 214 254))',
     };
     return gradientMap[value || ''] || '';
   };
@@ -526,19 +1032,22 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     return effectMap[value] || '';
   };
 
-  // 배경 스타일 클래스
-  const getBackgroundClass = (value: string) => {
+  // 배경 스타일 클래스 (패턴/그라데이션용, 없으면 빈 문자열 반환)
+  const getBackgroundClass = (value: string | undefined) => {
+    if (!value || value === 'none') return ''; // 빈 문자열 반환 (기본 배경색은 inline style로)
     const bgMap: Record<string, string> = {
-      'none': 'bg-transparent',
       'dots': 'bg-pattern-dots',
       'stripes': 'bg-pattern-stripes',
       'waves': 'bg-pattern-waves',
       'hearts': 'bg-pattern-hearts',
       'stars': 'bg-pattern-stars',
-      'gradient-soft': 'bg-gradient-to-br from-pink-100 to-blue-100',
-      'gradient-vivid': 'bg-gradient-to-br from-purple-200 to-pink-200',
+      'gradient-soft': 'bg-gradient-to-br from-pink-50 to-blue-50',
+      'gradient-vivid': 'bg-gradient-to-br from-purple-100 to-pink-100',
+      'gradient-mint': 'bg-gradient-to-br from-green-50 to-cyan-50',
+      'gradient-sunset': 'bg-gradient-to-br from-orange-50 to-pink-50',
+      'gradient-lavender': 'bg-gradient-to-br from-purple-50 to-indigo-50',
     };
-    return bgMap[value] || 'bg-transparent';
+    return bgMap[value] || '';
   };
 
   // 애니메이션 스타일 클래스
@@ -665,27 +1174,42 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
         </div>
       </header>
 
-      {/* 쿠키 현황 */}
+      {/* 쿠키 & 캔디 현황 */}
       <div className="max-w-4xl mx-auto px-4 py-6">
-        <Card className="bg-gradient-to-r from-amber-400 to-orange-400 text-white border-0">
-          <CardContent className="py-6">
-            <div className="text-center relative">
-              <p className="text-amber-100 text-sm mb-1">내 쿠키</p>
-              <p className="text-5xl font-bold mb-2">{currentStudent.cookie} 🍪</p>
-              <p className="text-amber-100 text-sm">
-                총 {currentStudent.totalCookie}개 획득 · {currentStudent.usedCookie}개 사용
-              </p>
-              <button
-                onClick={refreshCookie}
-                disabled={isRefreshingCookie}
-                className="mt-3 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-full text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2 mx-auto"
-              >
-                <span className={isRefreshingCookie ? 'animate-spin' : ''}>🔄</span>
-                {isRefreshingCookie ? '새로고침 중...' : '쿠키 새로고침'}
-              </button>
+        <div className="grid grid-cols-2 gap-3">
+          {/* 쿠키 (다했니 연동) */}
+          <div className="bg-gradient-to-r from-amber-400 to-orange-400 text-white rounded-xl">
+            <div className="py-4 px-6">
+              <div className="text-center">
+                <p className="text-amber-100 text-xs mb-1">다했니 쿠키</p>
+                <p className="text-3xl font-bold">{currentStudent.cookie} 🍪</p>
+                <p className="text-amber-100 text-xs mt-1">성찰로 획득</p>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+          {/* 캔디 (게임/상점용) */}
+          <div className="bg-gradient-to-r from-pink-400 to-purple-400 text-white rounded-xl">
+            <div className="py-4 px-6">
+              <div className="text-center">
+                <p className="text-pink-100 text-xs mb-1">내 캔디</p>
+                <p className="text-3xl font-bold">{currentStudent.jelly ?? currentStudent.cookie} 🍭</p>
+                <p className="text-pink-100 text-xs mt-1">게임/상점용</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* 전체 동기화 버튼 */}
+        <div className="text-center mt-3">
+          <button
+            onClick={refreshCookie}
+            disabled={isRefreshingCookie}
+            className="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-full text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2 mx-auto"
+          >
+            <span className={isRefreshingCookie ? 'animate-spin' : ''}>🔄</span>
+            {isRefreshingCookie ? '동기화 중...' : '전체 동기화'}
+          </button>
+          <p className="text-xs text-gray-400 mt-1">쿠키, 인벤토리, 모든 요청을 동기화합니다</p>
+        </div>
       </div>
 
       {/* 탭 네비게이션 */}
@@ -761,6 +1285,16 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
           >
             🏆 팀
           </button>
+          <button
+            onClick={() => setActiveTab('gameCenter')}
+            className={`flex-1 min-w-[60px] py-3 text-center font-medium transition-colors text-sm ${
+              activeTab === 'gameCenter'
+                ? 'text-amber-600 border-b-2 border-amber-600'
+                : 'text-gray-500'
+            }`}
+          >
+            🎮 게임
+          </button>
         </div>
       </div>
 
@@ -799,6 +1333,20 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 <span className="text-2xl">🌱</span>
                 <span className="text-sm font-medium text-green-700">내 잔디</span>
               </button>
+              <button
+                onClick={() => setActiveTab('gameCenter')}
+                className="flex-1 min-w-[120px] p-3 rounded-xl bg-pink-100 hover:bg-pink-200 transition-colors flex items-center gap-2"
+              >
+                <span className="text-2xl">🎮</span>
+                <span className="text-sm font-medium text-pink-700">게임센터</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('classmates')}
+                className="flex-1 min-w-[120px] p-3 rounded-xl bg-indigo-100 hover:bg-indigo-200 transition-colors flex items-center gap-2"
+              >
+                <span className="text-2xl">👥</span>
+                <span className="text-sm font-medium text-indigo-700">친구들</span>
+              </button>
             </div>
 
             {/* 정보 블럭 그리드 */}
@@ -810,7 +1358,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                   border: `2px solid ${getBorderColor(currentStudent.profile.buttonBorderCode)}`,
                   ...(isGradientFill(currentStudent.profile.buttonFillCode)
                     ? { backgroundImage: getGradientStyle(currentStudent.profile.buttonFillCode) }
-                    : { backgroundColor: getFillColor(currentStudent.profile.buttonFillCode) || 'rgb(255 251 235)' }
+                    : { backgroundColor: (!currentStudent.profile.buttonFillCode || currentStudent.profile.buttonFillCode === 'none' || currentStudent.profile.buttonFillCode === 'transparent') ? 'rgb(255 251 235)' : getFillColor(currentStudent.profile.buttonFillCode) }
                   ),
                 }}>
                 <div className={`text-center ${getAnimationClass(currentStudent.profile.animationCode || 'none')}`}>
@@ -877,7 +1425,16 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                     <span className="text-2xl">{myTeam.flag}</span>
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm truncate">{myTeam.teamName}</p>
-                      <p className="text-xs text-amber-600">{myTeam.teamCookie} 🍪 · {myTeam.members.length}명</p>
+                      <p className="text-xs text-amber-600">
+                        {(() => {
+                          // 팀원들의 쿠키 합계 계산
+                          const allStudents = [currentStudent, ...classmates];
+                          return myTeam.members.reduce((sum, code) => {
+                            const member = allStudents.find(s => s?.code === code);
+                            return sum + (member?.cookie ?? 0);
+                          }, 0);
+                        })()} 🍪 · {myTeam.members.length}명
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -974,62 +1531,90 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 {wishes.length === 0 ? (
                   <p className="text-center text-gray-500 py-8">아직 소원이 없어요</p>
                 ) : (
-                  <div className="space-y-3">
-                    {wishes.map((wish) => {
-                      const isLiked = wish.likes.includes(currentStudent.code);
-                      const isMine = wish.studentCode === currentStudent.code;
+                  <>
+                    <div className="space-y-3">
+                      {(() => {
+                        const startIndex = (wishPage - 1) * WISHES_PER_PAGE;
+                        const paginatedWishes = wishes.slice(startIndex, startIndex + WISHES_PER_PAGE);
+                        return paginatedWishes.map((wish) => {
+                          const isLiked = wish.likes.includes(currentStudent.code);
+                          const isMine = wish.studentCode === currentStudent.code;
 
-                      return (
-                        <div
-                          key={wish.id}
-                          className={`p-3 rounded-lg ${
-                            wish.isGranted
-                              ? 'shadow-lg'
-                              : 'bg-white border border-gray-200'
-                          }`}
-                          style={{
-                            border: wish.isGranted
-                              ? '3px solid transparent'
-                              : undefined,
-                            backgroundImage: wish.isGranted
-                              ? 'linear-gradient(to right, rgb(254 243 199), rgb(253 230 138), rgb(254 243 199)), linear-gradient(to right, rgb(239 68 68), rgb(234 179 8), rgb(34 197 94), rgb(59 130 246), rgb(168 85 247))'
-                              : undefined,
-                            backgroundOrigin: 'border-box',
-                            backgroundClip: wish.isGranted ? 'padding-box, border-box' : undefined,
-                          }}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <p className={`font-medium text-sm ${wish.isGranted ? 'text-amber-700' : ''}`}>
-                                {wish.isGranted && <span className="text-xl mr-1">✨</span>}
-                                {wish.studentName}
-                                {isMine && <span className="text-amber-500 ml-1">(나)</span>}
-                                {wish.isGranted && <span className="ml-2 px-2 py-0.5 bg-gray-800 text-white text-xs rounded-full">🌟 이루어질지어다~</span>}
-                              </p>
-                              <p className={`mt-1 ${wish.isGranted ? 'text-amber-800 font-medium' : 'text-gray-700'}`}>
-                                {wish.content}
-                              </p>
-                              {wish.isGranted && wish.grantedMessage && (
-                                <p className="text-sm text-purple-600 mt-2 italic">
-                                  💬 어디선가 들려오는 목소리: "{wish.grantedMessage}"
-                                </p>
-                              )}
-                            </div>
-                            <button
-                              onClick={() => handleLikeWish(wish.id, isLiked)}
-                              className={`flex items-center gap-1 px-2 py-1 rounded-full text-sm ${
-                                isLiked
-                                  ? 'bg-red-100 text-red-500'
-                                  : 'bg-gray-100 text-gray-500'
+                          return (
+                            <div
+                              key={wish.id}
+                              className={`p-3 rounded-lg ${
+                                wish.isGranted
+                                  ? 'shadow-lg'
+                                  : 'bg-white border border-gray-200'
                               }`}
+                              style={{
+                                border: wish.isGranted
+                                  ? '3px solid transparent'
+                                  : undefined,
+                                backgroundImage: wish.isGranted
+                                  ? 'linear-gradient(to right, rgb(254 243 199), rgb(253 230 138), rgb(254 243 199)), linear-gradient(to right, rgb(239 68 68), rgb(234 179 8), rgb(34 197 94), rgb(59 130 246), rgb(168 85 247))'
+                                  : undefined,
+                                backgroundOrigin: 'border-box',
+                                backgroundClip: wish.isGranted ? 'padding-box, border-box' : undefined,
+                              }}
                             >
-                              {isLiked ? '❤️' : '🤍'} {wish.likes.length}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <p className={`font-medium text-sm ${wish.isGranted ? 'text-amber-700' : ''}`}>
+                                    {wish.isGranted && <span className="text-xl mr-1">✨</span>}
+                                    {wish.studentName}
+                                    {isMine && <span className="text-amber-500 ml-1">(나)</span>}
+                                    {wish.isGranted && <span className="ml-2 px-2 py-0.5 bg-gray-800 text-white text-xs rounded-full">🌟 이루어질지어다~</span>}
+                                  </p>
+                                  <p className={`mt-1 ${wish.isGranted ? 'text-amber-800 font-medium' : 'text-gray-700'}`}>
+                                    {wish.content}
+                                  </p>
+                                  {wish.isGranted && wish.grantedMessage && (
+                                    <p className="text-sm text-purple-600 mt-2 italic">
+                                      💬 어디선가 들려오는 목소리: "{wish.grantedMessage}"
+                                    </p>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => handleLikeWish(wish.id, isLiked)}
+                                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-sm ${
+                                    isLiked
+                                      ? 'bg-red-100 text-red-500'
+                                      : 'bg-gray-100 text-gray-500'
+                                  }`}
+                                >
+                                  {isLiked ? '❤️' : '🤍'} {wish.likes.length}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                    {/* 페이지네이션 */}
+                    {wishes.length > WISHES_PER_PAGE && (
+                      <div className="flex justify-center items-center gap-2 mt-4">
+                        <button
+                          onClick={() => setWishPage(p => Math.max(1, p - 1))}
+                          disabled={wishPage === 1}
+                          className="px-3 py-1 text-sm rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          ◀ 이전
+                        </button>
+                        <span className="text-sm text-gray-600">
+                          {wishPage} / {Math.ceil(wishes.length / WISHES_PER_PAGE)} 페이지
+                        </span>
+                        <button
+                          onClick={() => setWishPage(p => Math.min(Math.ceil(wishes.length / WISHES_PER_PAGE), p + 1))}
+                          disabled={wishPage >= Math.ceil(wishes.length / WISHES_PER_PAGE)}
+                          className="px-3 py-1 text-sm rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          다음 ▶
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -1044,17 +1629,30 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
               <CardDescription>최근 활동 기록</CardDescription>
             </CardHeader>
             <CardContent>
-              {/* 잔디 그리드 - 7행 x 53열, 월 표시 포함 */}
+              {/* 잔디 그리드 - 5행(월~금) x 22열 (약 5개월, 한 학기) */}
               {(() => {
+                const WEEKS_COUNT = 22; // 약 5개월
+                const CELL_SIZE = 18; // 셀 크기 (px)
+                const GAP = 4; // 셀 간격 (px)
+                const DAY_NAMES = ['월', '화', '수', '목', '금'];
+
                 const today = new Date();
+                // 시작일을 해당 주의 월요일로 맞춤
                 const startDate = new Date(today);
-                startDate.setDate(startDate.getDate() - (53 * 7 - 1));
+                startDate.setDate(startDate.getDate() - (WEEKS_COUNT * 7 - 1));
+                // 월요일로 조정 (0=일, 1=월, ..., 6=토)
+                const startDayOfWeek = startDate.getDay();
+                if (startDayOfWeek === 0) {
+                  startDate.setDate(startDate.getDate() + 1); // 일요일 -> 월요일
+                } else if (startDayOfWeek !== 1) {
+                  startDate.setDate(startDate.getDate() - (startDayOfWeek - 1)); // 다른 요일 -> 월요일
+                }
 
                 // 각 주의 시작 날짜로 월 레이블 계산
                 const monthLabels: { weekIdx: number; month: number }[] = [];
                 let lastMonth = -1;
 
-                for (let weekIdx = 0; weekIdx < 53; weekIdx++) {
+                for (let weekIdx = 0; weekIdx < WEEKS_COUNT; weekIdx++) {
                   const weekStartDate = new Date(startDate);
                   weekStartDate.setDate(weekStartDate.getDate() + weekIdx * 7);
                   const month = weekStartDate.getMonth();
@@ -1064,263 +1662,414 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                   }
                 }
 
-                return (
-                  <div className="w-full">
-                    {/* 월 표시 - 각 월 시작 위치에 맞춤 */}
-                    <div className="flex text-xs text-gray-400 mb-1 justify-between">
-                      {monthLabels.map((label, idx) => (
-                        <span key={idx} style={{ fontSize: '10px' }}>{label.month + 1}월</span>
-                      ))}
-                    </div>
+                // 오늘이 주말이면 금요일을 "오늘"로 표시
+                const todayDayOfWeek = today.getDay();
+                let displayToday = new Date(today);
+                if (todayDayOfWeek === 0) {
+                  displayToday.setDate(displayToday.getDate() - 2);
+                } else if (todayDayOfWeek === 6) {
+                  displayToday.setDate(displayToday.getDate() - 1);
+                }
+                const displayTodayStr = getKoreanDateString(displayToday);
 
-                    {/* 잔디 그리드 - CSS로 컨테이너에 맞춤 */}
-                    <div className="flex justify-between">
-                      {Array.from({ length: 53 }).map((_, weekIndex) => (
-                        <div key={weekIndex} className="flex flex-col" style={{ gap: '1px' }}>
-                          {Array.from({ length: 7 }).map((_, dayIndex) => {
-                            const totalDays = weekIndex * 7 + dayIndex;
+                return (
+                  <div className="w-full overflow-x-auto">
+                    <div className="inline-block min-w-fit">
+                      {/* 월 표시 - 각 주 위치에 맞춤 */}
+                      <div className="flex mb-2 ml-7" style={{ gap: `${GAP}px` }}>
+                        {Array.from({ length: WEEKS_COUNT }).map((_, weekIdx) => {
+                          const monthLabel = monthLabels.find(m => m.weekIdx === weekIdx);
+                          return (
+                            <div
+                              key={weekIdx}
+                              style={{ width: `${CELL_SIZE}px`, minWidth: `${CELL_SIZE}px`, fontSize: '11px' }}
+                              className="text-gray-500 font-medium"
+                            >
+                              {monthLabel ? `${monthLabel.month + 1}월` : ''}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* 잔디 그리드 - 5행(월~금) */}
+                      <div className="flex pb-2" style={{ gap: `${GAP}px` }}>
+                        {/* 요일 라벨 */}
+                        <div className="flex flex-col justify-around text-xs text-gray-400 pr-1" style={{ gap: `${GAP}px` }}>
+                          {DAY_NAMES.map((day, i) => (
+                            <div key={i} style={{ height: `${CELL_SIZE}px`, lineHeight: `${CELL_SIZE}px` }}>{day}</div>
+                          ))}
+                        </div>
+                        {Array.from({ length: WEEKS_COUNT }).map((_, weekIndex) => (
+                          <div key={weekIndex} className="flex flex-col" style={{ gap: `${GAP}px` }}>
+                          {Array.from({ length: 5 }).map((_, dayIndex) => {
+                            // 주의 월요일 + dayIndex (0=월, 1=화, ..., 4=금)
                             const date = new Date(startDate);
-                            date.setDate(date.getDate() + totalDays);
-                            const dateStr = date.toISOString().split('T')[0];
+                            date.setDate(date.getDate() + weekIndex * 7 + dayIndex);
+                            const dateStr = getKoreanDateString(date);
                             const isFuture = date > today;
                             const grassRecord = grassData.find((g) => g.date === dateStr);
                             const cookieChange = grassRecord?.cookieChange || 0;
                             const refreshCount = grassRecord?.count || 0;
-                            const isToday = dateStr === today.toISOString().split('T')[0];
+                            const isToday = dateStr === displayTodayStr;
 
                             return (
                               <div
                                 key={dayIndex}
-                                className={`rounded-sm ${
+                                style={{ width: `${CELL_SIZE}px`, height: `${CELL_SIZE}px`, minWidth: `${CELL_SIZE}px`, minHeight: `${CELL_SIZE}px` }}
+                                className={`rounded ${
                                   isFuture
-                                    ? 'bg-gray-50'
+                                    ? 'bg-gray-100'
                                     : getGrassColor(cookieChange)
-                                } ${isToday ? 'ring-1 ring-blue-400' : ''}`}
-                                style={{ aspectRatio: '1', width: '100%' }}
-                                title={isFuture ? '미래' : `${dateStr}: +${cookieChange}쿠키 (${refreshCount}회 기록)`}
+                                } ${isToday ? 'ring-2 ring-blue-400' : ''}`}
+                                title={isFuture ? '미래' : `${dateStr} (${DAY_NAMES[dayIndex]}): +${cookieChange}쿠키 (${refreshCount}회 기록)`}
                               />
                             );
                           })}
-                        </div>
-                      ))}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 );
               })()}
 
               {/* 범례 */}
-              <div className="flex items-center justify-between mt-4">
-                <span className="text-xs text-gray-400">
+              <div className="flex items-center justify-center gap-6 mt-4">
+                <span className="text-sm text-gray-500">
                   총 {grassData.reduce((sum, g) => sum + g.cookieChange, 0)}개 획득
                 </span>
-                <div className="flex items-center gap-1 text-xs text-gray-400">
+                <div className="flex items-center gap-2 text-sm text-gray-500">
                   <span>0</span>
-                  <div className="w-[9px] h-[9px] rounded-sm bg-gray-200" title="0개" />
-                  <div className="w-[9px] h-[9px] rounded-sm bg-green-200" title="1개" />
-                  <div className="w-[9px] h-[9px] rounded-sm bg-green-400" title="2개" />
-                  <div className="w-[9px] h-[9px] rounded-sm bg-green-500" title="3-4개" />
-                  <div className="w-[9px] h-[9px] rounded-sm bg-green-600" title="5+개" />
-                  <span>5+</span>
+                  <div style={{ width: '14px', height: '14px' }} className="rounded bg-gray-200" title="0개" />
+                  <div style={{ width: '14px', height: '14px' }} className="rounded bg-green-300" title="1개" />
+                  <div style={{ width: '14px', height: '14px' }} className="rounded bg-green-500" title="2개" />
+                  <div style={{ width: '14px', height: '14px' }} className="rounded bg-green-700" title="3+개" />
+                  <span>3+</span>
                 </div>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* 상점 탭 - 카테고리별 */}
+        {/* 상점 탭 - 토글 (캔디/쿠키) */}
         {activeTab === 'shop' && (
           <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">🏪 상점</CardTitle>
-                <CardDescription>쿠키로 아이템을 구매해보세요! (최소 5쿠키)</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center mb-4 p-3 bg-amber-50 rounded-lg">
-                  <span className="text-gray-600">보유 쿠키: </span>
-                  <span className="font-bold text-amber-600 text-xl">{currentStudent.cookie} 🍪</span>
-                </div>
+            {/* 상점 모드 토글 */}
+            <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
+              <button
+                onClick={() => setShopMode('candy')}
+                className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  shopMode === 'candy'
+                    ? 'bg-white text-pink-600 shadow-sm'
+                    : 'text-gray-600'
+                }`}
+              >
+                🍭 캔디 상점
+              </button>
+              <button
+                onClick={() => {
+                  setShopMode('cookie');
+                  loadCookieShopData();
+                }}
+                className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  shopMode === 'cookie'
+                    ? 'bg-white text-amber-600 shadow-sm'
+                    : 'text-gray-600'
+                }`}
+              >
+                🍪 쿠키 상점
+              </button>
+            </div>
 
-                {/* 카테고리 탭 */}
-                <div className="flex flex-wrap gap-2 mb-4 pb-2">
-                  {[
-                    { key: 'all', label: '전체', icon: '📦' },
-                    { key: 'emoji', label: '이모지', icon: '😊' },
-                    { key: 'titlePermit', label: '칭호권', icon: '🏷️' },
-                    { key: 'titleColor', label: '칭호색상', icon: '🎨' },
-                    { key: 'nameEffect', label: '이름효과', icon: '✨' },
-                    { key: 'animation', label: '애니메이션', icon: '🎬' },
-                    { key: 'buttonBorder', label: '버튼테두리', icon: '🔲' },
-                    { key: 'buttonFill', label: '버튼채우기', icon: '🎨' },
-                  ].map((cat) => {
-                    const count = cat.key === 'all'
-                      ? shopItems.filter((item: ShopItem) => item.price >= 5).length
-                      : shopItems.filter((item: ShopItem) => item.category === cat.key && item.price >= 5).length;
-                    return (
-                      <button
-                        key={cat.key}
-                        onClick={() => setShopCategory(cat.key as typeof shopCategory)}
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
-                          shopCategory === cat.key
-                            ? 'bg-amber-500 text-white'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        <span>{cat.icon}</span>
-                        <span>{cat.label}</span>
-                        <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs ${
-                          shopCategory === cat.key ? 'bg-amber-600' : 'bg-gray-200'
-                        }`}>
-                          {count}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+            {/* 캔디 상점 (프로필 아이템) */}
+            {shopMode === 'candy' && (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">🍭 캔디 상점</CardTitle>
+                    <CardDescription>캔디로 프로필 아이템을 구매해보세요!</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center mb-4 p-3 bg-pink-50 rounded-lg">
+                      <span className="text-gray-600">보유 캔디: </span>
+                      <span className="font-bold text-pink-600 text-xl">{currentStudent.jelly ?? currentStudent.cookie} 🍭</span>
+                    </div>
 
-                {isLoadingShop ? (
-                  <p className="text-center py-8 text-gray-500">로딩 중...</p>
-                ) : (
-                  <div className="space-y-3">
-                    {shopItems
-                      .filter((item: ShopItem) => {
-                        // 카테고리 필터링
-                        if (shopCategory === 'all') return true;
-                        return item.category === shopCategory;
-                      })
-                      .filter((item: ShopItem) => item.price >= 5) // 최소 5쿠키
-                      .map((item: ShopItem) => {
-                        const isOwned = currentStudent.ownedItems.includes(item.code);
-                        const canAfford = currentStudent.cookie >= item.price;
-
-                        // 카테고리별 아이콘
-                        const getCategoryIcon = () => {
-                          switch (item.category) {
-                            case 'emoji': return item.value || '😊';
-                            case 'titlePermit': return '🏷️';
-                            case 'titleColor': return '🎨';
-                            case 'nameEffect': return '✨';
-                            case 'animation': return '🎬';
-                            case 'buttonBorder': return '🔲';
-                            case 'buttonFill': return '🎨';
-                            default: return '📦';
-                          }
-                        };
-
-                        // 카테고리별 한글 이름
-                        const getCategoryName = () => {
-                          switch (item.category) {
-                            case 'emoji': return '이모지';
-                            case 'titlePermit': return '칭호권';
-                            case 'titleColor': return '칭호색상';
-                            case 'nameEffect': return '이름 효과';
-                            case 'animation': return '애니메이션';
-                            case 'buttonBorder': return '버튼 테두리';
-                            case 'buttonFill': return '버튼 채우기';
-                            default: return item.category;
-                          }
-                        };
-
+                    {/* 카테고리 탭 */}
+                    <div className="flex flex-wrap gap-2 mb-4 pb-2">
+                      {[
+                        { key: 'all', label: '전체', icon: '📦' },
+                        { key: 'emoji', label: '이모지', icon: '😊' },
+                        { key: 'titlePermit', label: '칭호권', icon: '🏷️' },
+                        { key: 'titleColor', label: '칭호색상', icon: '🎨' },
+                        { key: 'nameEffect', label: '이름효과', icon: '✨' },
+                        { key: 'animation', label: '애니메이션', icon: '🎬' },
+                        { key: 'buttonBorder', label: '버튼테두리', icon: '🔲' },
+                        { key: 'buttonFill', label: '버튼채우기', icon: '🎨' },
+                      ].map((cat) => {
+                        const count = cat.key === 'all'
+                          ? shopItems.filter((item: ShopItem) => item.price >= 5).length
+                          : shopItems.filter((item: ShopItem) => item.category === cat.key && item.price >= 5).length;
                         return (
-                          <div
-                            key={item.code}
-                            className={`p-4 rounded-xl border-2 ${isOwned ? 'bg-green-50 border-green-300' : 'bg-white border-gray-200'}`}
+                          <button
+                            key={cat.key}
+                            onClick={() => setShopCategory(cat.key as typeof shopCategory)}
+                            className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                              shopCategory === cat.key
+                                ? 'bg-amber-500 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                {/* 아이템 썸네일 */}
-                                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center text-2xl">
-                                  {getCategoryIcon()}
-                                </div>
-                                <div>
-                                  <p className="font-medium">{item.name}</p>
-                                  <p className="text-xs text-gray-500">{getCategoryName()}</p>
-                                </div>
-                              </div>
-                              <div className="text-right flex flex-col gap-1">
-                                <p className="font-bold text-amber-600 text-lg">{item.price} 🍪</p>
-                                <div className="flex gap-1">
-                                  {/* 미리보기 버튼 */}
-                                  <button
-                                    onClick={() => setPreviewItem(item)}
-                                    className="px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600"
-                                  >
-                                    👁️ 미리보기
-                                  </button>
-                                  {isOwned ? (
-                                    item.category === 'titlePermit' ? (
-                                      hasTitlePermit() ? (
-                                        <span className="inline-flex items-center gap-1 text-xs text-green-600 bg-green-100 px-2 py-1 rounded-lg">
-                                          ✅ 활성화됨
-                                        </span>
-                                      ) : (
+                            <span>{cat.icon}</span>
+                            <span>{cat.label}</span>
+                            <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs ${
+                              shopCategory === cat.key ? 'bg-amber-600' : 'bg-gray-200'
+                            }`}>
+                              {count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {isLoadingShop ? (
+                      <p className="text-center py-8 text-gray-500">로딩 중...</p>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+                        {shopItems
+                          .filter((item: ShopItem) => {
+                            if (shopCategory === 'all') return true;
+                            return item.category === shopCategory;
+                          })
+                          .filter((item: ShopItem) => item.price >= 5)
+                          .map((item: ShopItem) => {
+                            const isOwned = currentStudent.ownedItems.includes(item.code);
+                            const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
+                            const canAfford = currentJelly >= item.price;
+
+                            const getCategoryIcon = () => {
+                              switch (item.category) {
+                                case 'emoji': return item.value || '😊';
+                                case 'titlePermit': return '🏷️';
+                                case 'titleColor': return '🎨';
+                                case 'nameEffect': return '✨';
+                                case 'animation': return '🎬';
+                                case 'buttonBorder': return '🔲';
+                                case 'buttonFill': return '🎨';
+                                default: return '📦';
+                              }
+                            };
+
+                            return (
+                              <div
+                                key={item.code}
+                                onClick={() => setPreviewItem(item)}
+                                className={`p-2 rounded-lg border-2 cursor-pointer hover:shadow-md transition-all ${isOwned ? 'bg-green-50 border-green-300' : 'bg-white border-gray-200'}`}
+                              >
+                                <div className="text-center">
+                                  <div className="text-2xl mb-1">
+                                    {getCategoryIcon()}
+                                  </div>
+                                  <p className="text-xs font-medium truncate mb-1">{item.name}</p>
+                                  <p className="text-xs font-bold text-pink-600">{item.price} 🍭</p>
+                                  <div className="mt-1">
+                                    {isOwned ? (
+                                      item.category === 'titlePermit' && !hasTitlePermit() ? (
                                         <button
-                                          onClick={handleActivateTitlePermit}
+                                          onClick={(e) => { e.stopPropagation(); handleActivateTitlePermit(); }}
                                           disabled={isPurchasing}
-                                          className="px-2 py-1 rounded-lg text-xs font-medium bg-purple-500 hover:bg-purple-600 text-white"
+                                          className="w-full px-1 py-0.5 rounded text-xs font-medium bg-purple-500 hover:bg-purple-600 text-white"
                                         >
-                                          {isPurchasing ? '...' : '🏷️ 활성화'}
+                                          활성화
                                         </button>
+                                      ) : (
+                                        <span className="text-xs text-green-600">보유</span>
                                       )
                                     ) : (
-                                      <span className="inline-flex items-center gap-1 text-xs text-green-600 bg-green-100 px-2 py-1 rounded-lg">
-                                        ✅ 보유
-                                      </span>
-                                    )
-                                  ) : (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handlePurchase(item); }}
+                                        disabled={!canAfford || isPurchasing}
+                                        className={`w-full px-1 py-0.5 rounded text-xs font-medium ${
+                                          canAfford
+                                            ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                                            : 'bg-gray-200 text-gray-400'
+                                        }`}
+                                      >
+                                        {canAfford ? '구매' : '🔒'}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        {shopItems
+                          .filter((item: ShopItem) => item.category === shopCategory)
+                          .filter((item: ShopItem) => item.price >= 5).length === 0 && (
+                          <p className="text-center py-8 text-gray-500">이 카테고리에 상품이 없어요</p>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 보유 아이템 요약 */}
+                {currentStudent.ownedItems.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">🎒 내 아이템 ({currentStudent.ownedItems.length}개)</CardTitle>
+                      <CardDescription>프로필 탭에서 아이템을 장착할 수 있어요!</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {currentStudent.ownedItems.slice(0, 10).map((itemCode: string) => {
+                          const item = shopItems.find((i: ShopItem) => i.code === itemCode);
+                          return (
+                            <span key={itemCode} className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm">
+                              {item?.name || itemCode}
+                            </span>
+                          );
+                        })}
+                        {currentStudent.ownedItems.length > 10 && (
+                          <span className="px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-sm">
+                            +{currentStudent.ownedItems.length - 10}개 더
+                          </span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
+
+            {/* 쿠키 상점 (실물 교환) */}
+            {shopMode === 'cookie' && (
+              <>
+                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-amber-800 font-medium">🍪 쿠키 상점 안내</p>
+                      <p className="text-xs text-amber-600 mt-1">실물 상품을 신청하면 다했니 쿠키가 차감됩니다.</p>
+                    </div>
+                    <button
+                      onClick={() => setShowItemSuggestionModal(true)}
+                      className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-medium hover:bg-amber-600 transition-all shrink-0"
+                    >
+                      💡 물품 요청
+                    </button>
+                  </div>
+                  {/* 물품 요청 현황 버튼 */}
+                  <button
+                    onClick={() => setShowMyItemSuggestions(true)}
+                    className="w-full mt-2 px-3 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-all flex items-center justify-center gap-2"
+                  >
+                    📋 내 물품 요청 현황 {myItemSuggestions.length > 0 && <span className="bg-white text-blue-600 rounded-full px-2 py-0.5 text-xs">{myItemSuggestions.length}건</span>}
+                  </button>
+                </div>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-lg">📦 실물 상품</CardTitle>
+                      <CardDescription>보유 쿠키: <span className="font-bold text-amber-600">{currentStudent.cookie} 🍪</span></CardDescription>
+                    </div>
+                    <button
+                      onClick={() => setShowMyRequests(!showMyRequests)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1 ${
+                        showMyRequests
+                          ? 'bg-amber-500 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      📋 내 신청 ({cookieShopRequests.length})
+                    </button>
+                  </CardHeader>
+                  <CardContent>
+                    {showMyRequests ? (
+                      // 내 신청 내역
+                      <div className="space-y-3">
+                        {cookieShopRequests.length === 0 ? (
+                          <p className="text-center py-8 text-gray-500">신청 내역이 없습니다.</p>
+                        ) : (
+                          cookieShopRequests.map((request) => (
+                            <div
+                              key={request.id}
+                              className={`p-4 rounded-xl border-2 ${
+                                request.status === 'pending' ? 'border-amber-300 bg-amber-50' :
+                                request.status === 'approved' ? 'border-green-300 bg-green-50' :
+                                request.status === 'rejected' ? 'border-red-300 bg-red-50' :
+                                'border-gray-300 bg-gray-50'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="font-medium">{request.itemName} x{request.quantity}</p>
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                  request.status === 'pending' ? 'bg-amber-200 text-amber-800' :
+                                  request.status === 'approved' ? 'bg-green-200 text-green-800' :
+                                  request.status === 'rejected' ? 'bg-red-200 text-red-800' :
+                                  'bg-gray-200 text-gray-800'
+                                }`}>
+                                  {request.status === 'pending' ? '대기중' :
+                                   request.status === 'approved' ? '승인됨' :
+                                   request.status === 'rejected' ? '거절됨' : '완료'}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-600">{request.totalPrice} 쿠키</p>
+                              {request.teacherResponse && (
+                                <p className="mt-2 text-sm text-gray-700 bg-white p-2 rounded">
+                                  💬 선생님: {request.teacherResponse}
+                                </p>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    ) : (
+                      // 상품 목록
+                      isLoadingCookieShop ? (
+                        <p className="text-center py-8 text-gray-500">로딩 중...</p>
+                      ) : cookieShopItems.length === 0 ? (
+                        <p className="text-center py-8 text-gray-500">등록된 상품이 없습니다.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {cookieShopItems.map((item) => {
+                            const canAfford = currentStudent.cookie >= item.price;
+                            return (
+                              <div
+                                key={item.id}
+                                className="p-4 rounded-xl border-2 bg-white border-gray-200"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="font-medium">{item.name}</p>
+                                    {item.description && (
+                                      <p className="text-xs text-gray-500">{item.description}</p>
+                                    )}
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="font-bold text-amber-600">{item.price} 🍪</p>
                                     <button
-                                      onClick={() => handlePurchase(item)}
-                                      disabled={!canAfford || isPurchasing}
-                                      className={`px-2 py-1 rounded-lg text-xs font-medium ${
+                                      onClick={() => handleCookieShopRequest(item)}
+                                      disabled={!canAfford}
+                                      className={`mt-1 px-3 py-1 rounded-lg text-xs font-medium ${
                                         canAfford
                                           ? 'bg-amber-500 hover:bg-amber-600 text-white'
                                           : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                                       }`}
                                     >
-                                      {isPurchasing ? '...' : canAfford ? '🛒 구매' : '🔒'}
+                                      {canAfford ? '📝 신청' : '🔒 쿠키 부족'}
                                     </button>
-                                  )}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    {shopItems
-                      .filter((item: ShopItem) => item.category === shopCategory)
-                      .filter((item: ShopItem) => item.price >= 5).length === 0 && (
-                      <p className="text-center py-8 text-gray-500">이 카테고리에 상품이 없어요</p>
+                            );
+                          })}
+                        </div>
+                      )
                     )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* 보유 아이템 요약 */}
-            {currentStudent.ownedItems.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">🎒 내 아이템 ({currentStudent.ownedItems.length}개)</CardTitle>
-                  <CardDescription>프로필 탭에서 아이템을 장착할 수 있어요!</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {currentStudent.ownedItems.slice(0, 10).map((itemCode: string) => {
-                      const item = shopItems.find((i: ShopItem) => i.code === itemCode);
-                      return (
-                        <span key={itemCode} className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm">
-                          {item?.name || itemCode}
-                        </span>
-                      );
-                    })}
-                    {currentStudent.ownedItems.length > 10 && (
-                      <span className="px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-sm">
-                        +{currentStudent.ownedItems.length - 10}개 더
-                      </span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </>
             )}
           </div>
         )}
@@ -1758,20 +2507,8 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                   <span className="text-3xl">{myTeam.flag}</span>
                   <div className="flex-1">
                     <h2 className="text-lg font-bold text-amber-800">{myTeam.teamName}</h2>
-                    <div className="flex gap-4 mt-1 text-sm">
-                      <span className="text-amber-600 font-medium">{myTeam.teamCookie} 🍪</span>
-                      <span className="text-green-600">
-                        +{(() => {
-                          let total = 0;
-                          myTeam.members.forEach(code => {
-                            const memberGrass = teamMembersGrass.get(code) || [];
-                            memberGrass.forEach(g => {
-                              if (g.cookieChange > 0) total += g.cookieChange;
-                            });
-                          });
-                          return total;
-                        })()}획득
-                      </span>
+                    <div className="flex gap-3 mt-1 text-sm flex-wrap">
+                      <span className="text-amber-600 font-medium">{teamMembers.reduce((sum, m) => sum + (m.cookie || 0), 0)} 🍪</span>
                       <span className="text-blue-600">{myTeam.members.length}명</span>
                     </div>
                   </div>
@@ -1794,7 +2531,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                       for (let i = 6; i >= 0; i--) {
                         const d = new Date(today);
                         d.setDate(d.getDate() - i);
-                        const dateStr = d.toISOString().split('T')[0];
+                        const dateStr = getKoreanDateString(d);
                         const dayData = memberGrass.find(g => g.date === dateStr);
                         recentDays.push({
                           date: dateStr,
@@ -1802,8 +2539,11 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         });
                       }
 
-                      // 총 획득량
-                      const totalGain = memberGrass.reduce((sum, g) => sum + (g.cookieChange > 0 ? g.cookieChange : 0), 0);
+                      // 팀 결성일 이후 획득량 (팀 결성일이 없으면 전체 합산)
+                      const teamCreatedDate = myTeam?.createdAt?.toDate ? getKoreanDateString(myTeam.createdAt.toDate()) : null;
+                      const totalGain = memberGrass
+                        .filter(g => !teamCreatedDate || g.date >= teamCreatedDate)
+                        .reduce((sum, g) => sum + (g.cookieChange > 0 ? g.cookieChange : 0), 0);
 
                       return (
                         <div
@@ -1835,10 +2575,10 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                                 <p className={`text-xs ${getTitleColorClass(member.profile.titleColorCode)}`}>{member.profile.title}</p>
                               )}
                             </div>
-                            {/* 쿠키/획득량 */}
+                            {/* 보유 쿠키 / 획득 쿠키 */}
                             <div className="text-right text-sm shrink-0">
-                              <p className="font-bold text-amber-600">{member.cookie} 🍪</p>
-                              <p className="text-xs text-green-600">+{totalGain}</p>
+                              <p className="text-amber-600 font-medium">{member.cookie} 🍪</p>
+                              <p className="text-green-600 text-xs">+{totalGain} 획득</p>
                             </div>
                           </div>
                           {/* 최근 7일 잔디 */}
@@ -1879,6 +2619,297 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 </Card>
               </>
             )}
+          </div>
+        )}
+
+        {/* 게임센터 탭 */}
+        {activeTab === 'gameCenter' && (
+          <div className="space-y-6">
+            {/* 게임센터 헤더 */}
+            <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl p-6 text-center border-2 border-purple-200">
+              <div className="text-5xl mb-3">🎮</div>
+              <h2 className="text-xl font-bold text-purple-800 mb-2">게임센터</h2>
+              <p className="text-purple-600 text-sm">
+                선생님이 게임을 열면 참가할 수 있어요!
+              </p>
+              {activeBaseballGame && (
+                <div className="mt-3 inline-block bg-green-100 text-green-700 px-4 py-1.5 rounded-full text-sm font-medium animate-pulse">
+                  🎮 숫자야구 게임 대기중!
+                </div>
+              )}
+            </div>
+
+            {/* 게임 목록 그리드 - 교사 순서와 동기화 */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {/* 숫자야구 - 활성화! */}
+              {activeBaseballGame ? (
+                <button
+                  onClick={joinBaseballGame}
+                  disabled={isJoiningGame}
+                  className="p-5 rounded-2xl bg-gradient-to-br from-purple-100 to-violet-100 border-2 border-purple-400 transition-all hover:scale-105 hover:shadow-lg animate-pulse"
+                >
+                  <div className="text-4xl mb-2">⚾</div>
+                  <h3 className="font-bold text-purple-800 text-sm">숫자야구</h3>
+                  <p className="text-xs text-purple-600 mt-1">{activeBaseballGame.digits}자리</p>
+                  <span className="inline-block mt-2 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">
+                    {isJoiningGame ? '참가중...' : '🎮 참가하기!'}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  disabled
+                  className="p-5 rounded-2xl bg-gradient-to-br from-purple-50 to-violet-50 border-2 border-purple-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+                >
+                  <div className="text-4xl mb-2">⚾</div>
+                  <h3 className="font-bold text-purple-800 text-sm">숫자야구</h3>
+                  <p className="text-xs text-purple-600 mt-1">개인전</p>
+                  <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                    대기중
+                  </span>
+                </button>
+              )}
+
+              {/* 소수결게임 */}
+              {activeMinorityGame ? (
+                <button
+                  onClick={joinMinorityGame}
+                  disabled={isJoiningMinorityGame}
+                  className="p-5 rounded-2xl bg-gradient-to-br from-teal-100 to-cyan-100 border-2 border-teal-400 transition-all hover:scale-105 hover:shadow-lg animate-pulse"
+                >
+                  <div className="text-4xl mb-2">⚖️</div>
+                  <h3 className="font-bold text-teal-800 text-sm">소수결게임</h3>
+                  <p className="text-xs text-teal-600 mt-1">서바이벌</p>
+                  <span className="inline-block mt-2 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">
+                    {isJoiningMinorityGame ? '참가중...' : '🎮 참가하기!'}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  disabled
+                  className="p-5 rounded-2xl bg-gradient-to-br from-teal-50 to-cyan-50 border-2 border-teal-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+                >
+                  <div className="text-4xl mb-2">⚖️</div>
+                  <h3 className="font-bold text-teal-800 text-sm">소수결게임</h3>
+                  <p className="text-xs text-teal-600 mt-1">서바이벌</p>
+                  <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                    대기중
+                  </span>
+                </button>
+              )}
+
+              {/* 총알피하기 */}
+              {activeBulletDodgeGame ? (
+                <button
+                  onClick={joinBulletDodgeGame}
+                  disabled={isJoiningBulletDodge}
+                  className="p-5 rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 border-2 border-indigo-400 transition-all hover:scale-105 hover:shadow-lg animate-pulse"
+                >
+                  <div className="text-4xl mb-2">🚀</div>
+                  <h3 className="font-bold text-indigo-800 text-sm">총알피하기</h3>
+                  <p className="text-xs text-indigo-600 mt-1">점수 도전</p>
+                  <span className="inline-block mt-2 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">
+                    {isJoiningBulletDodge ? '참가중...' : '🎮 참가하기!'}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  disabled
+                  className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+                >
+                  <div className="text-4xl mb-2">🚀</div>
+                  <h3 className="font-bold text-indigo-800 text-sm">총알피하기</h3>
+                  <p className="text-xs text-indigo-600 mt-1">점수 도전</p>
+                  <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                    대기중
+                  </span>
+                </button>
+              )}
+
+              {/* 가위바위보 */}
+              {activeRpsGame ? (
+                <button
+                  onClick={joinRpsGame}
+                  disabled={isJoiningRps}
+                  className="p-5 rounded-2xl bg-gradient-to-br from-green-100 to-emerald-100 border-2 border-green-400 transition-all hover:scale-105 hover:shadow-lg animate-pulse"
+                >
+                  <div className="text-4xl mb-2">✊✋✌️</div>
+                  <h3 className="font-bold text-green-800 text-sm">가위바위보</h3>
+                  <p className="text-xs text-green-600 mt-1">
+                    {activeRpsGame.gameMode === 'survivor' ? '서바이벌' :
+                     activeRpsGame.gameMode === 'candy15' ? '1.5배' : '1.2배'}
+                  </p>
+                  <span className="inline-block mt-2 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">
+                    {isJoiningRps ? '참가중...' : '🎮 참가하기!'}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  disabled
+                  className="p-5 rounded-2xl bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+                >
+                  <div className="text-4xl mb-2">✊</div>
+                  <h3 className="font-bold text-green-800 text-sm">가위바위보</h3>
+                  <p className="text-xs text-green-600 mt-1">개인전</p>
+                  <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                    대기중
+                  </span>
+                </button>
+              )}
+
+              {/* 쿠키 배틀 - 준비중 */}
+              <button
+                disabled
+                className="p-5 rounded-2xl bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+              >
+                <div className="text-4xl mb-2">⚔️</div>
+                <h3 className="font-bold text-red-800 text-sm">쿠키 배틀</h3>
+                <p className="text-xs text-red-600 mt-1">팀 대결</p>
+                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                  준비중
+                </span>
+              </button>
+
+              {/* 스피드 퀴즈 - 준비중 */}
+              <button
+                disabled
+                className="p-5 rounded-2xl bg-gradient-to-br from-yellow-50 to-amber-50 border-2 border-yellow-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+              >
+                <div className="text-4xl mb-2">⚡</div>
+                <h3 className="font-bold text-yellow-800 text-sm">스피드 퀴즈</h3>
+                <p className="text-xs text-yellow-600 mt-1">개인전</p>
+                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                  준비중
+                </span>
+              </button>
+
+              {/* 홀짝 게임 - 준비중 */}
+              <button
+                disabled
+                className="p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+              >
+                <div className="text-4xl mb-2">🎲</div>
+                <h3 className="font-bold text-blue-800 text-sm">홀짝 게임</h3>
+                <p className="text-xs text-blue-600 mt-1">개인전</p>
+                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                  준비중
+                </span>
+              </button>
+
+              {/* 끝말잇기 - 준비중 */}
+              <button
+                disabled
+                className="p-5 rounded-2xl bg-gradient-to-br from-pink-50 to-rose-50 border-2 border-pink-200 opacity-60 cursor-not-allowed transition-all hover:scale-[0.98]"
+              >
+                <div className="text-4xl mb-2">💬</div>
+                <h3 className="font-bold text-pink-800 text-sm">끝말잇기</h3>
+                <p className="text-xs text-pink-600 mt-1">실시간</p>
+                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">
+                  준비중
+                </span>
+              </button>
+            </div>
+
+            {/* 활성 게임 안내 */}
+            {activeBaseballGame && (
+              <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl p-4 border-2 border-purple-300">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl animate-bounce">⚾</span>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-purple-800">숫자야구 게임 대기중!</h3>
+                    <p className="text-sm text-purple-600">
+                      선생님이 {activeBaseballGame.digits}자리 숫자야구 게임을 열었어요. 지금 참가하세요!
+                    </p>
+                  </div>
+                  <button
+                    onClick={joinBaseballGame}
+                    disabled={isJoiningGame}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-all"
+                  >
+                    {isJoiningGame ? '...' : '참가'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 소수결게임 안내 */}
+            {activeMinorityGame && (
+              <div className="bg-gradient-to-r from-teal-100 to-cyan-100 rounded-2xl p-4 border-2 border-teal-300">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl animate-bounce">⚖️</span>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-teal-800">소수결게임 대기중!</h3>
+                    <p className="text-sm text-teal-600">
+                      선생님이 소수결게임을 열었어요. 소수파가 승리하는 서바이벌!
+                    </p>
+                  </div>
+                  <button
+                    onClick={joinMinorityGame}
+                    disabled={isJoiningMinorityGame}
+                    className="px-4 py-2 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all"
+                  >
+                    {isJoiningMinorityGame ? '...' : '참가'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 총알피하기 안내 */}
+            {activeBulletDodgeGame && (
+              <div className="bg-gradient-to-r from-indigo-100 to-purple-100 rounded-2xl p-4 border-2 border-indigo-300">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl animate-bounce">🚀</span>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-indigo-800">총알피하기 {activeBulletDodgeGame.status === 'playing' ? '진행중!' : '대기중!'}</h3>
+                    <p className="text-sm text-indigo-600">
+                      우주선을 조종해 총알을 피하세요! 생존 시간이 점수입니다!
+                    </p>
+                  </div>
+                  <button
+                    onClick={joinBulletDodgeGame}
+                    disabled={isJoiningBulletDodge}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all"
+                  >
+                    {isJoiningBulletDodge ? '...' : '참가'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 가위바위보 안내 */}
+            {activeRpsGame && (
+              <div className="bg-gradient-to-r from-green-100 to-emerald-100 rounded-2xl p-4 border-2 border-green-300">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl animate-bounce">✊✋✌️</span>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-green-800">
+                      가위바위보 {activeRpsGame.status === 'selecting' ? '진행중!' : '대기중!'}
+                    </h3>
+                    <p className="text-sm text-green-600">
+                      {activeRpsGame.gameMode === 'survivor'
+                        ? '최후의 1인이 될 때까지! 지금 참가하세요!'
+                        : activeRpsGame.gameMode === 'candy15'
+                          ? '이기면 캔디 1.5배! 지금 참가하세요!'
+                          : '이기면 캔디 1.2배! 지금 참가하세요!'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={joinRpsGame}
+                    disabled={isJoiningRps}
+                    className="px-4 py-2 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition-all"
+                  >
+                    {isJoiningRps ? '...' : '참가'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 안내 문구 */}
+            <Card className="bg-gray-50 border-dashed">
+              <CardContent className="py-4 text-center text-gray-500 text-sm">
+                <p>🔜 더 많은 게임이 곧 추가될 예정이에요!</p>
+                <p className="text-xs mt-1">숫자야구는 선생님이 게임을 열면 참가할 수 있어요</p>
+              </CardContent>
+            </Card>
           </div>
         )}
 
@@ -2053,26 +3084,38 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                     <p className="text-center text-sm text-gray-400 py-4">로딩 중...</p>
                   ) : (
                     <div className="flex gap-[2px] justify-center">
-                      {Array.from({ length: 12 }).map((_, weekIndex) => (
-                        <div key={weekIndex} className="flex flex-col gap-[2px]">
-                          {Array.from({ length: 7 }).map((_, dayIndex) => {
-                            const totalDays = weekIndex * 7 + dayIndex;
-                            const date = new Date();
-                            date.setDate(date.getDate() - (12 * 7 - totalDays));
-                            const dateStr = date.toISOString().split('T')[0];
-                            const isFuture = date > new Date();
-                            const grassRecord = selectedClassmateGrass.find((g) => g.date === dateStr);
-                            const cookieChange = grassRecord?.cookieChange || 0;
-                            return (
-                              <div
-                                key={dayIndex}
-                                className={`w-3 h-3 rounded-sm ${isFuture ? 'bg-gray-100' : getGrassColor(cookieChange)}`}
-                                title={`${dateStr}: +${cookieChange}쿠키`}
-                              />
-                            );
-                          })}
-                        </div>
-                      ))}
+                      {(() => {
+                        const WEEKS = 12;
+                        const today = new Date();
+                        // 시작일을 12주 전 월요일로 설정
+                        const startDate = new Date(today);
+                        startDate.setDate(startDate.getDate() - (WEEKS * 7));
+                        const startDayOfWeek = startDate.getDay();
+                        if (startDayOfWeek === 0) {
+                          startDate.setDate(startDate.getDate() + 1);
+                        } else if (startDayOfWeek !== 1) {
+                          startDate.setDate(startDate.getDate() - (startDayOfWeek - 1));
+                        }
+                        return Array.from({ length: WEEKS }).map((_, weekIndex) => (
+                          <div key={weekIndex} className="flex flex-col gap-[2px]">
+                            {Array.from({ length: 5 }).map((_, dayIndex) => {
+                              const date = new Date(startDate);
+                              date.setDate(date.getDate() + weekIndex * 7 + dayIndex);
+                              const dateStr = getKoreanDateString(date);
+                              const isFuture = date > today;
+                              const grassRecord = selectedClassmateGrass.find((g) => g.date === dateStr);
+                              const cookieChange = grassRecord?.cookieChange || 0;
+                              return (
+                                <div
+                                  key={dayIndex}
+                                  className={`w-3 h-3 rounded-sm ${isFuture ? 'bg-gray-100' : getGrassColor(cookieChange)}`}
+                                  title={`${dateStr}: +${cookieChange}쿠키`}
+                                />
+                              );
+                            })}
+                          </div>
+                        ));
+                      })()}
                     </div>
                   )}
                 </div>
@@ -2268,7 +3311,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600">가격</span>
-                    <span className="font-bold text-amber-600">{previewItem.price} 🍪</span>
+                    <span className="font-bold text-pink-600">{previewItem.price} 🍭</span>
                   </div>
                   {previewItem.description && (
                     <p className="text-xs text-gray-500 mt-2 pt-2 border-t">{previewItem.description}</p>
@@ -2280,23 +3323,159 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                   <div className="text-center py-3 bg-green-100 rounded-xl text-green-600 font-medium">
                     ✅ 이미 보유중인 아이템입니다
                   </div>
-                ) : currentStudent.cookie >= previewItem.price ? (
+                ) : (currentStudent.jelly ?? currentStudent.cookie ?? 0) >= previewItem.price ? (
                   <button
                     onClick={() => {
                       handlePurchase(previewItem);
                       setPreviewItem(null);
                     }}
                     disabled={isPurchasing}
-                    className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium flex items-center justify-center gap-2"
+                    className="w-full py-3 bg-pink-500 hover:bg-pink-600 text-white rounded-xl font-medium flex items-center justify-center gap-2"
                   >
                     <span>🛒</span>
-                    <span>{isPurchasing ? '구매 중...' : `${previewItem.price}🍪로 구매하기`}</span>
+                    <span>{isPurchasing ? '구매 중...' : `${previewItem.price}🍭로 구매하기`}</span>
                   </button>
                 ) : (
                   <div className="text-center py-3 bg-gray-100 rounded-xl text-gray-500">
-                    🔒 쿠키가 부족합니다 (보유: {currentStudent.cookie}🍪)
+                    🔒 캔디가 부족합니다 (보유: {currentStudent.jelly ?? currentStudent.cookie}🍭)
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 물품 요청 모달 */}
+        {showItemSuggestionModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-xl">
+              <div className="p-4 bg-amber-50 border-b border-amber-200">
+                <h3 className="text-lg font-bold text-amber-800">💡 상점에 물품 요청하기</h3>
+                <p className="text-sm text-amber-600 mt-1">상점에 추가됐으면 하는 물품을 요청해보세요!</p>
+              </div>
+              <div className="p-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">물품 이름 *</label>
+                  <input
+                    type="text"
+                    value={suggestionItemName}
+                    onChange={(e) => setSuggestionItemName(e.target.value)}
+                    placeholder="예: 연필, 지우개, 간식 등"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                    maxLength={50}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">추가 설명 (선택)</label>
+                  <textarea
+                    value={suggestionDescription}
+                    onChange={(e) => setSuggestionDescription(e.target.value)}
+                    placeholder="물품에 대한 설명이나 희망 가격 등"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none"
+                    rows={3}
+                    maxLength={200}
+                  />
+                </div>
+              </div>
+              <div className="p-4 bg-gray-50 flex gap-2">
+                <button
+                  onClick={() => {
+                    setShowItemSuggestionModal(false);
+                    setSuggestionItemName('');
+                    setSuggestionDescription('');
+                  }}
+                  className="flex-1 py-2 px-4 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-all"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleSubmitItemSuggestion}
+                  disabled={isSubmittingSuggestion || !suggestionItemName.trim()}
+                  className="flex-1 py-2 px-4 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmittingSuggestion ? '제출 중...' : '요청하기'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 내 물품 요청 현황 모달 */}
+        {showMyItemSuggestions && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-xl max-h-[80vh] flex flex-col">
+              <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-800">📋 내 물품 요청 현황</h3>
+                  <p className="text-sm text-gray-600 mt-1">요청한 물품의 승인/거절 상태를 확인하세요</p>
+                </div>
+                <button
+                  onClick={() => setShowMyItemSuggestions(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="p-4 overflow-y-auto flex-1">
+                {myItemSuggestions.length === 0 ? (
+                  <p className="text-center py-8 text-gray-500">요청 내역이 없습니다.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {myItemSuggestions.map((suggestion) => (
+                      <div
+                        key={suggestion.id}
+                        className={`p-4 rounded-xl border-2 ${
+                          suggestion.status === 'pending' ? 'border-amber-300 bg-amber-50' :
+                          suggestion.status === 'approved' ? 'border-green-300 bg-green-50' :
+                          'border-red-300 bg-red-50'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-gray-800">{suggestion.itemName}</span>
+                              <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                                suggestion.status === 'pending' ? 'bg-amber-200 text-amber-800' :
+                                suggestion.status === 'approved' ? 'bg-green-200 text-green-800' :
+                                'bg-red-200 text-red-800'
+                              }`}>
+                                {suggestion.status === 'pending' ? '검토 중' :
+                                 suggestion.status === 'approved' ? '승인됨' : '거절됨'}
+                              </span>
+                            </div>
+                            {suggestion.description && (
+                              <p className="text-sm text-gray-600 mt-1">{suggestion.description}</p>
+                            )}
+                            <p className="text-xs text-gray-400 mt-2">
+                              {suggestion.createdAt?.toDate?.().toLocaleDateString('ko-KR') || '날짜 없음'}
+                            </p>
+                          </div>
+                        </div>
+                        {/* 선생님 메시지 */}
+                        {suggestion.teacherMessage && (
+                          <div className={`mt-3 p-3 rounded-lg ${
+                            suggestion.status === 'approved' ? 'bg-green-100' : 'bg-red-100'
+                          }`}>
+                            <p className="text-xs text-gray-500 mb-1">선생님 메시지:</p>
+                            <p className={`text-sm ${
+                              suggestion.status === 'approved' ? 'text-green-800' : 'text-red-800'
+                            }`}>
+                              {suggestion.teacherMessage}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="p-4 bg-gray-50 border-t border-gray-200">
+                <button
+                  onClick={() => setShowMyItemSuggestions(false)}
+                  className="w-full py-2 px-4 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-all"
+                >
+                  닫기
+                </button>
               </div>
             </div>
           </div>

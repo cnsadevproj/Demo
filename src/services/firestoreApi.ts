@@ -51,10 +51,13 @@ export interface Student {
   classId: string;
   teacherId: string;
   cookie: number;
+  jelly: number;                // 캔디 (게임/상점용 재화)
+  lastSyncedCookie: number;     // 마지막 동기화 시점의 쿠키 값
   usedCookie: number;
   totalCookie: number;
   chocoChips: number;
   previousCookie: number;
+  initialCookie: number; // 등록 시점의 쿠키 수 (잔디 계산용)
   profile: {
     emojiCode: string;
     title: string;
@@ -98,6 +101,7 @@ export interface Team {
   flag: string;
   members: string[];
   teamCookie: number;
+  createdAt?: Timestamp; // 팀 결성일
 }
 
 // 소원 정보
@@ -111,6 +115,7 @@ export interface Wish {
   isGranted: boolean;
   grantedReward: number;  // deprecated - 더이상 사용하지 않음
   grantedMessage?: string; // 선정 시 교사 코멘트
+  grantedAt?: Timestamp; // 선정된 시각 (24시간 후 자동 삭제용)
 }
 
 // 상점 아이템
@@ -121,6 +126,37 @@ export interface ShopItem {
   price: number;
   value: string;
   description: string;
+}
+
+// 쿠키 상점 아이템 (실물 교환)
+export interface CookieShopItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;  // 다했니 쿠키 차감량
+  stock?: number; // 재고 (없으면 무제한)
+  imageUrl?: string;
+  isActive: boolean;
+  createdAt: Timestamp;
+}
+
+// 쿠키 상점 신청
+export interface CookieShopRequest {
+  id: string;
+  itemId: string;
+  itemName: string;
+  itemPrice: number;
+  studentCode: string;
+  studentName: string;
+  studentNumber: number;
+  classId: string;
+  className: string;
+  quantity: number;
+  totalPrice: number;  // price * quantity
+  status: 'pending' | 'approved' | 'rejected' | 'completed';
+  teacherResponse?: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 // ========================================
@@ -302,18 +338,26 @@ export async function updateStudent(
   });
 }
 
-// 학생에게 쿠키 부여 (교사용)
-export async function addCookiesToStudent(
+// 학생에게 캔디 부여 (교사용)
+export async function addJellyToStudent(
   teacherId: string,
   studentCode: string,
   amount: number
 ): Promise<void> {
   const studentRef = doc(db, 'teachers', teacherId, 'students', studentCode);
   await updateDoc(studentRef, {
-    cookie: increment(amount),
-    totalCookie: increment(amount),
+    jelly: increment(amount),
     lastUpdate: serverTimestamp()
   });
+}
+
+// 학생에게 쿠키 부여 (교사용) - deprecated, 호환성 위해 유지 (캔디로 동작)
+export async function addCookiesToStudent(
+  teacherId: string,
+  studentCode: string,
+  amount: number
+): Promise<void> {
+  await addJellyToStudent(teacherId, studentCode, amount);
 }
 
 // 학생 삭제
@@ -521,7 +565,8 @@ export async function grantWish(
   const wishRef = doc(db, 'teachers', teacherId, 'wishes', wishId);
   await updateDoc(wishRef, {
     isGranted: true,
-    grantedMessage: message
+    grantedMessage: message,
+    grantedAt: serverTimestamp()
   });
 }
 
@@ -533,6 +578,29 @@ export async function deleteWish(
 ): Promise<void> {
   const wishRef = doc(db, 'teachers', teacherId, 'wishes', wishId);
   await deleteDoc(wishRef);
+}
+
+// 24시간 지난 선정된 소원 삭제
+export async function cleanupExpiredGrantedWishes(teacherId: string): Promise<number> {
+  const wishesRef = collection(db, 'teachers', teacherId, 'wishes');
+  const snapshot = await getDocs(wishesRef);
+
+  const now = new Date();
+  const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+  let deletedCount = 0;
+
+  for (const docSnap of snapshot.docs) {
+    const wish = docSnap.data() as Wish;
+    if (wish.isGranted && wish.grantedAt) {
+      const grantedTime = wish.grantedAt.toDate();
+      if (now.getTime() - grantedTime.getTime() > TWENTY_FOUR_HOURS) {
+        await deleteDoc(docSnap.ref);
+        deletedCount++;
+      }
+    }
+  }
+
+  return deletedCount;
 }
 
 // 실시간 소원 구독 (모든 클래스룸 공유)
@@ -600,7 +668,8 @@ export async function createTeam(
     teamName,
     flag,
     members: [],
-    teamCookie: 0
+    teamCookie: 0,
+    createdAt: serverTimestamp()
   });
 
   return teamRef.id;
@@ -681,7 +750,7 @@ export async function getShopItems(): Promise<ShopItem[]> {
   })) as ShopItem[];
 }
 
-// 아이템 구매
+// 아이템 구매 (캔디 사용)
 export async function purchaseItem(
   teacherId: string,
   studentCode: string,
@@ -691,8 +760,7 @@ export async function purchaseItem(
   const studentRef = doc(db, 'teachers', teacherId, 'students', studentCode);
 
   await updateDoc(studentRef, {
-    cookie: increment(-price),
-    usedCookie: increment(price),
+    jelly: increment(-price),  // 캔디로 구매
     ownedItems: arrayUnion(itemCode),
     lastUpdate: serverTimestamp()
   });
@@ -725,17 +793,24 @@ export async function getTeacherShopItems(teacherId: string): Promise<ShopItem[]
 // 상점 아이템 추가
 export async function addShopItem(
   teacherId: string,
-  item: Omit<ShopItem, 'code'>
+  item: Omit<ShopItem, 'code'> & { code?: string }
 ): Promise<string> {
   const itemsRef = collection(db, 'teachers', teacherId, 'shop');
-  const itemRef = doc(itemsRef);
+
+  // 코드가 제공되면 해당 코드 사용, 아니면 자동 생성
+  const itemCode = item.code || doc(itemsRef).id;
+  const itemRef = doc(itemsRef, itemCode);
 
   await setDoc(itemRef, {
-    code: itemRef.id,
-    ...item
+    code: itemCode,
+    name: item.name,
+    price: item.price,
+    category: item.category,
+    description: item.description,
+    value: item.value
   });
 
-  return itemRef.id;
+  return itemCode;
 }
 
 // 상점 아이템 수정
@@ -800,15 +875,34 @@ export async function saveProfile(
 // 잔디(Grass) API
 // ========================================
 
-// 잔디 기록 추가
+// 한국 시간 기준 날짜 문자열 생성 (YYYY-MM-DD)
+function getKoreanDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// 잔디 기록 추가 (주말은 금요일로 반영)
 export async function addGrassRecord(
   teacherId: string,
   classId: string,
   studentCode: string,
   cookieChange: number
 ): Promise<void> {
-  const today = new Date().toISOString().split('T')[0];
-  const grassRef = doc(db, 'teachers', teacherId, 'classes', classId, 'grass', today);
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // 0=일, 1=월, ..., 5=금, 6=토
+
+  // 주말이면 금요일로 조정
+  let targetDate = new Date(today);
+  if (dayOfWeek === 0) { // 일요일 -> 금요일 (-2일)
+    targetDate.setDate(targetDate.getDate() - 2);
+  } else if (dayOfWeek === 6) { // 토요일 -> 금요일 (-1일)
+    targetDate.setDate(targetDate.getDate() - 1);
+  }
+
+  const dateStr = getKoreanDateString(targetDate);
+  const grassRef = doc(db, 'teachers', teacherId, 'classes', classId, 'grass', dateStr);
   
   const grassSnap = await getDoc(grassRef);
   
@@ -878,6 +972,94 @@ export async function resetGrassData(
   }
 
   return { success: true, deletedCount };
+}
+
+// 특정 날짜에 잔디 기록 추가 (과거 소급용)
+export async function addGrassRecordForDate(
+  teacherId: string,
+  classId: string,
+  studentCode: string,
+  dateStr: string, // YYYY-MM-DD 형식
+  cookieChange: number
+): Promise<void> {
+  const grassRef = doc(db, 'teachers', teacherId, 'classes', classId, 'grass', dateStr);
+
+  const grassSnap = await getDoc(grassRef);
+
+  if (grassSnap.exists()) {
+    const records = grassSnap.data().records || {};
+    const currentData = records[studentCode] || { change: 0, count: 0 };
+
+    await updateDoc(grassRef, {
+      [`records.${studentCode}`]: {
+        change: currentData.change + cookieChange,
+        count: currentData.count + 1
+      }
+    });
+  } else {
+    await setDoc(grassRef, {
+      date: new Date(dateStr),
+      records: {
+        [studentCode]: { change: cookieChange, count: 1 }
+      }
+    });
+  }
+}
+
+// 잔디 날짜 재배치 (date Timestamp를 한국 시간으로 변환하여 올바른 날짜로 이동)
+export async function migrateGrassDateToToday(
+  teacherId: string,
+  classId: string
+): Promise<{ success: boolean; migratedCount: number }> {
+  const grassRef = collection(db, 'teachers', teacherId, 'classes', classId, 'grass');
+  const snapshot = await getDocs(grassRef);
+
+  let migratedCount = 0;
+
+  for (const docSnap of snapshot.docs) {
+    const docId = docSnap.id; // 현재 문서 ID (날짜 문자열)
+    const data = docSnap.data();
+    const dateTimestamp = data.date;
+
+    if (!dateTimestamp || !dateTimestamp.toDate) continue;
+
+    // Timestamp를 한국 시간 날짜 문자열로 변환
+    const actualDate = dateTimestamp.toDate();
+    const correctDateStr = getKoreanDateString(actualDate);
+
+    // 문서 ID와 실제 날짜가 다르면 재배치
+    if (docId !== correctDateStr) {
+      const records = data.records || {};
+      const correctRef = doc(db, 'teachers', teacherId, 'classes', classId, 'grass', correctDateStr);
+      const correctSnap = await getDoc(correctRef);
+
+      if (correctSnap.exists()) {
+        // 올바른 날짜에 이미 기록이 있으면 병합
+        const existingRecords = correctSnap.data().records || {};
+        for (const [studentCode, recordData] of Object.entries(records)) {
+          const record = recordData as { change: number; count: number };
+          const existing = existingRecords[studentCode] || { change: 0, count: 0 };
+          existingRecords[studentCode] = {
+            change: existing.change + record.change,
+            count: existing.count + record.count
+          };
+        }
+        await updateDoc(correctRef, { records: existingRecords });
+      } else {
+        // 올바른 날짜에 기록이 없으면 새로 생성
+        await setDoc(correctRef, {
+          date: actualDate,
+          records: records
+        });
+      }
+
+      // 잘못된 날짜의 문서 삭제
+      await deleteDoc(doc(db, 'teachers', teacherId, 'classes', classId, 'grass', docId));
+      migratedCount++;
+    }
+  }
+
+  return { success: migratedCount > 0, migratedCount };
 }
 
 // ========================================
@@ -981,15 +1163,13 @@ export async function canRefreshCookies(
 }
 
 // 쿠키 새로고침 (다했니 API에서 가져와서 Firestore에 저장)
-// 수동 새로고침은 언제든 가능, 잔디 기록은 4시간마다만 추가
+// 잔디는 쿠키가 증가할 때마다 바로 기록 (첫 등록 제외)
+// 캔디는 쿠키 증가분만큼 추가 (감소는 무시)
 export async function refreshStudentCookies(
   teacherId: string,
   classId: string,
   apiKey: string
 ): Promise<{ success: boolean; count: number; error?: string }> {
-  // 4시간 경과 여부 확인 (잔디 기록 추가 여부 결정용)
-  const { canRefresh: canRecordGrass } = await canRefreshCookies(teacherId, classId);
-
   const students = await getClassStudents(teacherId, classId);
   let updatedCount = 0;
 
@@ -997,22 +1177,44 @@ export async function refreshStudentCookies(
     try {
       const dahandinData = await fetchStudentFromDahandin(apiKey, student.code);
 
-      // 첫 로드인지 확인 (previousCookie가 0이면 첫 등록 후 첫 동기화)
-      const isFirstLoad = student.previousCookie === 0;
+      // 첫 로드인지 확인:
+      // 1. initialCookie가 없거나 0이면 첫 등록 후 첫 동기화
+      // 2. previousCookie가 0이면 이전 버전 데이터
+      const hasInitialCookie = student.initialCookie !== undefined && student.initialCookie > 0;
+      const isFirstLoad = !hasInitialCookie && student.previousCookie === 0;
+
+      // 쿠키 변화량 계산 (previousCookie 기준)
       const cookieChange = dahandinData.cookie - student.previousCookie;
 
+      // 캔디 마이그레이션: jelly가 없으면 현재 cookie 값으로 초기화
+      const currentJelly = student.jelly ?? student.cookie ?? 0;
+      const currentLastSyncedCookie = student.lastSyncedCookie ?? student.cookie ?? 0;
+
+      // 캔디 증가량 계산 (lastSyncedCookie 기준, 증가분만)
+      const jellyIncrease = Math.max(0, dahandinData.cookie - currentLastSyncedCookie);
+
       // 학생 정보 업데이트 (뱃지 포함)
-      await updateStudent(teacherId, student.code, {
+      const updateData: Partial<Student> = {
         cookie: dahandinData.cookie,
+        jelly: currentJelly + jellyIncrease,  // 증가분만 캔디에 추가
+        lastSyncedCookie: dahandinData.cookie, // 동기화 시점 기록
         usedCookie: dahandinData.usedCookie,
         totalCookie: dahandinData.totalCookie,
         chocoChips: dahandinData.chocoChips,
         previousCookie: dahandinData.cookie,
         badges: dahandinData.badges
-      });
+      };
 
-      // 잔디 기록 (4시간 경과 시에만, 쿠키가 증가했을 때만, 첫 로드는 제외)
-      if (canRecordGrass && cookieChange > 0 && !isFirstLoad) {
+      // 첫 로드면 initialCookie 설정
+      if (isFirstLoad) {
+        updateData.initialCookie = dahandinData.cookie;
+      }
+
+      await updateStudent(teacherId, student.code, updateData);
+
+      // 잔디 기록 (쿠키가 증가했을 때만, 첫 로드는 제외)
+      // 4시간 제한 제거 - 쿠키가 증가하면 바로 기록
+      if (cookieChange > 0 && !isFirstLoad) {
         await addGrassRecord(teacherId, classId, student.code, cookieChange);
       }
 
@@ -1022,13 +1224,11 @@ export async function refreshStudentCookies(
     }
   }
 
-  // 잔디 기록이 추가된 경우에만 새로고침 시간 업데이트
-  if (canRecordGrass) {
-    const classRef = doc(db, 'teachers', teacherId, 'classes', classId);
-    await updateDoc(classRef, {
-      lastCookieRefresh: serverTimestamp()
-    });
-  }
+  // 새로고침 시간 항상 업데이트
+  const classRef = doc(db, 'teachers', teacherId, 'classes', classId);
+  await updateDoc(classRef, {
+    lastCookieRefresh: serverTimestamp()
+  });
 
   return { success: true, count: updatedCount };
 }
@@ -1185,7 +1385,7 @@ export async function checkTodayGrass(
   classId: string,
   studentCode: string
 ): Promise<boolean> {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getKoreanDateString(new Date());
   const grassRef = doc(db, 'teachers', teacherId, 'classes', classId, 'grass', today);
   const grassSnap = await getDoc(grassRef);
 
@@ -1271,4 +1471,260 @@ export async function getMultipleStudentsInfo(
   }
 
   return results;
+}
+
+// ========================================
+// 쿠키 상점 API (실물 교환)
+// ========================================
+
+// 쿠키 상점 아이템 목록 조회 (전체 클래스 공유)
+export async function getCookieShopItems(
+  teacherId: string
+): Promise<CookieShopItem[]> {
+  const itemsRef = collection(db, 'teachers', teacherId, 'cookieShopItems');
+  const snapshot = await getDocs(query(itemsRef, orderBy('createdAt', 'desc')));
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  })) as CookieShopItem[];
+}
+
+// 쿠키 상점 아이템 추가 (전체 클래스 공유)
+export async function addCookieShopItem(
+  teacherId: string,
+  item: Omit<CookieShopItem, 'id' | 'createdAt'>
+): Promise<string> {
+  const itemsRef = collection(db, 'teachers', teacherId, 'cookieShopItems');
+  const newDoc = doc(itemsRef);
+  await setDoc(newDoc, {
+    ...item,
+    createdAt: serverTimestamp()
+  });
+  return newDoc.id;
+}
+
+// 쿠키 상점 아이템 수정 (전체 클래스 공유)
+export async function updateCookieShopItem(
+  teacherId: string,
+  itemId: string,
+  updates: Partial<Omit<CookieShopItem, 'id' | 'createdAt'>>
+): Promise<void> {
+  const itemRef = doc(db, 'teachers', teacherId, 'cookieShopItems', itemId);
+  await updateDoc(itemRef, updates);
+}
+
+// 쿠키 상점 아이템 삭제 (전체 클래스 공유)
+export async function deleteCookieShopItem(
+  teacherId: string,
+  itemId: string
+): Promise<void> {
+  const itemRef = doc(db, 'teachers', teacherId, 'cookieShopItems', itemId);
+  await deleteDoc(itemRef);
+}
+
+// 쿠키 상점 신청 생성 (학생용 - 전체 클래스 공유)
+export async function createCookieShopRequest(
+  teacherId: string,
+  request: Omit<CookieShopRequest, 'id' | 'createdAt' | 'status'>
+): Promise<string> {
+  const requestsRef = collection(db, 'teachers', teacherId, 'cookieShopRequests');
+  const newDoc = doc(requestsRef);
+  await setDoc(newDoc, {
+    ...request,
+    status: 'pending',
+    createdAt: serverTimestamp()
+  });
+  return newDoc.id;
+}
+
+// 쿠키 상점 신청 목록 조회 (교사용 - 전체 클래스 공유)
+export async function getCookieShopRequests(
+  teacherId: string,
+  statusFilter?: 'pending' | 'approved' | 'rejected' | 'completed'
+): Promise<CookieShopRequest[]> {
+  const requestsRef = collection(db, 'teachers', teacherId, 'cookieShopRequests');
+  let q;
+  if (statusFilter) {
+    // 인덱스 오류 방지를 위해 클라이언트 측 정렬
+    q = query(requestsRef, where('status', '==', statusFilter));
+  } else {
+    q = query(requestsRef, orderBy('createdAt', 'desc'));
+  }
+  const snapshot = await getDocs(q);
+  const requests = snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  })) as CookieShopRequest[];
+  // statusFilter 있을 때 클라이언트 측 정렬
+  if (statusFilter) {
+    return requests.sort((a, b) => {
+      const aTime = a.createdAt?.toMillis?.() || 0;
+      const bTime = b.createdAt?.toMillis?.() || 0;
+      return bTime - aTime;
+    });
+  }
+  return requests;
+}
+
+// 쿠키 상점 신청 목록 조회 (학생용 - 본인 것만)
+export async function getStudentCookieShopRequests(
+  teacherId: string,
+  studentCode: string
+): Promise<CookieShopRequest[]> {
+  const requestsRef = collection(db, 'teachers', teacherId, 'cookieShopRequests');
+  // 인덱스 오류 방지를 위해 클라이언트 측 정렬
+  const q = query(requestsRef, where('studentCode', '==', studentCode));
+  const snapshot = await getDocs(q);
+  const requests = snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  })) as CookieShopRequest[];
+  // 최신순 정렬 (클라이언트 측)
+  return requests.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis?.() || 0;
+    const bTime = b.createdAt?.toMillis?.() || 0;
+    return bTime - aTime;
+  });
+}
+
+// 쿠키 상점 신청 상태 업데이트 (교사용 - 전체 클래스 공유)
+export async function updateCookieShopRequestStatus(
+  teacherId: string,
+  requestId: string,
+  status: 'approved' | 'rejected' | 'completed',
+  teacherResponse?: string
+): Promise<void> {
+  const requestRef = doc(db, 'teachers', teacherId, 'cookieShopRequests', requestId);
+  await updateDoc(requestRef, {
+    status,
+    teacherResponse: teacherResponse || '',
+    updatedAt: serverTimestamp()
+  });
+}
+
+// 대기 중인 신청 개수 조회 (교사용 - 전체 클래스 공유)
+export async function getPendingCookieShopRequestsCount(
+  teacherId: string
+): Promise<number> {
+  const requestsRef = collection(db, 'teachers', teacherId, 'cookieShopRequests');
+  const q = query(requestsRef, where('status', '==', 'pending'));
+  const snapshot = await getDocs(q);
+  return snapshot.size;
+}
+
+// 쿠키 상점 신청 삭제 (전체 클래스 공유)
+export async function deleteCookieShopRequest(
+  teacherId: string,
+  requestId: string
+): Promise<void> {
+  const requestRef = doc(db, 'teachers', teacherId, 'cookieShopRequests', requestId);
+  await deleteDoc(requestRef);
+}
+
+// ========== 상점 물품 요청 (학생 → 교사) ==========
+
+// 물품 요청 타입
+export interface ItemSuggestion {
+  id: string;
+  studentCode: string;
+  studentName: string;
+  classId: string;
+  className?: string;
+  itemName: string;
+  description?: string;
+  createdAt: Timestamp;
+  status: 'pending' | 'approved' | 'rejected';
+  teacherMessage?: string;
+  updatedAt?: Timestamp;
+}
+
+// 물품 요청 생성 (학생용)
+export async function createItemSuggestion(
+  teacherId: string,
+  suggestion: Omit<ItemSuggestion, 'id' | 'createdAt' | 'status'>
+): Promise<string> {
+  const suggestionsRef = collection(db, 'teachers', teacherId, 'itemSuggestions');
+  const newDoc = doc(suggestionsRef);
+  await setDoc(newDoc, {
+    ...suggestion,
+    status: 'pending',
+    createdAt: serverTimestamp()
+  });
+  return newDoc.id;
+}
+
+// 물품 요청 목록 조회 (교사용)
+export async function getItemSuggestions(
+  teacherId: string
+): Promise<ItemSuggestion[]> {
+  const suggestionsRef = collection(db, 'teachers', teacherId, 'itemSuggestions');
+  const snapshot = await getDocs(suggestionsRef);
+  const suggestions = snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  })) as ItemSuggestion[];
+
+  // 클라이언트 측 정렬 (최신순)
+  return suggestions.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis?.() || 0;
+    const bTime = b.createdAt?.toMillis?.() || 0;
+    return bTime - aTime;
+  });
+}
+
+// 물품 요청 상태 업데이트 (교사용)
+export async function updateItemSuggestionStatus(
+  teacherId: string,
+  suggestionId: string,
+  status: 'pending' | 'approved' | 'rejected',
+  teacherMessage?: string
+): Promise<void> {
+  const suggestionRef = doc(db, 'teachers', teacherId, 'itemSuggestions', suggestionId);
+  const updateData: any = {
+    status,
+    updatedAt: serverTimestamp()
+  };
+  if (teacherMessage) {
+    updateData.teacherMessage = teacherMessage;
+  }
+  await updateDoc(suggestionRef, updateData);
+}
+
+// 학생용 물품 요청 목록 조회
+export async function getStudentItemSuggestions(
+  teacherId: string,
+  studentCode: string
+): Promise<ItemSuggestion[]> {
+  const suggestionsRef = collection(db, 'teachers', teacherId, 'itemSuggestions');
+  const q = query(suggestionsRef, where('studentCode', '==', studentCode));
+  const snapshot = await getDocs(q);
+  const suggestions = snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  })) as ItemSuggestion[];
+
+  return suggestions.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis?.() || 0;
+    const bTime = b.createdAt?.toMillis?.() || 0;
+    return bTime - aTime;
+  });
+}
+
+// 물품 요청 삭제 (교사용)
+export async function deleteItemSuggestion(
+  teacherId: string,
+  suggestionId: string
+): Promise<void> {
+  const suggestionRef = doc(db, 'teachers', teacherId, 'itemSuggestions', suggestionId);
+  await deleteDoc(suggestionRef);
+}
+
+// 대기 중인 물품 요청 개수 조회
+export async function getPendingItemSuggestionsCount(
+  teacherId: string
+): Promise<number> {
+  const suggestionsRef = collection(db, 'teachers', teacherId, 'itemSuggestions');
+  const q = query(suggestionsRef, where('status', '==', 'pending'));
+  const snapshot = await getDocs(q);
+  return snapshot.size;
 }

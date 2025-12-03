@@ -303,15 +303,88 @@ export function generateDefensePenaltyNarration(teamName: string, penaltyCookies
 }
 
 // 팀 이모지 옵션
-export const TEAM_FLAGS = [
+// 팀 이름과 이모지 매핑 (이름과 이모지가 일치하도록)
+export const TEAM_NOUN_EMOJI_MAP: { noun: string; emoji: string }[] = [
   // 동물
-  '🐉', '🦅', '🦁', '🐺', '🦊', '🐻', '🦈', '🦋', '🐯', '🦄',
-  '🐼', '🐰', '🦖', '🦕', '🐸', '🦀', '🐙', '🦑', '🦩', '🦚',
+  { noun: '드래곤', emoji: '🐉' },
+  { noun: '이글', emoji: '🦅' },
+  { noun: '라이온', emoji: '🦁' },
+  { noun: '울프', emoji: '🐺' },
+  { noun: '폭스', emoji: '🦊' },
+  { noun: '베어', emoji: '🐻' },
+  { noun: '샤크', emoji: '🦈' },
+  { noun: '타이거', emoji: '🐯' },
+  { noun: '유니콘', emoji: '🦄' },
+  { noun: '판다', emoji: '🐼' },
+  { noun: '래빗', emoji: '🐰' },
+  { noun: '티렉스', emoji: '🦖' },
+  { noun: '옥토퍼스', emoji: '🐙' },
+  { noun: '피닉스', emoji: '🔥' },
+  { noun: '플라밍고', emoji: '🦩' },
+  { noun: '피콕', emoji: '🦚' },
+  { noun: '돌핀', emoji: '🐬' },
+  { noun: '호크', emoji: '🪶' },
+  { noun: '코브라', emoji: '🐍' },
+  { noun: '펭귄', emoji: '🐧' },
   // 자연/우주
-  '🔥', '🌟', '⚡', '🌊', '🌈', '☀️', '🌙', '⭐', '🪐', '🌸',
-  // 물건/특별
-  '🎯', '🚀', '💎', '🏆', '👑', '🗡️', '🛡️', '⚔️', '🎮', '🎪',
+  { noun: '스타', emoji: '⭐' },
+  { noun: '썬더', emoji: '⚡' },
+  { noun: '웨이브', emoji: '🌊' },
+  { noun: '레인보우', emoji: '🌈' },
+  { noun: '선', emoji: '☀️' },
+  { noun: '문', emoji: '🌙' },
+  { noun: '플래닛', emoji: '🪐' },
+  { noun: '블로썸', emoji: '🌸' },
+  { noun: '플레임', emoji: '🌋' },
+  { noun: '스톰', emoji: '🌪️' },
+  // 특별/물건
+  { noun: '크라운', emoji: '👑' },
+  { noun: '다이아몬드', emoji: '💎' },
+  { noun: '로켓', emoji: '🚀' },
+  { noun: '트로피', emoji: '🏆' },
+  { noun: '나이츠', emoji: '⚔️' },
+  { noun: '가디언', emoji: '🛡️' },
+  { noun: '헌터', emoji: '🎯' },
+  { noun: '서커스', emoji: '🎪' },
 ];
+
+// 기존 TEAM_FLAGS 유지 (빠른 팀 생성용)
+export const TEAM_FLAGS = TEAM_NOUN_EMOJI_MAP.map(item => item.emoji);
+
+// 팀 이름 형용사 (붉은, 푸른, 용맹한 등) - 더 재치있고 다양하게
+export const TEAM_ADJECTIVES = [
+  // 색상
+  '붉은', '푸른', '황금', '은빛', '검은', '무지개빛',
+  // 분위기
+  '용맹한', '신비한', '전설의', '불타는', '얼어붙은',
+  '폭풍의', '번개의', '포효하는', '날쌘', '거침없는',
+  // 시간
+  '빛나는', '어둠의', '새벽의', '황혼의', '한밤의',
+  // 강함
+  '무적의', '고대의', '영원한', '깨어난', '최후의', '전설의',
+  // 재치있는
+  '배고픈', '졸린', '신난', '까불거리는', '쿠키탐하는',
+  '말랑한', '뾰족한', '몽글몽글', '반짝이는', '두근두근',
+];
+
+// 팀 이름 명사 목록 (TEAM_NOUN_EMOJI_MAP에서 추출)
+export const TEAM_NOUNS = TEAM_NOUN_EMOJI_MAP.map(item => item.noun);
+
+// 랜덤 팀 이름과 이모지 생성 (형용사 + 명사, 일치하는 이모지)
+export function generateRandomTeamNameWithEmoji(): { name: string; emoji: string } {
+  const adj = TEAM_ADJECTIVES[Math.floor(Math.random() * TEAM_ADJECTIVES.length)];
+  const item = TEAM_NOUN_EMOJI_MAP[Math.floor(Math.random() * TEAM_NOUN_EMOJI_MAP.length)];
+  return {
+    name: `${adj} ${item.noun}`,
+    emoji: item.emoji
+  };
+}
+
+// 기존 함수 유지 (호환성)
+export function generateRandomTeamName(): string {
+  const result = generateRandomTeamNameWithEmoji();
+  return result.name;
+}
 
 // 승률 계산 함수
 export function calculateWinProbability(
