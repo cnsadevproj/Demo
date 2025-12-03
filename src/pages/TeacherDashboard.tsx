@@ -3536,12 +3536,19 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               <>
                 {/* 팀별 현황 */}
                 {teams.map((team) => {
-                  // 팀 총 쿠키 획득량 계산
+                  // 팀 결성일 (없으면 아주 오래 전 날짜로 설정)
+                  const teamCreatedAtForTotal = team.createdAt?.toDate?.() || new Date(0);
+                  const teamCreatedDateStrForTotal = getKoreanDateString(teamCreatedAtForTotal);
+
+                  // 팀 총 쿠키 획득량 계산 (팀 결성 이후만)
                   let teamTotalCookieGain = 0;
                   team.members.forEach(code => {
                     const memberGrass = teamStatusData.get(code) || [];
                     memberGrass.forEach(g => {
-                      if (g.cookieChange > 0) teamTotalCookieGain += g.cookieChange;
+                      // 팀 결성일 이후의 데이터만 합산
+                      if (g.date >= teamCreatedDateStrForTotal && g.cookieChange > 0) {
+                        teamTotalCookieGain += g.cookieChange;
+                      }
                     });
                   });
 
@@ -3582,6 +3589,13 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                             const student = students.find(s => s.code === code);
                             const memberGrass = teamStatusData.get(code) || [];
 
+                            // 팀 결성일 (없으면 아주 오래 전 날짜로 설정)
+                            const teamCreatedAt = team.createdAt?.toDate?.() || new Date(0);
+                            const teamCreatedDateStr = getKoreanDateString(teamCreatedAt);
+
+                            // 팀 결성일 이후의 잔디 데이터만 필터링
+                            const memberGrassAfterTeam = memberGrass.filter(g => g.date >= teamCreatedDateStr);
+
                             // 최근 7일간 쿠키 변화량 계산
                             const today = new Date();
                             const recentDays: { date: string; change: number }[] = [];
@@ -3589,15 +3603,15 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                               const d = new Date(today);
                               d.setDate(d.getDate() - i);
                               const dateStr = getKoreanDateString(d);
-                              const dayData = memberGrass.find(g => g.date === dateStr);
+                              const dayData = memberGrassAfterTeam.find(g => g.date === dateStr);
                               recentDays.push({
                                 date: dateStr,
                                 change: dayData?.cookieChange || 0
                               });
                             }
 
-                            // 총 획득량
-                            const totalGain = memberGrass.reduce((sum, g) => sum + (g.cookieChange > 0 ? g.cookieChange : 0), 0);
+                            // 총 획득량 (팀 결성 이후만)
+                            const totalGain = memberGrassAfterTeam.reduce((sum, g) => sum + (g.cookieChange > 0 ? g.cookieChange : 0), 0);
 
                             return (
                               <div key={code} className="p-4 bg-gray-50 rounded-xl">
