@@ -37,11 +37,65 @@ export function BulletDodgeTeacher() {
   const [players, setPlayers] = useState<PlayerData[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // 타이머 관련 상태
+  const [timerMinutes, setTimerMinutes] = useState<number>(3); // 기본 3분
+  const [timerSeconds, setTimerSeconds] = useState<number>(0);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [remainingTime, setRemainingTime] = useState<number>(0); // 남은 시간 (초)
+  const [frozenPlayers, setFrozenPlayers] = useState<PlayerData[] | null>(null); // 타이머 종료 시 고정된 순위
+
   // 학생 모달 관련 상태
   const [selectedPlayer, setSelectedPlayer] = useState<PlayerData | null>(null);
   const [studentData, setStudentData] = useState<StudentData | null>(null);
   const [candyAmount, setCandyAmount] = useState('');
   const [isAddingCandy, setIsAddingCandy] = useState(false);
+
+  // 타이머 시작
+  const startTimer = () => {
+    const totalSeconds = timerMinutes * 60 + timerSeconds;
+    if (totalSeconds <= 0) return;
+    setRemainingTime(totalSeconds);
+    setIsTimerRunning(true);
+    setFrozenPlayers(null); // 타이머 시작 시 고정 해제
+  };
+
+  // 타이머 중지
+  const stopTimer = () => {
+    setIsTimerRunning(false);
+  };
+
+  // 타이머 리셋
+  const resetTimer = () => {
+    setIsTimerRunning(false);
+    setRemainingTime(0);
+    setFrozenPlayers(null);
+  };
+
+  // 타이머 카운트다운
+  useEffect(() => {
+    if (!isTimerRunning || remainingTime <= 0) return;
+
+    const interval = setInterval(() => {
+      setRemainingTime(prev => {
+        if (prev <= 1) {
+          setIsTimerRunning(false);
+          // 타이머 종료 시 현재 순위 고정
+          setFrozenPlayers([...players]);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isTimerRunning, remainingTime, players]);
+
+  // 남은 시간 포맷팅
+  const formatRemainingTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   // 학생 모달 열기
   const openStudentModal = async (player: PlayerData) => {
@@ -264,6 +318,79 @@ export function BulletDodgeTeacher() {
             )}
             {gameData?.status === 'playing' && (
               <>
+                {/* 타이머 설정 */}
+                <div className="col-span-2 bg-white/10 rounded-xl p-3 mb-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-white/70 text-sm">⏱️ 타이머</span>
+                    {frozenPlayers && (
+                      <span className="text-amber-400 text-xs font-bold animate-pulse">🔒 순위 고정됨</span>
+                    )}
+                  </div>
+
+                  {!isTimerRunning && remainingTime === 0 ? (
+                    // 타이머 설정 UI
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max="59"
+                        value={timerMinutes}
+                        onChange={(e) => setTimerMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                        className="w-14 px-2 py-2 bg-white/20 text-white text-center rounded-lg font-bold"
+                      />
+                      <span className="text-white">분</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="59"
+                        value={timerSeconds}
+                        onChange={(e) => setTimerSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                        className="w-14 px-2 py-2 bg-white/20 text-white text-center rounded-lg font-bold"
+                      />
+                      <span className="text-white">초</span>
+                      <button
+                        onClick={startTimer}
+                        disabled={timerMinutes === 0 && timerSeconds === 0}
+                        className="flex-1 py-2 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 disabled:opacity-50"
+                      >
+                        ▶️ 시작
+                      </button>
+                    </div>
+                  ) : (
+                    // 타이머 실행 중 또는 종료됨
+                    <div className="flex items-center gap-2">
+                      <div className={`flex-1 text-center py-2 rounded-lg font-bold text-2xl ${
+                        remainingTime === 0 ? 'bg-red-500/30 text-red-300' :
+                        remainingTime <= 10 ? 'bg-red-500/20 text-red-300 animate-pulse' :
+                        'bg-white/20 text-white'
+                      }`}>
+                        {remainingTime === 0 ? '⏰ 종료!' : formatRemainingTime(remainingTime)}
+                      </div>
+                      {isTimerRunning ? (
+                        <button
+                          onClick={stopTimer}
+                          className="px-4 py-2 bg-amber-500 text-white rounded-lg font-bold hover:bg-amber-600"
+                        >
+                          ⏸️
+                        </button>
+                      ) : (
+                        <button
+                          onClick={startTimer}
+                          className="px-4 py-2 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600"
+                        >
+                          ▶️
+                        </button>
+                      )}
+                      <button
+                        onClick={resetTimer}
+                        className="px-4 py-2 bg-gray-500 text-white rounded-lg font-bold hover:bg-gray-600"
+                      >
+                        🔄
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <button
                   onClick={handleEndGame}
                   className="col-span-2 px-4 py-3 bg-amber-600 text-white rounded-xl font-bold hover:bg-amber-700 transition-all"
@@ -285,18 +412,23 @@ export function BulletDodgeTeacher() {
 
         {/* 참가자 / 리더보드 */}
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-          <h2 className="text-lg font-bold text-white mb-4">
-            🏆 리더보드 ({players.length}명)
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-white">
+              🏆 리더보드 ({players.length}명)
+            </h2>
+            {frozenPlayers && (
+              <span className="text-amber-400 text-sm font-bold">🔒 순위 고정</span>
+            )}
+          </div>
 
-          {players.length === 0 ? (
+          {(frozenPlayers || players).length === 0 ? (
             <div className="text-center py-8">
               <div className="text-4xl mb-2">🎮</div>
               <p className="text-white/50">아직 참가한 학생이 없습니다</p>
             </div>
           ) : (
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {players.map((player, index) => (
+              {(frozenPlayers || players).map((player, index) => (
                 <div
                   key={player.code}
                   onClick={() => openStudentModal(player)}
@@ -305,7 +437,7 @@ export function BulletDodgeTeacher() {
                     index === 1 ? 'bg-gray-400/20 border border-gray-400/30' :
                     index === 2 ? 'bg-orange-600/20 border border-orange-600/30' :
                     'bg-white/5'
-                  }`}
+                  } ${frozenPlayers ? 'ring-1 ring-amber-500/30' : ''}`}
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-xl">
@@ -315,12 +447,13 @@ export function BulletDodgeTeacher() {
                        `${index + 1}위`}
                     </span>
                     <span className="text-white font-medium">{player.name}</span>
+                    {frozenPlayers && <span className="text-amber-400 text-xs">🔒</span>}
                   </div>
                   <div className="text-right">
                     <div className="text-white font-bold">
                       {formatScore(player.highScore || 0)}
                     </div>
-                    {player.lastScore !== player.highScore && player.lastScore > 0 && (
+                    {!frozenPlayers && player.lastScore !== player.highScore && player.lastScore > 0 && (
                       <div className="text-white/50 text-xs">
                         최근: {formatScore(player.lastScore || 0)}
                       </div>
