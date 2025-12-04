@@ -2527,3 +2527,35 @@ button {
 .space-y-1 > :not([hidden]) ~ :not([hidden]) {
   margin-top: 0.25rem;
 }
+
+/* ========================================
+   Indigo 500 gradient - FeedbackButton용
+   ======================================== */
+
+.from-indigo-500 {
+  --tw-gradient-from: rgb(99 102 241);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(99 102 241 / 0));
+}
+
+.to-purple-500 {
+  --tw-gradient-to: rgb(168 85 247);
+}
+
+.hover\:from-indigo-600:hover {
+  --tw-gradient-from: rgb(79 70 229);
+}
+
+.hover\:to-purple-600:hover {
+  --tw-gradient-to: rgb(147 51 234);
+}
+
+.text-\[10px\] {
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+/* py-1.5 */
+.py-1\.5 {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+}

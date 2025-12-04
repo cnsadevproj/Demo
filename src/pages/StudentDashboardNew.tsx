@@ -2179,39 +2179,41 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 <CardDescription>나만의 프로필을 만들어보세요</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* 미리보기 - 프로필 효과 적용 */}
-                <div className="text-center p-6 rounded-xl bg-gradient-to-b from-amber-50 to-orange-50">
-                  <p className="text-xs text-gray-500 mb-3">미리보기</p>
-                  <div
-                    className={`inline-block px-6 py-4 rounded-xl ${getAnimationClass(selectedAnimation)}`}
-                    style={{
-                      border: `2px solid ${getBorderColor(selectedBtnBorder)}`,
-                      ...(isGradientFill(selectedBtnFill)
-                        ? { backgroundImage: getGradientStyle(selectedBtnFill) }
-                        : { backgroundColor: getFillColor(selectedBtnFill) || 'transparent' }
-                      ),
-                    }}
-                  >
-                    {/* 뱃지가 선택되어 있으면 뱃지 표시, 없으면 이모지 표시 */}
-                    {selectedBadge && currentStudent?.badges?.[selectedBadge]?.hasBadge ? (
-                      <div className={`mb-2 ${getAnimationClass(selectedAnimation)}`}>
-                        <img
-                          src={currentStudent.badges[selectedBadge].imgUrl}
-                          alt={currentStudent.badges[selectedBadge].title}
-                          className="w-16 h-16 mx-auto rounded"
-                        />
-                      </div>
-                    ) : selectedEmoji && getOwnedEmojis().includes(selectedEmoji) ? (
-                      <div className={`text-4xl mb-2 ${getAnimationClass(selectedAnimation)}`}>{selectedEmoji}</div>
-                    ) : (
-                      <div className="w-12 h-12 mx-auto mb-2 bg-gray-200 rounded-full flex items-center justify-center">
-                        <span className="text-gray-400 text-xs">없음</span>
-                      </div>
-                    )}
-                    <p className={`font-bold text-lg ${getNameEffectClass(selectedNameEffect)}`}>{currentStudent.name}</p>
-                    {hasTitlePermit() && selectedTitle && (
-                      <p className={`text-sm mt-1 ${getTitleColorClass(selectedTitleColor)}`}>{selectedTitle}</p>
-                    )}
+                {/* 미리보기 - 상단 고정 (sticky) */}
+                <div className="sticky top-0 z-10 bg-white pb-4">
+                  <div className="text-center p-4 rounded-xl bg-gradient-to-b from-amber-50 to-orange-50 shadow-md">
+                    <p className="text-xs text-gray-500 mb-2">👁️ 미리보기</p>
+                    <div
+                      className={`inline-block px-6 py-4 rounded-xl ${getAnimationClass(selectedAnimation)}`}
+                      style={{
+                        border: `2px solid ${getBorderColor(selectedBtnBorder)}`,
+                        ...(isGradientFill(selectedBtnFill)
+                          ? { backgroundImage: getGradientStyle(selectedBtnFill) }
+                          : { backgroundColor: getFillColor(selectedBtnFill) || 'transparent' }
+                        ),
+                      }}
+                    >
+                      {/* 뱃지가 선택되어 있으면 뱃지 표시, 없으면 이모지 표시 */}
+                      {selectedBadge && currentStudent?.badges?.[selectedBadge]?.hasBadge ? (
+                        <div className={`mb-2 ${getAnimationClass(selectedAnimation)}`}>
+                          <img
+                            src={currentStudent.badges[selectedBadge].imgUrl}
+                            alt={currentStudent.badges[selectedBadge].title}
+                            className="w-16 h-16 mx-auto rounded"
+                          />
+                        </div>
+                      ) : selectedEmoji && getOwnedEmojis().includes(selectedEmoji) ? (
+                        <div className={`text-4xl mb-2 ${getAnimationClass(selectedAnimation)}`}>{selectedEmoji}</div>
+                      ) : (
+                        <div className="w-12 h-12 mx-auto mb-2 bg-gray-200 rounded-full flex items-center justify-center">
+                          <span className="text-gray-400 text-xs">없음</span>
+                        </div>
+                      )}
+                      <p className={`font-bold text-lg ${getNameEffectClass(selectedNameEffect)}`}>{currentStudent.name}</p>
+                      {hasTitlePermit() && selectedTitle && (
+                        <p className={`text-sm mt-1 ${getTitleColorClass(selectedTitleColor)}`}>{selectedTitle}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -2233,13 +2235,14 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         <button
                           key={emoji}
                           onClick={() => setSelectedEmoji(selectedEmoji === emoji ? '' : emoji)}
-                          className={`text-2xl px-3 py-1 rounded-lg transition-all shadow-md hover:shadow-lg ${
+                          className={`relative text-2xl px-3 py-1 rounded-lg transition-all shadow-md hover:shadow-lg ${
                             selectedEmoji === emoji
-                              ? 'bg-amber-100 ring-2 ring-amber-400 scale-110'
+                              ? 'bg-green-100 ring-2 ring-green-500 scale-110'
                               : 'bg-white hover:bg-gray-50'
                           }`}
                         >
                           {emoji}
+                          {selectedEmoji === emoji && <span className="absolute -top-1 -right-1 text-green-600 text-xs bg-white rounded-full">✓</span>}
                         </button>
                       ))}
                     </div>
@@ -2271,14 +2274,15 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                           <button
                             key={key}
                             onClick={() => setSelectedBadge(selectedBadge === key ? '' : key)}
-                            className={`p-2 rounded-lg transition-all shadow-md hover:shadow-lg ${
+                            className={`relative p-2 rounded-lg transition-all shadow-md hover:shadow-lg ${
                               selectedBadge === key
-                                ? 'bg-amber-100 ring-2 ring-amber-400 scale-110'
+                                ? 'bg-green-100 ring-2 ring-green-500 scale-110'
                                 : 'bg-white hover:bg-gray-50'
                             }`}
                             title={badge.title}
                           >
                             <img src={badge.imgUrl} alt={badge.title} className="w-16 h-16 rounded" />
+                            {selectedBadge === key && <span className="absolute -top-1 -right-1 text-green-600 text-xs bg-white rounded-full px-1">✓</span>}
                           </button>
                         ))}
                     </div>
@@ -2333,13 +2337,14 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                       <button
                         key={item.code}
                         onClick={() => setSelectedTitleColor(selectedTitleColor === item.value ? '0' : item.value)}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
+                        className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
                           selectedTitleColor === item.value
-                            ? 'ring-2 ring-amber-400 scale-105'
+                            ? 'ring-2 ring-green-500 scale-105'
                             : 'hover:scale-105'
                         } ${getTitleColorClass(item.value)} bg-white border`}
                       >
                         {item.name}
+                        {selectedTitleColor === item.value && <span className="absolute -top-1 -right-1 text-green-600 text-xs bg-white rounded-full px-1">✓</span>}
                       </button>
                     ))}
                   </div>
@@ -2362,13 +2367,14 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         <button
                           key={item.code}
                           onClick={() => setSelectedNameEffect(selectedNameEffect === item.value ? 'none' : item.value)}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
+                          className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
                             selectedNameEffect === item.value
-                              ? 'ring-2 ring-amber-400 scale-105'
+                              ? 'ring-2 ring-green-500 scale-105'
                               : 'hover:scale-105'
                           } ${getNameEffectClass(item.value)} bg-white border`}
                         >
                           {item.name}
+                          {selectedNameEffect === item.value && <span className="absolute -top-1 -right-1 text-green-600 text-xs bg-white rounded-full px-1">✓</span>}
                         </button>
                       ))}
                     </div>
@@ -2392,13 +2398,14 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         <button
                           key={item.code}
                           onClick={() => setSelectedAnimation(selectedAnimation === item.value ? 'none' : item.value)}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
+                          className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
                             selectedAnimation === item.value
-                              ? 'ring-2 ring-amber-400 scale-105'
+                              ? 'ring-2 ring-green-500 scale-105'
                               : 'hover:scale-105'
                           } ${selectedAnimation === item.value ? getAnimationClass(item.value) : ''} bg-white border`}
                         >
                           {item.name}
+                          {selectedAnimation === item.value && <span className="absolute -top-1 -right-1 text-green-600 text-xs bg-white rounded-full px-1">✓</span>}
                         </button>
                       ))}
                     </div>
@@ -2422,14 +2429,15 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         <button
                           key={item.code}
                           onClick={() => setSelectedBtnBorder(selectedBtnBorder === item.value ? 'gray-300' : item.value)}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg bg-white ${
+                          className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg bg-white ${
                             selectedBtnBorder === item.value
-                              ? 'ring-2 ring-amber-400 scale-105'
+                              ? 'ring-2 ring-green-500 scale-105'
                               : 'hover:scale-105'
                           }`}
                           style={{ border: `2px solid ${getBorderColor(item.value)}` }}
                         >
                           {item.name}
+                          {selectedBtnBorder === item.value && <span className="absolute -top-1 -right-1 text-green-600 text-xs bg-white rounded-full px-1">✓</span>}
                         </button>
                       ))}
                     </div>
@@ -2453,9 +2461,9 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         <button
                           key={item.code}
                           onClick={() => setSelectedBtnFill(selectedBtnFill === item.value ? 'none' : item.value)}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
+                          className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
                             selectedBtnFill === item.value
-                              ? 'ring-2 ring-amber-400 scale-105'
+                              ? 'ring-2 ring-green-500 scale-105'
                               : 'hover:scale-105'
                           }`}
                           style={{
@@ -2467,6 +2475,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                           }}
                         >
                           {item.name}
+                          {selectedBtnFill === item.value && <span className="absolute -top-1 -right-1 text-green-600 text-xs bg-white rounded-full px-1">✓</span>}
                         </button>
                       ))}
                     </div>

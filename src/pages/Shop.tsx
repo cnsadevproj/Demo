@@ -237,10 +237,34 @@ export function Shop({ onBack }: ShopProps) {
                         </Badge>
                       )}
 
-                      {/* 아이템 미리보기 */}
-                      <div className="text-center mb-2">
+                      {/* 카테고리 유형 표시 (상단) */}
+                      <div className="text-center text-[10px] text-gray-400 mb-1">
+                        {selectedCategory === 'emoji' && '이모지'}
+                        {selectedCategory === 'titlePermit' && '칭호권'}
+                        {selectedCategory === 'titleColor' && '칭호색상'}
+                        {selectedCategory === 'animation' && '애니메이션'}
+                        {selectedCategory === 'buttonBorder' && '테두리색'}
+                        {selectedCategory === 'buttonFill' && '채우기'}
+                        {selectedCategory === 'border' && '프로필테두리'}
+                        {selectedCategory === 'nameEffect' && '이름효과'}
+                        {selectedCategory === 'background' && '배경'}
+                      </div>
+
+                      {/* 아이템 미리보기 (중앙 - 크게) */}
+                      <div className="text-center mb-1">
                         {selectedCategory === 'emoji' && (
-                          <span className="text-2xl">{displayValue}</span>
+                          <span className="text-3xl">{displayValue}</span>
+                        )}
+                        {selectedCategory === 'titlePermit' && (
+                          <Badge className="bg-indigo-100 text-indigo-800">
+                            칭호
+                          </Badge>
+                        )}
+                        {selectedCategory === 'animation' && (
+                          <span className="text-3xl">
+                            {item.name.match(/(\p{Emoji_Presentation}|\p{Extended_Pictographic})/u)?.[0] ||
+                             item.name.slice(0, 2).trim() || '✨'}
+                          </span>
                         )}
                         {selectedCategory === 'border' && (
                           <div
@@ -361,7 +385,7 @@ export function Shop({ onBack }: ShopProps) {
                         )}
                       </div>
 
-                      {/* 아이템 이름 */}
+                      {/* 아이템 이름 (하단) */}
                       <p className="text-center font-medium text-xs mb-1 truncate">{item.name}</p>
 
                       {/* 가격 / 구매 버튼 */}
