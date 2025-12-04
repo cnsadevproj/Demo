@@ -292,7 +292,7 @@ export function BulletDodgeTeacher() {
             <button
               onClick={() => {
                 if (gameId && gameData?.status === 'playing') {
-                  window.open(`/game/bullet-dodge?gameId=${gameId}&studentCode=teacher&studentName=선생님`, '_blank');
+                  window.open(`${window.location.origin}?game=bullet-dodge&gameId=${gameId}&studentCode=teacher&studentName=${encodeURIComponent('선생님')}`, '_blank');
                 } else {
                   alert('게임이 진행 중일 때만 참여할 수 있습니다.');
                 }

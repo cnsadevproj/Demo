@@ -650,6 +650,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   // 상점 모드 (캔디/쿠키)
   const [shopMode, setShopMode] = useState<'candy' | 'cookie'>('candy');
 
+  // 팀 탭 모드 (관리/현황)
+  const [teamTabMode, setTeamTabMode] = useState<'manage' | 'status'>('manage');
+
   // 쿠키 상점 상태
   const [cookieShopItems, setCookieShopItems] = useState<CookieShopItem[]>([]);
   const [cookieShopRequests, setCookieShopRequests] = useState<CookieShopRequest[]>([]);
@@ -1907,7 +1910,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
         price: parseInt(newItemPrice),
         category: newItemCategory,
         description: newItemDescription,
-        value: newItemName
+        value: newItemDescription || newItemName
       });
       setNewItemName('');
       setNewItemPrice('');
@@ -2445,8 +2448,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             <TabsTrigger value="students">👨‍🎓 학생</TabsTrigger>
             <TabsTrigger value="grass" onClick={loadGrassData}>🌱 잔디</TabsTrigger>
             <TabsTrigger value="shop" onClick={loadShopItems}>🏪 상점</TabsTrigger>
-            <TabsTrigger value="teams" onClick={loadTeams}>👥 팀</TabsTrigger>
-            <TabsTrigger value="teamStatus" onClick={loadTeamStatus}>📊 팀 현황</TabsTrigger>
+            <TabsTrigger value="teams" onClick={() => { loadTeams(); if (teamTabMode === 'status') loadTeamStatus(); }}>👥 팀</TabsTrigger>
             <TabsTrigger value="gameCenter">🎮 게임센터</TabsTrigger>
             <TabsTrigger value="wishes" onClick={loadWishes}>⭐ 소원</TabsTrigger>
             <TabsTrigger value="profiles">👤 프로필</TabsTrigger>
@@ -3456,13 +3458,42 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
           {/* 팀 탭 */}
           <TabsContent value="teams" className="space-y-6">
+            {/* 팀 모드 토글 */}
+            <div className="flex gap-2 p-1 bg-gray-100 rounded-lg w-fit">
+              <button
+                onClick={() => setTeamTabMode('manage')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  teamTabMode === 'manage'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                👥 팀 관리
+              </button>
+              <button
+                onClick={() => {
+                  setTeamTabMode('status');
+                  if (selectedClass) {
+                    loadTeamStatus();
+                  }
+                }}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  teamTabMode === 'status'
+                    ? 'bg-white text-green-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                📊 팀 현황
+              </button>
+            </div>
+
             {!selectedClass ? (
               <Card>
                 <CardContent className="py-12 text-center text-gray-500">
                   👆 상단에서 학급을 선택해주세요
                 </CardContent>
               </Card>
-            ) : (
+            ) : teamTabMode === 'manage' ? (
               <>
                 {/* 팀 생성 */}
                 <Card>
@@ -3720,18 +3751,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   </Card>
                 )}
               </>
-            )}
-          </TabsContent>
-
-          {/* 팀 현황 탭 */}
-          <TabsContent value="teamStatus" className="space-y-6">
-            {!selectedClass ? (
-              <Card>
-                <CardContent className="py-12 text-center text-gray-500">
-                  👆 먼저 학급 관리 탭에서 학급을 선택해주세요.
-                </CardContent>
-              </Card>
-            ) : isLoadingTeamStatus ? (
+            ) : (
+              /* 팀 현황 모드 */
+              isLoadingTeamStatus ? (
               <Card>
                 <CardContent className="py-12 text-center text-gray-500">
                   📊 팀 현황을 불러오는 중...
@@ -3740,7 +3762,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             ) : teams.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center text-gray-500">
-                  생성된 팀이 없습니다. 팀 탭에서 팀을 먼저 만들어주세요.
+                  생성된 팀이 없습니다. 팀 관리에서 팀을 먼저 만들어주세요.
                 </CardContent>
               </Card>
             ) : (
@@ -3895,6 +3917,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   );
                 })}
               </>
+            )
             )}
           </TabsContent>
 
