@@ -87,7 +87,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [shopItems, setShopItems] = useState<ShopItem[]>([]);
   const [isLoadingShop, setIsLoadingShop] = useState(false);
   const [isPurchasing, setIsPurchasing] = useState(false);
-  const [shopCategory, setShopCategory] = useState<'all' | 'emoji' | 'titlePermit' | 'titleColor' | 'nameEffect' | 'animation' | 'buttonBorder' | 'buttonFill' | 'profilePhoto'>('all');
+  const [shopCategory, setShopCategory] = useState<'all' | 'emoji' | 'custom' | 'titleColor' | 'nameEffect' | 'animation' | 'buttonBorder' | 'buttonFill'>('all');
   const [previewItem, setPreviewItem] = useState<ShopItem | null>(null);
 
   // 프로필 사진 업로드 모달
@@ -131,7 +131,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // 인벤토리 탭
-  const [inventoryTab, setInventoryTab] = useState<'all' | 'emoji' | 'nameEffect' | 'titleColor' | 'animation' | 'titlePermit' | 'buttonBorder' | 'buttonFill'>('all');
+  const [inventoryTab, setInventoryTab] = useState<'all' | 'emoji' | 'nameEffect' | 'titleColor' | 'animation' | 'custom' | 'buttonBorder' | 'buttonFill'>('all');
 
   // 숫자야구 게임 상태
   interface BaseballGame {
@@ -898,8 +898,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const hasTitlePermitOwned = () => {
     if (!currentStudent?.ownedItems) return false;
     return currentStudent.ownedItems.some(code =>
-      code.startsWith('title_permit') ||
-      getItemByCode(code)?.category === 'titlePermit'
+      code.startsWith('title_permit')
     );
   };
 
@@ -912,8 +911,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const hasProfilePhotoOwned = () => {
     if (!currentStudent?.ownedItems) return false;
     return currentStudent.ownedItems.some(code =>
-      code === 'profile_photo_permit' ||
-      getItemByCode(code)?.category === 'profilePhoto'
+      code === 'profile_photo_permit'
     );
   };
 
@@ -1947,13 +1945,12 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                       {[
                         { key: 'all', label: '전체', icon: '📦' },
                         { key: 'emoji', label: '이모지', icon: '😊' },
-                        { key: 'titlePermit', label: '칭호권', icon: '🏷️' },
+                        { key: 'custom', label: '커스텀', icon: '⚙️' },
                         { key: 'titleColor', label: '칭호색상', icon: '🎨' },
                         { key: 'nameEffect', label: '이름효과', icon: '✨' },
                         { key: 'animation', label: '애니메이션', icon: '🎬' },
                         { key: 'buttonBorder', label: '버튼테두리', icon: '🔲' },
                         { key: 'buttonFill', label: '버튼채우기', icon: '🎨' },
-                        { key: 'profilePhoto', label: '프로필사진', icon: '📷' },
                       ].map((cat) => {
                         const count = cat.key === 'all'
                           ? shopItems.filter((item: ShopItem) => item.price >= 5).length
@@ -1998,13 +1995,12 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                             const getCategoryIcon = () => {
                               switch (item.category) {
                                 case 'emoji': return item.value || '😊';
-                                case 'titlePermit': return '🏷️';
+                                case 'custom': return '⚙️';
                                 case 'titleColor': return '🎨';
                                 case 'nameEffect': return '✨';
                                 case 'animation': return '🎬';
                                 case 'buttonBorder': return '🔲';
                                 case 'buttonFill': return '🎨';
-                                case 'profilePhoto': return '📷';
                                 default: return '📦';
                               }
                             };
@@ -2034,7 +2030,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                                   <p className="text-xs font-bold text-pink-600">{item.price} 🍭</p>
                                   <div className="mt-1">
                                     {isOwned ? (
-                                      item.category === 'titlePermit' && !hasTitlePermit() ? (
+                                      item.code.startsWith('title_permit') && !hasTitlePermit() ? (
                                         <button
                                           onClick={(e) => { e.stopPropagation(); handleActivateTitlePermit(); }}
                                           disabled={isPurchasing}
@@ -2042,7 +2038,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                                         >
                                           활성화
                                         </button>
-                                      ) : item.category === 'profilePhoto' && !hasProfilePhotoPermit() ? (
+                                      ) : item.code === 'profile_photo_permit' && !hasProfilePhotoPermit() ? (
                                         <button
                                           onClick={(e) => { e.stopPropagation(); handleActivateProfilePhoto(); }}
                                           disabled={isPurchasing}
@@ -2050,7 +2046,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                                         >
                                           활성화
                                         </button>
-                                      ) : item.category === 'profilePhoto' && hasProfilePhotoPermit() ? (
+                                      ) : item.code === 'profile_photo_permit' && hasProfilePhotoPermit() ? (
                                         <button
                                           onClick={(e) => { e.stopPropagation(); setShowPhotoUpload(true); }}
                                           className="w-full px-1 py-0.5 rounded text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white"
