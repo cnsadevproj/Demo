@@ -1885,13 +1885,26 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     return getLastWeekdays(10);
   };
 
+  // 카테고리 정규화 (이전 카테고리를 새 카테고리로 매핑)
+  const normalizeCategory = (category: string): string => {
+    if (category === 'titlePermit' || category === 'profilePhoto') {
+      return 'custom';
+    }
+    return category;
+  };
+
   // ========== 상점 핸들러 ==========
   const loadShopItems = async () => {
     if (!user) return;
     setIsLoadingShop(true);
     try {
       const items = await getTeacherShopItems(user.uid);
-      setShopItems(items);
+      // 카테고리 정규화 적용
+      const normalizedItems = items.map(item => ({
+        ...item,
+        category: normalizeCategory(item.category) as typeof item.category
+      }));
+      setShopItems(normalizedItems);
     } catch (error) {
       console.error('Failed to load shop items:', error);
     }

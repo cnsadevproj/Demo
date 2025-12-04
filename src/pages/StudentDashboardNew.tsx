@@ -658,6 +658,15 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     setIsRefreshingCookie(false);
   };
 
+  // 카테고리 정규화 (이전 카테고리를 새 카테고리로 매핑)
+  const normalizeCategory = (category: string): string => {
+    // titlePermit, profilePhoto → custom으로 통합
+    if (category === 'titlePermit' || category === 'profilePhoto') {
+      return 'custom';
+    }
+    return category;
+  };
+
   // 상점 로드 (Firebase에 없으면 기본 아이템 사용)
   const loadShop = async () => {
     // teacherId 없어도 기본 상품 표시
@@ -670,7 +679,16 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     try {
       const items = await getTeacherShopItems(studentTeacherId);
       // Firebase에 상품이 없으면 기본 상품 목록 사용
-      setShopItems(items.length > 0 ? items : ALL_SHOP_ITEMS);
+      if (items.length > 0) {
+        // 카테고리 정규화 적용
+        const normalizedItems = items.map(item => ({
+          ...item,
+          category: normalizeCategory(item.category) as typeof item.category
+        }));
+        setShopItems(normalizedItems);
+      } else {
+        setShopItems(ALL_SHOP_ITEMS);
+      }
     } catch (error) {
       console.error('Failed to load shop:', error);
       // 에러 시에도 기본 상품 표시
