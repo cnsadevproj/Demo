@@ -50,7 +50,7 @@ export function BulletDodgeTeacher() {
   const [candyAmount, setCandyAmount] = useState('');
   const [isAddingCandy, setIsAddingCandy] = useState(false);
 
-  // 타이머 시작
+  // 타이머 시작 (새로 시작)
   const startTimer = () => {
     const totalSeconds = timerMinutes * 60 + timerSeconds;
     if (totalSeconds <= 0) return;
@@ -59,7 +59,14 @@ export function BulletDodgeTeacher() {
     setFrozenPlayers(null); // 타이머 시작 시 고정 해제
   };
 
-  // 타이머 중지
+  // 타이머 재개 (일시정지 후 이어서)
+  const resumeTimer = () => {
+    if (remainingTime > 0) {
+      setIsTimerRunning(true);
+    }
+  };
+
+  // 타이머 중지 (일시정지)
   const stopTimer = () => {
     setIsTimerRunning(false);
   };
@@ -375,7 +382,7 @@ export function BulletDodgeTeacher() {
                         </button>
                       ) : (
                         <button
-                          onClick={startTimer}
+                          onClick={resumeTimer}
                           className="px-4 py-2 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600"
                         >
                           ▶️
