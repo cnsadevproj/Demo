@@ -1953,10 +1953,10 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                                 className={`p-2 rounded-lg border-2 cursor-pointer hover:shadow-md transition-all ${isOwned ? 'bg-green-50 border-green-300' : 'bg-white border-gray-200'}`}
                               >
                                 <div className="text-center">
+                                  <p className="text-xs font-medium truncate mb-1">{item.name}</p>
                                   <div className="text-2xl mb-1">
                                     {getCategoryIcon()}
                                   </div>
-                                  <p className="text-xs font-medium truncate mb-1">{item.name}</p>
                                   <p className="text-xs font-bold text-pink-600">{item.price} 🍭</p>
                                   <div className="mt-1">
                                     {isOwned ? (
