@@ -526,6 +526,31 @@ export function CookieBattleTeacher() {
     }
   };
 
+  // 대표자 자동 지정 (모든 팀)
+  const autoAssignRepresentatives = async () => {
+    if (!gameId) return;
+
+    try {
+      const batch = writeBatch(db);
+      for (const team of teams) {
+        if (team.isEliminated || team.representativeCode) continue;
+
+        // 온라인인 첫 번째 멤버를 대표로
+        const onlineMember = team.members.find(code => students.get(code)?.isOnline);
+        // 없으면 첫 번째 멤버를 대표로
+        const representative = onlineMember || team.members[0];
+
+        if (representative) {
+          const teamRef = doc(db, 'games', gameId, 'teams', team.id);
+          batch.update(teamRef, { representativeCode: representative });
+        }
+      }
+      await batch.commit();
+    } catch (error) {
+      console.error('Failed to auto-assign representatives:', error);
+    }
+  };
+
   // 팀 재화 조정
   const adjustTeamResources = async (teamId: string, amount: number) => {
     if (!gameId) return;
@@ -598,6 +623,10 @@ export function CookieBattleTeacher() {
   const aliveTeams = teams.filter(t => !t.isEliminated);
   const allTeamsReady = aliveTeams.every(t => t.isReady);
 
+  // 온라인 학생 수 계산
+  const onlineStudents = Array.from(students.values()).filter(s => s.isOnline);
+  const totalStudents = students.size;
+
   // 손실 모드 라벨
   const lossModeLabels: Record<LossMode, { emoji: string; name: string }> = {
     basic: { emoji: '⚔️', name: '기본' },
@@ -619,6 +648,12 @@ export function CookieBattleTeacher() {
               <p className="text-stone-400 mt-1">{gameData.className || '게임'}</p>
             </div>
             <div className="flex items-center gap-4">
+              <div className="text-center">
+                <p className="text-stone-500 text-xs">접속</p>
+                <p className={`text-2xl font-bold ${onlineStudents.length > 0 ? 'text-green-400' : 'text-stone-500'}`}>
+                  {onlineStudents.length}/{totalStudents}
+                </p>
+              </div>
               <div className="text-center">
                 <p className="text-stone-500 text-xs">라운드</p>
                 <p className="text-2xl font-bold text-amber-400">{gameData.round}</p>
@@ -765,16 +800,21 @@ export function CookieBattleTeacher() {
                       key={code}
                       className={`flex items-center justify-between px-2 py-1 rounded ${
                         student?.isOnline
-                          ? 'bg-green-900/30'
+                          ? 'bg-green-900/30 ring-1 ring-green-500/50'
                           : student?.hasReflected === false
                             ? 'bg-red-900/30'
                             : 'bg-stone-700/30'
                       }`}
                     >
                       <div className="flex items-center gap-2">
+                        {/* 온라인 상태 표시 */}
+                        <span className={`w-2 h-2 rounded-full ${
+                          student?.isOnline ? 'bg-green-400 animate-pulse' : 'bg-stone-600'
+                        }`}></span>
                         {isRepresentative && <span className="text-yellow-400">👑</span>}
                         <span className={`text-sm ${
-                          student?.hasReflected === false ? 'text-red-400' : 'text-stone-300'
+                          student?.hasReflected === false ? 'text-red-400' :
+                          student?.isOnline ? 'text-green-300' : 'text-stone-400'
                         }`}>
                           {student?.name || code}
                         </span>
@@ -820,6 +860,14 @@ export function CookieBattleTeacher() {
           <div className="flex flex-wrap gap-3">
             {gameData.status === 'waiting' && (
               <>
+                {aliveTeams.some(t => !t.representativeCode) && (
+                  <button
+                    onClick={autoAssignRepresentatives}
+                    className="px-6 py-3 rounded-xl bg-purple-600 text-white font-bold hover:bg-purple-700"
+                  >
+                    👑 대표 자동지정
+                  </button>
+                )}
                 <button
                   onClick={startBettingPhase}
                   disabled={aliveTeams.length < 2 || aliveTeams.some(t => !t.representativeCode) || isProcessing}
