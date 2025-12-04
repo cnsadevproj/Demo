@@ -1786,15 +1786,9 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                             const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
                             const isFuture = dateOnly > endDateOnly;
 
-                            // 미래 날짜는 빈 div로 (투명, 보이지 않음)
+                            // 미래 날짜는 렌더링하지 않음 (완전히 숨김)
                             if (isFuture) {
-                              return (
-                                <div
-                                  key={dayIndex}
-                                  style={{ width: `${CELL_SIZE}px`, height: `${CELL_SIZE}px`, minWidth: `${CELL_SIZE}px`, minHeight: `${CELL_SIZE}px` }}
-                                  className="bg-transparent"
-                                />
-                              );
+                              return null;
                             }
 
                             const grassRecord = grassData.find((g) => g.date === dateStr);
@@ -3222,14 +3216,9 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                               const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
                               const isFuture = dateOnly > endDateOnly;
 
-                              // 미래 날짜는 투명하게
+                              // 미래 날짜는 렌더링하지 않음 (완전히 숨김)
                               if (isFuture) {
-                                return (
-                                  <div
-                                    key={dayIndex}
-                                    className="w-3 h-3 bg-transparent"
-                                  />
-                                );
+                                return null;
                               }
 
                               const grassRecord = selectedClassmateGrass.find((g) => g.date === dateStr);
