@@ -1780,8 +1780,11 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                             const date = new Date(startDate);
                             date.setDate(date.getDate() + weekIndex * 7 + dayIndex);
                             const dateStr = getKoreanDateString(date);
-                            // endDate를 기준으로 미래 날짜 판단
-                            const isFuture = date > endDate;
+
+                            // 날짜만 비교 (시간 제외)
+                            const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+                            const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+                            const isFuture = dateOnly > endDateOnly;
 
                             // 미래 날짜는 빈 div로 (투명, 보이지 않음)
                             if (isFuture) {
