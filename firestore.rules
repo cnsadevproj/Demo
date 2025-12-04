@@ -100,16 +100,16 @@ service cloud.firestore {
         allow write: if request.auth != null;
       }
 
-      // 팀 쿠키 배틀 - 팀 데이터
+      // 팀 쿠키 배틀 - 팀 데이터 (학생도 배팅 제출 가능)
       match /teams/{teamId} {
         allow read: if true;
-        allow write: if request.auth != null;
+        allow write: if true;
       }
 
       // 팀 쿠키 배틀 - 학생 정보
       match /studentInfo/{studentCode} {
         allow read: if true;
-        allow write: if request.auth != null;
+        allow write: if true;
       }
     }
 
