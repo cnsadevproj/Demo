@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { FeedbackModal, FeedbackButton } from '../components/FeedbackModal';
 import { toast } from 'sonner';
 import { db } from '../services/firebase';
 import { collection, onSnapshot, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -61,6 +62,9 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [wishes, setWishes] = useState<Wish[]>([]);
   const [grassData, setGrassData] = useState<Array<{ date: string; cookieChange: number; count: number }>>([]);
   const [activeTab, setActiveTab] = useState<'home' | 'wish' | 'grass' | 'shop' | 'profile' | 'classmates' | 'team' | 'gameCenter'>('home');
+
+  // To개발자 모달
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // 새 소원 작성
   const [newWishContent, setNewWishContent] = useState('');
@@ -1231,15 +1235,27 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
               <p className="text-xs text-gray-500">{studentTeacher.schoolName}</p>
             </div>
           </div>
-          <button
-            onClick={onLogout}
-            className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg flex items-center gap-1"
-          >
-            <span>🚪</span>
-            <span>나가기</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <FeedbackButton onClick={() => setShowFeedbackModal(true)} />
+            <button
+              onClick={onLogout}
+              className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg flex items-center gap-1"
+            >
+              <span>🚪</span>
+              <span>나가기</span>
+            </button>
+          </div>
         </div>
       </header>
+
+      {/* To개발자 모달 */}
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+        userType="student"
+        userName={currentStudent.name}
+        userCode={currentStudent.code}
+      />
 
       {/* 쿠키 & 캔디 현황 */}
       <div className="max-w-4xl mx-auto px-4 py-6">
@@ -1747,7 +1763,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 }
 
                 return (
-                  <div className="w-full overflow-x-auto">
+                  <div className="w-full overflow-x-auto flex justify-center">
                     <div className="inline-block min-w-fit">
                       {/* 월 표시 - 각 주 위치에 맞춤 */}
                       <div className="flex mb-2 ml-7" style={{ gap: `${GAP}px` }}>

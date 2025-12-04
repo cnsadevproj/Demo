@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
+import { FeedbackModal, FeedbackButton } from '../components/FeedbackModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
@@ -116,6 +117,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
   // 전체 동기화
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // To개발자 모달
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // 학급 선택 시 학생 목록 로드
   useEffect(() => {
@@ -2396,6 +2400,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <FeedbackButton onClick={() => setShowFeedbackModal(true)} />
               <Button
                 variant="outline"
                 onClick={handleSync}
@@ -5817,6 +5822,15 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           </div>
         </div>
       )}
+
+      {/* To개발자 모달 */}
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+        userType="teacher"
+        userName={teacher?.name}
+        userCode={user?.uid}
+      />
     </div>
   );
 }
