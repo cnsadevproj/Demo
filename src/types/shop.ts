@@ -1,7 +1,7 @@
 // 상점 아이템 타입 정의
 
 // 아이템 카테고리
-export type ItemCategory = 'emoji' | 'nameEffect' | 'titleColor' | 'animation' | 'titlePermit' | 'buttonBorder' | 'buttonFill';
+export type ItemCategory = 'emoji' | 'nameEffect' | 'titleColor' | 'animation' | 'titlePermit' | 'buttonBorder' | 'buttonFill' | 'profilePhoto';
 
 // 상점 아이템
 export interface ShopItem {
@@ -155,6 +155,11 @@ export const TITLE_PERMIT_ITEMS: ShopItem[] = [
   { code: 'title_permit_5', category: 'titlePermit', name: '🏷️ 5글자 칭호권', price: 20, value: '5', description: '칭호를 5글자까지 설정할 수 있어요!' },
 ];
 
+// 프로필사진권 아이템
+export const PROFILE_PHOTO_ITEMS: ShopItem[] = [
+  { code: 'profile_photo_permit', category: 'profilePhoto', name: '📷 프로필사진권', price: 30, value: 'enabled', description: '나만의 프로필 사진을 업로드할 수 있어요! (3MB 이하)' },
+];
+
 // 버튼 테두리 아이템
 export const BUTTON_BORDER_ITEMS: ShopItem[] = [
   { code: 'btn_border_01', category: 'buttonBorder', name: '🔵 파란 테두리', price: 10, value: 'border-blue-500' },
@@ -196,6 +201,7 @@ export const ALL_SHOP_ITEMS: ShopItem[] = [
   ...TITLE_COLOR_ITEMS,
   ...ANIMATION_ITEMS,
   ...TITLE_PERMIT_ITEMS,
+  ...PROFILE_PHOTO_ITEMS,
   ...BUTTON_BORDER_ITEMS,
   ...BUTTON_FILL_ITEMS,
 ];
