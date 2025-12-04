@@ -3190,28 +3190,51 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                       {(() => {
                         const WEEKS = 12;
                         const today = new Date();
-                        // 시작일을 12주 전 월요일로 설정
-                        const startDate = new Date(today);
-                        startDate.setDate(startDate.getDate() - (WEEKS * 7));
-                        const startDayOfWeek = startDate.getDay();
-                        if (startDayOfWeek === 0) {
-                          startDate.setDate(startDate.getDate() + 1);
-                        } else if (startDayOfWeek !== 1) {
-                          startDate.setDate(startDate.getDate() - (startDayOfWeek - 1));
+                        const todayDayOfWeek = today.getDay();
+
+                        // endDate: 오늘이 주중이면 오늘, 주말이면 지난주 금요일
+                        let endDate = new Date(today);
+                        if (todayDayOfWeek === 0) {
+                          endDate.setDate(endDate.getDate() - 2);
+                        } else if (todayDayOfWeek === 6) {
+                          endDate.setDate(endDate.getDate() - 1);
                         }
+
+                        // endDate가 속한 주의 월요일부터 WEEKS 주를 표시
+                        const startDate = new Date(endDate);
+                        const endDateDayOfWeek = endDate.getDay();
+                        const daysFromMonday = endDateDayOfWeek === 0 ? 6 : endDateDayOfWeek - 1;
+                        startDate.setDate(startDate.getDate() - daysFromMonday);
+                        startDate.setDate(startDate.getDate() - (WEEKS - 1) * 7);
+
                         return Array.from({ length: WEEKS }).map((_, weekIndex) => (
                           <div key={weekIndex} className="flex flex-col gap-[2px]">
                             {Array.from({ length: 5 }).map((_, dayIndex) => {
                               const date = new Date(startDate);
                               date.setDate(date.getDate() + weekIndex * 7 + dayIndex);
                               const dateStr = getKoreanDateString(date);
-                              const isFuture = date > today;
+
+                              // 날짜만 비교 (시간 제외)
+                              const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+                              const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+                              const isFuture = dateOnly > endDateOnly;
+
+                              // 미래 날짜는 투명하게
+                              if (isFuture) {
+                                return (
+                                  <div
+                                    key={dayIndex}
+                                    className="w-3 h-3 bg-transparent"
+                                  />
+                                );
+                              }
+
                               const grassRecord = selectedClassmateGrass.find((g) => g.date === dateStr);
                               const cookieChange = grassRecord?.cookieChange || 0;
                               return (
                                 <div
                                   key={dayIndex}
-                                  className={`w-3 h-3 rounded-sm ${isFuture ? 'bg-gray-100' : getGrassColor(cookieChange)}`}
+                                  className={`w-3 h-3 rounded-sm ${getGrassColor(cookieChange)}`}
                                   title={`${dateStr}: +${cookieChange}쿠키`}
                                 />
                               );
