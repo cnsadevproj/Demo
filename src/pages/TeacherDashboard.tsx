@@ -2403,7 +2403,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <FeedbackButton onClick={() => setShowFeedbackModal(true)} />
+              <FeedbackButton onClick={() => setShowFeedbackModal(true)} variant="outline" />
               <Button
                 variant="outline"
                 onClick={handleSync}

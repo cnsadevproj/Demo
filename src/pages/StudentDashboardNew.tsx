@@ -1956,6 +1956,13 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                               }
                             };
 
+                            // 상품 이름에서 이모지 추출
+                            const extractEmoji = (name: string) => {
+                              const match = name.match(/(\p{Emoji_Presentation}|\p{Extended_Pictographic})/u);
+                              return match ? match[0] : null;
+                            };
+                            const itemEmoji = extractEmoji(item.name);
+
                             return (
                               <div
                                 key={item.code}
@@ -1963,10 +1970,14 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                                 className={`p-2 rounded-lg border-2 cursor-pointer hover:shadow-md transition-all ${isOwned ? 'bg-green-50 border-green-300' : 'bg-white border-gray-200'}`}
                               >
                                 <div className="text-center">
-                                  <p className="text-xs font-medium truncate mb-1">{item.name}</p>
+                                  {/* 카테고리 유형 (상단) */}
+                                  <p className="text-[10px] text-gray-400 mb-0.5">{getCategoryIcon()}</p>
+                                  {/* 상품 이모지 (중앙 - 크게) */}
                                   <div className="text-2xl mb-1">
-                                    {getCategoryIcon()}
+                                    {itemEmoji || getCategoryIcon()}
                                   </div>
+                                  {/* 상품 이름 */}
+                                  <p className="text-xs font-medium truncate mb-1">{item.name}</p>
                                   <p className="text-xs font-bold text-pink-600">{item.price} 🍭</p>
                                   <div className="mt-1">
                                     {isOwned ? (

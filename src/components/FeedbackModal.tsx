@@ -183,7 +183,24 @@ export function FeedbackModal({ isOpen, onClose, userType, userName, userCode }:
 }
 
 // To개발자 버튼 컴포넌트
-export function FeedbackButton({ onClick }: { onClick: () => void }) {
+interface FeedbackButtonProps {
+  onClick: () => void;
+  variant?: 'default' | 'outline';
+}
+
+export function FeedbackButton({ onClick, variant = 'default' }: FeedbackButtonProps) {
+  if (variant === 'outline') {
+    return (
+      <button
+        onClick={onClick}
+        className="px-4 py-2 border rounded-md text-sm font-medium bg-white hover:bg-gray-100 transition-all flex items-center gap-1"
+      >
+        <span>💬</span>
+        <span>To 개발자</span>
+      </button>
+    );
+  }
+
   return (
     <button
       onClick={onClick}
