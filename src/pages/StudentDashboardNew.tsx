@@ -18,6 +18,7 @@ import {
   getTeacherShopItems,
   purchaseItem,
   activateTitlePermit,
+  activateProfilePhoto,
   saveProfile,
   getTeams,
   getClassStudents,
@@ -36,6 +37,7 @@ import {
   getStudentItemSuggestions,
   ItemSuggestion
 } from '../services/firestoreApi';
+import { ProfilePhotoUpload } from '../components/ProfilePhotoUpload';
 import { getItemByCode, ALL_SHOP_ITEMS } from '../types/shop';
 import { getKoreanDateString } from '../utils/dateUtils';
 
@@ -85,8 +87,11 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [shopItems, setShopItems] = useState<ShopItem[]>([]);
   const [isLoadingShop, setIsLoadingShop] = useState(false);
   const [isPurchasing, setIsPurchasing] = useState(false);
-  const [shopCategory, setShopCategory] = useState<'all' | 'emoji' | 'titlePermit' | 'titleColor' | 'nameEffect' | 'animation' | 'buttonBorder' | 'buttonFill'>('all');
+  const [shopCategory, setShopCategory] = useState<'all' | 'emoji' | 'titlePermit' | 'titleColor' | 'nameEffect' | 'animation' | 'buttonBorder' | 'buttonFill' | 'profilePhoto'>('all');
   const [previewItem, setPreviewItem] = useState<ShopItem | null>(null);
+
+  // 프로필 사진 업로드 모달
+  const [showPhotoUpload, setShowPhotoUpload] = useState(false);
 
   // 상점 모드 (캔디/쿠키)
   const [shopMode, setShopMode] = useState<'candy' | 'cookie'>('candy');
@@ -752,6 +757,32 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     setIsPurchasing(false);
   };
 
+  // 프로필사진권 활성화
+  const handleActivateProfilePhoto = async () => {
+    if (!studentTeacherId || !currentStudent) return;
+
+    setIsPurchasing(true);
+    try {
+      await activateProfilePhoto(studentTeacherId, currentStudent.code);
+      await loadData();
+      toast.success('프로필사진권이 활성화되었습니다! 이제 사진을 업로드할 수 있습니다. 📷');
+    } catch (error) {
+      toast.error('프로필사진권 활성화에 실패했습니다.');
+    }
+    setIsPurchasing(false);
+  };
+
+  // 프로필 사진 업데이트 핸들러
+  const handlePhotoUpdated = (url: string) => {
+    if (currentStudent) {
+      setCurrentStudent({
+        ...currentStudent,
+        profilePhotoUrl: url || undefined
+      });
+    }
+    loadData();
+  };
+
   // 쿠키 상점 로드 (전체 클래스 공유)
   const loadCookieShopData = async () => {
     if (!studentTeacherId || !currentStudent) return;
@@ -869,6 +900,20 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     return currentStudent.ownedItems.some(code =>
       code.startsWith('title_permit') ||
       getItemByCode(code)?.category === 'titlePermit'
+    );
+  };
+
+  // 프로필사진권 활성화 여부 확인
+  const hasProfilePhotoPermit = () => {
+    return currentStudent?.profile?.profilePhotoActive === true;
+  };
+
+  // 프로필사진권 보유 여부 확인 (구매는 했지만 활성화 안 됨)
+  const hasProfilePhotoOwned = () => {
+    if (!currentStudent?.ownedItems) return false;
+    return currentStudent.ownedItems.some(code =>
+      code === 'profile_photo_permit' ||
+      getItemByCode(code)?.category === 'profilePhoto'
     );
   };
 
@@ -1445,7 +1490,13 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                   ),
                 }}>
                 <div className={`text-center ${getAnimationClass(currentStudent.profile.animationCode || 'none')}`}>
-                  {currentStudent.profile.emojiCode && getEmojiFromCode(currentStudent.profile.emojiCode) ? (
+                  {currentStudent.profilePhotoUrl && currentStudent.profile.profilePhotoActive ? (
+                    <img
+                      src={currentStudent.profilePhotoUrl}
+                      alt="프로필 사진"
+                      className="w-12 h-12 mx-auto mb-1 rounded-full object-cover border-2 border-white shadow-md"
+                    />
+                  ) : currentStudent.profile.emojiCode && getEmojiFromCode(currentStudent.profile.emojiCode) ? (
                     <div className="text-4xl mb-1">{getEmojiFromCode(currentStudent.profile.emojiCode)}</div>
                   ) : (
                     <div className="w-12 h-12 mx-auto mb-1 bg-gray-200 rounded-full flex items-center justify-center">
@@ -1902,6 +1953,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         { key: 'animation', label: '애니메이션', icon: '🎬' },
                         { key: 'buttonBorder', label: '버튼테두리', icon: '🔲' },
                         { key: 'buttonFill', label: '버튼채우기', icon: '🎨' },
+                        { key: 'profilePhoto', label: '프로필사진', icon: '📷' },
                       ].map((cat) => {
                         const count = cat.key === 'all'
                           ? shopItems.filter((item: ShopItem) => item.price >= 5).length
@@ -1952,6 +2004,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                                 case 'animation': return '🎬';
                                 case 'buttonBorder': return '🔲';
                                 case 'buttonFill': return '🎨';
+                                case 'profilePhoto': return '📷';
                                 default: return '📦';
                               }
                             };
@@ -1988,6 +2041,21 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                                           className="w-full px-1 py-0.5 rounded text-xs font-medium bg-purple-500 hover:bg-purple-600 text-white"
                                         >
                                           활성화
+                                        </button>
+                                      ) : item.category === 'profilePhoto' && !hasProfilePhotoPermit() ? (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); handleActivateProfilePhoto(); }}
+                                          disabled={isPurchasing}
+                                          className="w-full px-1 py-0.5 rounded text-xs font-medium bg-purple-500 hover:bg-purple-600 text-white"
+                                        >
+                                          활성화
+                                        </button>
+                                      ) : item.category === 'profilePhoto' && hasProfilePhotoPermit() ? (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setShowPhotoUpload(true); }}
+                                          className="w-full px-1 py-0.5 rounded text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white"
+                                        >
+                                          📷 업로드
                                         </button>
                                       ) : (
                                         <span className="text-xs text-green-600">보유</span>
@@ -2204,8 +2272,16 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         ),
                       }}
                     >
-                      {/* 뱃지가 선택되어 있으면 뱃지 표시, 없으면 이모지 표시 */}
-                      {selectedBadge && currentStudent?.badges?.[selectedBadge]?.hasBadge ? (
+                      {/* 프로필 사진, 뱃지, 이모지 우선순위로 표시 */}
+                      {currentStudent.profilePhotoUrl && currentStudent.profile.profilePhotoActive ? (
+                        <div className={`mb-2 ${getAnimationClass(selectedAnimation)}`}>
+                          <img
+                            src={currentStudent.profilePhotoUrl}
+                            alt="프로필 사진"
+                            className="w-16 h-16 mx-auto rounded-full object-cover border-2 border-white shadow-md"
+                          />
+                        </div>
+                      ) : selectedBadge && currentStudent?.badges?.[selectedBadge]?.hasBadge ? (
                         <div className={`mb-2 ${getAnimationClass(selectedAnimation)}`}>
                           <img
                             src={currentStudent.badges[selectedBadge].imgUrl}
@@ -2256,6 +2332,60 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                           {selectedEmoji === emoji && <span className="absolute -top-1 -right-1 text-green-600 text-xs bg-white rounded-full">✓</span>}
                         </button>
                       ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 프로필 사진 관리 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    📷 프로필 사진
+                    <span className="text-xs text-gray-400 ml-2">(상점에서 구매 필요)</span>
+                  </label>
+                  {hasProfilePhotoPermit() ? (
+                    <div className="p-4 bg-blue-50 rounded-lg">
+                      <div className="flex items-center gap-4">
+                        {currentStudent.profilePhotoUrl ? (
+                          <img
+                            src={currentStudent.profilePhotoUrl}
+                            alt="프로필 사진"
+                            className="w-16 h-16 rounded-full object-cover border-2 border-blue-300 shadow-md"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center border-2 border-gray-300">
+                            <span className="text-2xl">📷</span>
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-blue-700">
+                            {currentStudent.profilePhotoUrl ? '사진이 설정되어 있어요!' : '사진을 업로드해보세요!'}
+                          </p>
+                          <p className="text-xs text-blue-500 mb-2">3MB 이하, 원형으로 표시됩니다</p>
+                          <button
+                            onClick={() => setShowPhotoUpload(true)}
+                            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-all"
+                          >
+                            {currentStudent.profilePhotoUrl ? '📷 사진 변경' : '📷 사진 업로드'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : hasProfilePhotoOwned() ? (
+                    <div className="p-4 bg-purple-50 rounded-lg text-center">
+                      <p className="text-sm text-purple-700 mb-2">프로필사진권을 활성화하면 사진을 업로드할 수 있어요!</p>
+                      <button
+                        onClick={handleActivateProfilePhoto}
+                        disabled={isPurchasing}
+                        className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50"
+                      >
+                        {isPurchasing ? '활성화 중...' : '프로필사진권 활성화'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-gray-100 rounded-lg text-center text-gray-500">
+                      <p className="text-2xl mb-2">📷</p>
+                      <p className="text-sm">프로필사진권이 없습니다</p>
+                      <p className="text-xs text-gray-400">상점에서 프로필사진권을 구매해보세요!</p>
                     </div>
                   )}
                 </div>
@@ -3633,6 +3763,18 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
               </div>
             </div>
           </div>
+        )}
+
+        {/* 프로필 사진 업로드 모달 */}
+        {showPhotoUpload && studentTeacherId && currentStudent && (
+          <ProfilePhotoUpload
+            isOpen={showPhotoUpload}
+            onClose={() => setShowPhotoUpload(false)}
+            teacherId={studentTeacherId}
+            studentCode={currentStudent.code}
+            currentPhotoUrl={currentStudent.profilePhotoUrl}
+            onPhotoUpdated={handlePhotoUpdated}
+          />
         )}
       </div>
     </div>
