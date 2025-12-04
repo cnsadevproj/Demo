@@ -139,11 +139,21 @@ export function NumberBaseballTeacher() {
         snapshot.forEach((doc) => {
           playerList.push({ code: doc.id, ...doc.data() } as PlayerData);
         });
-        // 순위순, 참가순 정렬
+        // 소요 시간 기준 정렬 (짧은 시간 = 1등)
         playerList.sort((a, b) => {
-          if (a.rank && b.rank) return a.rank - b.rank;
-          if (a.rank) return -1;
-          if (b.rank) return 1;
+          // 둘 다 완료한 경우: 소요 시간으로 정렬
+          if (a.solvedAt && b.solvedAt && a.joinedAt && b.joinedAt) {
+            const aJoined = a.joinedAt.toDate ? a.joinedAt.toDate() : new Date(a.joinedAt);
+            const aSolved = a.solvedAt.toDate ? a.solvedAt.toDate() : new Date(a.solvedAt);
+            const bJoined = b.joinedAt.toDate ? b.joinedAt.toDate() : new Date(b.joinedAt);
+            const bSolved = b.solvedAt.toDate ? b.solvedAt.toDate() : new Date(b.solvedAt);
+            const aElapsed = aSolved.getTime() - aJoined.getTime();
+            const bElapsed = bSolved.getTime() - bJoined.getTime();
+            return aElapsed - bElapsed; // 짧은 시간이 먼저
+          }
+          // 완료한 사람이 먼저
+          if (a.solvedAt) return -1;
+          if (b.solvedAt) return 1;
           return 0;
         });
         console.log('[NumberBaseballTeacher] Players updated:', playerList.length);
@@ -297,7 +307,7 @@ export function NumberBaseballTeacher() {
               👥 참가자 ({players.length}명)
             </h2>
             <span className="text-green-600 font-medium">
-              🏆 완료: {players.filter(p => p.rank).length}명
+              🏆 완료: {players.filter(p => p.solvedAt).length}명
             </span>
           </div>
 
@@ -309,32 +319,43 @@ export function NumberBaseballTeacher() {
             </div>
           ) : (
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {players.map((player) => (
-                <div
-                  key={player.code}
-                  onClick={() => openStudentModal(player)}
-                  className={`flex items-center justify-between p-3 rounded-xl transition-all cursor-pointer hover:ring-2 hover:ring-purple-400 ${
-                    player.rank ? 'bg-green-50 border-2 border-green-200' : 'bg-gray-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{getRankEmoji(player.rank)}</span>
-                    <span className={`font-medium ${player.rank ? 'text-green-700' : 'text-gray-700'}`}>
-                      {player.name}
-                    </span>
-                  </div>
-                  <div className="text-sm text-right">
-                    {player.rank ? (
-                      <div>
-                        <span className="text-green-600 font-medium">{formatElapsedTime(player.joinedAt, player.solvedAt)}</span>
-                        <span className="text-gray-500 ml-2">({player.attempts}회)</span>
+              {players.map((player, index) => {
+                // 시간 기준 순위 계산 (완료한 사람만)
+                const timeBasedRank = player.solvedAt ? index + 1 : null;
+                return (
+                  <div
+                    key={player.code}
+                    onClick={() => openStudentModal(player)}
+                    className={`flex items-center justify-between p-3 rounded-xl transition-all cursor-pointer hover:ring-2 hover:ring-purple-400 ${
+                      player.solvedAt ? 'bg-green-50 border-2 border-green-200' : 'bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{getRankEmoji(timeBasedRank)}</span>
+                      <div className="flex flex-col">
+                        <span className={`font-medium ${player.solvedAt ? 'text-green-700' : 'text-gray-700'}`}>
+                          {player.name}
+                        </span>
+                        {timeBasedRank && timeBasedRank <= 3 && (
+                          <span className="text-xs text-purple-600 font-bold">
+                            {timeBasedRank === 1 ? '🏆 1등!' : timeBasedRank === 2 ? '2등' : '3등'}
+                          </span>
+                        )}
                       </div>
-                    ) : (
-                      <span className="text-amber-600">도전중...</span>
-                    )}
+                    </div>
+                    <div className="text-sm text-right">
+                      {player.solvedAt ? (
+                        <div>
+                          <span className="text-green-600 font-medium">{formatElapsedTime(player.joinedAt, player.solvedAt)}</span>
+                          <span className="text-gray-500 ml-2">({player.attempts}회)</span>
+                        </div>
+                      ) : (
+                        <span className="text-amber-600">도전중...</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

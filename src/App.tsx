@@ -20,6 +20,8 @@ import { BulletDodge } from './games/BulletDodge';
 import { BulletDodgeTeacher } from './games/BulletDodgeTeacher';
 import { RockPaperScissors } from './games/RockPaperScissors';
 import { RockPaperScissorsTeacher } from './games/RockPaperScissorsTeacher';
+import { CookieBattle } from './games/CookieBattle';
+import { CookieBattleTeacher } from './games/CookieBattleTeacher';
 
 // URL 경로 기반 라우팅
 function getRoutePath(): string {
@@ -58,6 +60,12 @@ function getRoutePath(): string {
   if (gameType === 'rps-teacher') {
     return 'game-rps-teacher';
   }
+  if (gameType === 'cookie-battle') {
+    return 'game-cookie-battle';
+  }
+  if (gameType === 'cookie-battle-teacher') {
+    return 'game-cookie-battle-teacher';
+  }
 
   return 'main';
 }
@@ -91,6 +99,12 @@ function AppContent() {
   }
   if (routePath === 'game-rps-teacher') {
     return <RockPaperScissorsTeacher />;
+  }
+  if (routePath === 'game-cookie-battle') {
+    return <CookieBattle />;
+  }
+  if (routePath === 'game-cookie-battle-teacher') {
+    return <CookieBattleTeacher />;
   }
 
   // 로딩 중
