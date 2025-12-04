@@ -50,6 +50,9 @@ export function BulletDodgeTeacher() {
   const [candyAmount, setCandyAmount] = useState('');
   const [isAddingCandy, setIsAddingCandy] = useState(false);
 
+  // 교사 테스트 플레이 상태
+  const [showTestGame, setShowTestGame] = useState(false);
+
   // 타이머 시작 (새로 시작)
   const startTimer = () => {
     const totalSeconds = timerMinutes * 60 + timerSeconds;
@@ -281,14 +284,51 @@ export function BulletDodgeTeacher() {
       <div className="max-w-md mx-auto">
         {/* 헤더 */}
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-4 border border-white/20">
-          <div className="flex items-center gap-4">
-            <span className="text-4xl">🚀</span>
-            <div>
-              <h1 className="text-xl font-bold text-white">총알피하기</h1>
-              <p className="text-white/70 text-sm">교사 관리 페이지</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <span className="text-4xl">🚀</span>
+              <div>
+                <h1 className="text-xl font-bold text-white">총알피하기</h1>
+                <p className="text-white/70 text-sm">교사 관리 페이지</p>
+              </div>
             </div>
+            <button
+              onClick={() => setShowTestGame(!showTestGame)}
+              className={`px-4 py-2 rounded-xl font-bold transition-all ${
+                showTestGame
+                  ? 'bg-red-500 text-white hover:bg-red-600'
+                  : 'bg-white/20 text-white hover:bg-white/30'
+              }`}
+            >
+              {showTestGame ? '✕ 닫기' : '🎮 테스트'}
+            </button>
           </div>
         </div>
+
+        {/* 교사 테스트 플레이 */}
+        {showTestGame && (
+          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 mb-4 border border-white/20">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-white font-bold">🎮 테스트 플레이</span>
+              <button
+                onClick={() => window.open(`/game/bullet-dodge?testMode=true&studentName=교사`, '_blank')}
+                className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600"
+              >
+                새 창에서 열기 ↗
+              </button>
+            </div>
+            <div className="bg-black rounded-xl overflow-hidden" style={{ height: '500px' }}>
+              <iframe
+                src={`/game/bullet-dodge?testMode=true&studentName=교사`}
+                className="w-full h-full border-0"
+                title="테스트 게임"
+              />
+            </div>
+            <p className="text-white/50 text-xs text-center mt-2">
+              테스트 모드 - 점수가 저장되지 않습니다
+            </p>
+          </div>
+        )}
 
         {/* 게임 상태 */}
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-4 border border-white/20">
