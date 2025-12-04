@@ -865,6 +865,25 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [selectedRpsMode, setSelectedRpsMode] = useState<RPSGameMode>('survivor');
   const [rpsEntryFee, setRpsEntryFee] = useState(0); // 가위바위보 참가비
 
+  // 쿠키 배틀 상태
+  type CookieBattleLossMode = 'basic' | 'zeroSum' | 'soft';
+  interface CookieBattleGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    status: 'waiting' | 'betting' | 'result' | 'finished';
+    lossMode: CookieBattleLossMode;
+    round: number;
+    className?: string;
+    createdAt: any;
+  }
+
+  const [cookieBattleGame, setCookieBattleGame] = useState<CookieBattleGame | null>(null);
+  const [isCreatingCookieBattle, setIsCreatingCookieBattle] = useState(false);
+  const [selectedCookieBattleLossMode, setSelectedCookieBattleLossMode] = useState<CookieBattleLossMode>('basic');
+  type CookieBattleResourceMode = 'memberCount' | 'ownedCookie' | 'earnedCookie';
+  const [selectedCookieBattleResourceMode, setSelectedCookieBattleResourceMode] = useState<CookieBattleResourceMode>('memberCount');
+
   // 총알피하기 게임 생성
   const createBulletDodgeGame = async () => {
     if (!user || !selectedClass) {
@@ -1032,6 +1051,193 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       });
 
       setRpsGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [user, selectedClass]);
+
+  // 쿠키 배틀 게임 생성
+  const createCookieBattleGame = async () => {
+    if (!user || !selectedClass) {
+      toast.error('학급을 먼저 선택해주세요.');
+      return;
+    }
+
+    setIsCreatingCookieBattle(true);
+    try {
+      // 팀 데이터 새로고침 (버튼 클릭 시 항상 최신 팀 데이터 로드)
+      const freshTeams = await getTeams(user.uid, selectedClass);
+      setTeams(freshTeams);
+
+      // 팀이 2개 이상 있어야 함
+      if (freshTeams.length < 2) {
+        toast.error(`쿠키 배틀은 최소 2개 이상의 팀이 필요합니다. (현재 ${freshTeams.length}개)`);
+        setIsCreatingCookieBattle(false);
+        return;
+      }
+
+      const gameId = `cookiebattle_${user.uid}_${Date.now()}`;
+      const currentClassName = classes?.find(c => c.id === selectedClass)?.name || '';
+      const today = getKoreanDateString(new Date());
+
+      // 자원 계산을 위한 학생 쿠키 맵
+      const studentDataMap = new Map<string, { name: string; number: number; jelly: number; hasReflected: boolean }>();
+
+      // 축적 기간 시작일 (가장 오래된 팀 결성일)
+      let accumulationStartDate = today;
+      freshTeams.forEach(team => {
+        if (team.createdAt) {
+          const teamDate = team.createdAt.toDate ?
+            team.createdAt.toDate().toISOString().split('T')[0] :
+            today;
+          if (teamDate < accumulationStartDate) {
+            accumulationStartDate = teamDate;
+          }
+        }
+      });
+
+      // 각 학생의 잔디 데이터 확인 (축적 기간 동안 성찰 여부)
+      for (const student of students) {
+        let hasReflected = false;
+        try {
+          const grassData = await getGrassData(user.uid, student.code);
+          // 축적 기간 동안 하루라도 잔디가 있으면 성찰한 것으로 간주
+          if (grassData) {
+            hasReflected = Object.keys(grassData).some(date =>
+              date >= accumulationStartDate && date <= today && grassData[date] > 0
+            );
+          }
+        } catch (e) {
+          console.error('Failed to get grass data for', student.code);
+        }
+
+        studentDataMap.set(student.code, {
+          name: student.name,
+          number: student.number ?? 0,
+          jelly: student.jelly ?? student.cookie ?? 0,
+          hasReflected
+        });
+      }
+
+      // 게임 문서 생성
+      const gameData = {
+        teacherId: user.uid,
+        classId: selectedClass,
+        gameType: 'cookieBattle',
+        status: 'waiting' as const,
+        lossMode: selectedCookieBattleLossMode,
+        resourceMode: selectedCookieBattleResourceMode,
+        round: 0,
+        createdAt: serverTimestamp(),
+        className: currentClassName,
+        accumulationStartDate,
+        battleLog: []
+      };
+
+      await setDoc(doc(db, 'games', gameId), gameData);
+
+      // 각 팀을 subcollection으로 생성
+      for (const team of freshTeams) {
+        // 자원 모드에 따른 초기 자원 계산
+        let initialResources = 0;
+        if (selectedCookieBattleResourceMode === 'memberCount') {
+          initialResources = team.members.length * 100;
+        } else if (selectedCookieBattleResourceMode === 'ownedCookie') {
+          initialResources = team.members.reduce((sum, memberCode) => {
+            return sum + (studentDataMap.get(memberCode)?.jelly || 0);
+          }, 0);
+        } else if (selectedCookieBattleResourceMode === 'earnedCookie') {
+          initialResources = team.teamCookie || 0;
+        }
+
+        const teamDoc = {
+          name: team.teamName,
+          emoji: team.flag,
+          resources: initialResources,
+          initialResources: initialResources,
+          members: team.members,
+          representativeCode: null,
+          attackBet: 0,
+          defenseBet: 0,
+          targetTeamId: null,
+          isEliminated: false,
+          isReady: false
+        };
+
+        await setDoc(doc(db, 'games', gameId, 'teams', team.teamId), teamDoc);
+      }
+
+      // 학생 정보도 subcollection으로 저장 (성찰 여부 포함)
+      for (const [code, data] of studentDataMap) {
+        const teamId = freshTeams.find(t => t.members.includes(code))?.teamId || '';
+        if (teamId) {
+          await setDoc(doc(db, 'games', gameId, 'studentInfo', code), {
+            name: data.name,
+            number: data.number,
+            teamId,
+            jelly: data.jelly,
+            hasReflected: data.hasReflected,
+            isOnline: false
+          });
+        }
+      }
+
+      // 교사용 게임 관리 창 열기
+      const teacherGameUrl = `${window.location.origin}?game=cookie-battle-teacher&gameId=${gameId}`;
+      window.open(teacherGameUrl, '_blank', 'width=1200,height=900');
+
+      toast.success('쿠키 배틀 게임이 생성되었습니다!');
+    } catch (error) {
+      console.error('Failed to create cookie battle game:', error);
+      toast.error('게임 생성에 실패했습니다.');
+    }
+    setIsCreatingCookieBattle(false);
+  };
+
+  // 쿠키 배틀 삭제
+  const deleteCookieBattleGame = async () => {
+    if (!cookieBattleGame) return;
+
+    if (!confirm('정말 게임을 삭제하시겠습니까?')) return;
+
+    try {
+      const playersRef = collection(db, 'games', cookieBattleGame.id, 'players');
+      const playersSnap = await getDocs(playersRef);
+      for (const playerDoc of playersSnap.docs) {
+        await deleteDoc(playerDoc.ref);
+      }
+
+      await deleteDoc(doc(db, 'games', cookieBattleGame.id));
+      setCookieBattleGame(null);
+      toast.success('게임이 삭제되었습니다.');
+    } catch (error) {
+      console.error('Failed to delete game:', error);
+      toast.error('게임 삭제에 실패했습니다.');
+    }
+  };
+
+  // 쿠키 배틀 구독
+  useEffect(() => {
+    if (!user || !selectedClass) {
+      setCookieBattleGame(null);
+      return;
+    }
+
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: CookieBattleGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.teacherId === user.uid &&
+            data.classId === selectedClass &&
+            data.status !== 'finished' &&
+            docSnap.id.startsWith('cookiebattle_')) {
+          activeGame = { id: docSnap.id, ...data } as CookieBattleGame;
+        }
+      });
+
+      setCookieBattleGame(activeGame);
     });
 
     return () => unsubscribe();
@@ -4202,19 +4408,169 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 </div>
 
                 {/* 쿠키 배틀 */}
-                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-red-50 to-orange-50 border border-red-200">
-                  <div className="flex items-center gap-4">
-                    <span className="text-3xl">⚔️</span>
-                    <div>
-                      <h3 className="font-bold text-red-800">쿠키 배틀</h3>
-                      <p className="text-xs text-red-600">팀끼리 쿠키를 걸고 전략 대결!</p>
-                      <span className="inline-block mt-1 bg-blue-100 text-blue-600 px-2 py-0.5 rounded text-xs">팀 대결</span>
+                <div className="p-4 rounded-xl bg-gradient-to-r from-red-50 to-orange-50 border border-red-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <span className="text-3xl">⚔️</span>
+                      <div>
+                        <h3 className="font-bold text-red-800">쿠키 배틀</h3>
+                        <p className="text-xs text-red-600">팀끼리 쿠키를 걸고 전략 대결!</p>
+                        <span className="inline-block mt-1 bg-blue-100 text-blue-600 px-2 py-0.5 rounded text-xs">팀 대결</span>
+                      </div>
                     </div>
+                    {!cookieBattleGame && (
+                      <Button
+                        onClick={createCookieBattleGame}
+                        disabled={isCreatingCookieBattle}
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        {isCreatingCookieBattle ? '팀 확인 중...' : '⚔️ 게임 생성'}
+                      </Button>
+                    )}
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400">준비중</span>
-                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
-                  </div>
+
+                  {/* 게임 모드 선택 (게임 없을 때만) */}
+                  {!cookieBattleGame && (
+                    <div className="mt-4 p-3 bg-white/50 rounded-lg">
+                      <p className="text-xs font-medium text-red-700 mb-2">🎯 손실 모드 선택</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          onClick={() => setSelectedCookieBattleLossMode('basic')}
+                          className={`p-2 rounded-lg border-2 transition-all ${
+                            selectedCookieBattleLossMode === 'basic'
+                              ? 'border-red-500 bg-red-100'
+                              : 'border-gray-200 bg-white hover:border-red-300'
+                          }`}
+                        >
+                          <span className="text-lg">⚔️</span>
+                          <p className="text-xs font-bold">기본</p>
+                          <p className="text-[10px] text-gray-500">패배 시 30%</p>
+                        </button>
+                        <button
+                          onClick={() => setSelectedCookieBattleLossMode('zeroSum')}
+                          className={`p-2 rounded-lg border-2 transition-all ${
+                            selectedCookieBattleLossMode === 'zeroSum'
+                              ? 'border-red-500 bg-red-100'
+                              : 'border-gray-200 bg-white hover:border-red-300'
+                          }`}
+                        >
+                          <span className="text-lg">💀</span>
+                          <p className="text-xs font-bold">제로섬</p>
+                          <p className="text-[10px] text-gray-500">패배 시 100%</p>
+                        </button>
+                        <button
+                          onClick={() => setSelectedCookieBattleLossMode('soft')}
+                          className={`p-2 rounded-lg border-2 transition-all ${
+                            selectedCookieBattleLossMode === 'soft'
+                              ? 'border-red-500 bg-red-100'
+                              : 'border-gray-200 bg-white hover:border-red-300'
+                          }`}
+                        >
+                          <span className="text-lg">🌸</span>
+                          <p className="text-xs font-bold">소프트</p>
+                          <p className="text-[10px] text-gray-500">패배 시 20%</p>
+                        </button>
+                      </div>
+
+                      <p className="text-xs font-medium text-red-700 mb-2 mt-3">💰 초기 자원 모드</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          onClick={() => setSelectedCookieBattleResourceMode('memberCount')}
+                          className={`p-2 rounded-lg border-2 transition-all ${
+                            selectedCookieBattleResourceMode === 'memberCount'
+                              ? 'border-amber-500 bg-amber-100'
+                              : 'border-gray-200 bg-white hover:border-amber-300'
+                          }`}
+                        >
+                          <span className="text-lg">👥</span>
+                          <p className="text-xs font-bold">인원 수</p>
+                          <p className="text-[10px] text-gray-500">팀원 × 100</p>
+                        </button>
+                        <button
+                          onClick={() => setSelectedCookieBattleResourceMode('ownedCookie')}
+                          className={`p-2 rounded-lg border-2 transition-all ${
+                            selectedCookieBattleResourceMode === 'ownedCookie'
+                              ? 'border-amber-500 bg-amber-100'
+                              : 'border-gray-200 bg-white hover:border-amber-300'
+                          }`}
+                        >
+                          <span className="text-lg">🍪</span>
+                          <p className="text-xs font-bold">보유 쿠키</p>
+                          <p className="text-[10px] text-gray-500">팀원 합계</p>
+                        </button>
+                        <button
+                          onClick={() => setSelectedCookieBattleResourceMode('earnedCookie')}
+                          className={`p-2 rounded-lg border-2 transition-all ${
+                            selectedCookieBattleResourceMode === 'earnedCookie'
+                              ? 'border-amber-500 bg-amber-100'
+                              : 'border-gray-200 bg-white hover:border-amber-300'
+                          }`}
+                        >
+                          <span className="text-lg">🏆</span>
+                          <p className="text-xs font-bold">팀 쿠키</p>
+                          <p className="text-[10px] text-gray-500">획득 쿠키</p>
+                        </button>
+                      </div>
+
+                      <p className="text-[10px] text-gray-500 mt-2 text-center">
+                        팀 수: {teams.length}개
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 진행 중인 게임이 있을 때 */}
+                  {cookieBattleGame && (
+                    <div className="mt-4 p-4 bg-white/80 rounded-lg space-y-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <div>
+                          <span className="text-gray-600">상태: </span>
+                          <span className={`font-bold ${
+                            cookieBattleGame.status === 'waiting' ? 'text-amber-600' :
+                            cookieBattleGame.status === 'betting' ? 'text-blue-600' :
+                            cookieBattleGame.status === 'result' ? 'text-green-600' :
+                            'text-gray-600'
+                          }`}>
+                            {cookieBattleGame.status === 'waiting' ? '⏳ 대기중' :
+                             cookieBattleGame.status === 'betting' ? '🎯 배팅중' :
+                             cookieBattleGame.status === 'result' ? '⚔️ 결과 발표' :
+                             '🏁 종료'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-sm text-gray-600">모드: </span>
+                          <span className="font-bold text-red-700">
+                            {cookieBattleGame.lossMode === 'basic' ? '⚔️ 기본' :
+                             cookieBattleGame.lossMode === 'zeroSum' ? '💀 제로섬' : '🌸 소프트'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-sm text-gray-600">라운드: </span>
+                          <span className="font-bold text-red-700">{cookieBattleGame.round}</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => {
+                            const teacherGameUrl = `${window.location.origin}?game=cookie-battle-teacher&gameId=${cookieBattleGame.id}`;
+                            window.open(teacherGameUrl, '_blank', 'width=1200,height=900');
+                          }}
+                          className="flex-1 bg-red-600 hover:bg-red-700"
+                        >
+                          🎮 관리 창 열기
+                        </Button>
+                        <Button
+                          onClick={deleteCookieBattleGame}
+                          variant="outline"
+                          className="text-red-600 border-red-300 hover:bg-red-50"
+                        >
+                          삭제
+                        </Button>
+                      </div>
+                      <p className="text-xs text-center text-gray-500">
+                        게임 관리는 새 창에서 진행됩니다
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* 스피드 퀴즈 */}
