@@ -57,6 +57,14 @@ export function Shop({ onBack }: ShopProps) {
 
   const isTeacher = role === 'teacher';
 
+  // 카테고리 정규화 (이전 카테고리를 새 카테고리로 매핑)
+  const normalizeCategory = (category: string): string => {
+    if (category === 'titlePermit' || category === 'profilePhoto') {
+      return 'custom';
+    }
+    return category;
+  };
+
   // 데이터 로드
   useEffect(() => {
     const loadData = async () => {
@@ -76,7 +84,16 @@ export function Shop({ onBack }: ShopProps) {
 
         setStudent(studentData);
         // Firebase에 상품이 없으면 기본 상품 목록 사용
-        setShopItems(items.length > 0 ? items : ALL_SHOP_ITEMS);
+        if (items.length > 0) {
+          // 카테고리 정규화 적용
+          const normalizedItems = items.map(item => ({
+            ...item,
+            category: normalizeCategory(item.category) as typeof item.category
+          }));
+          setShopItems(normalizedItems);
+        } else {
+          setShopItems(ALL_SHOP_ITEMS);
+        }
       } catch (error) {
         console.error('데이터 로드 오류:', error);
         // 에러 시에도 기본 상품 표시
