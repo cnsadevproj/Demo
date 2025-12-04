@@ -3440,8 +3440,8 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                     </div>
                   )}
 
-                  {/* 칭호권 미리보기 */}
-                  {previewItem.category === 'titlePermit' && (
+                  {/* 커스텀 아이템 미리보기 */}
+                  {previewItem.category === 'custom' && previewItem.code.startsWith('title_permit') && (
                     <div className="space-y-2">
                       <div className="text-4xl">🏷️</div>
                       <div className="inline-block px-4 py-2 bg-white rounded-lg shadow">
@@ -3449,6 +3449,18 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         <p className="text-amber-600 text-sm font-medium">예시칭호</p>
                       </div>
                       <p className="text-sm text-gray-600">칭호를 {previewItem.value}글자까지 설정 가능!</p>
+                    </div>
+                  )}
+                  {previewItem.category === 'custom' && previewItem.code === 'profile_photo_permit' && (
+                    <div className="space-y-2">
+                      <div className="text-4xl">📷</div>
+                      <div className="inline-block px-4 py-2 bg-white rounded-lg shadow">
+                        <div className="w-16 h-16 mx-auto bg-gray-200 rounded-full flex items-center justify-center mb-2">
+                          <span className="text-2xl">👤</span>
+                        </div>
+                        <p className="font-bold">{currentStudent.name}</p>
+                      </div>
+                      <p className="text-sm text-gray-600">나만의 프로필 사진을 업로드할 수 있어요!</p>
                     </div>
                   )}
 

@@ -36,7 +36,7 @@ interface ShopProps {
 // 카테고리 정보
 const CATEGORIES: { key: ItemCategory; label: string; icon: React.ReactNode }[] = [
   { key: 'emoji', label: '이모지', icon: <Sparkles className="w-4 h-4" /> },
-  { key: 'titlePermit', label: '칭호권', icon: <Tag className="w-4 h-4" /> },
+  { key: 'custom', label: '커스텀', icon: <Tag className="w-4 h-4" /> },
   { key: 'titleColor', label: '칭호색상', icon: <Palette className="w-4 h-4" /> },
   { key: 'animation', label: '애니메이션', icon: <Sparkles className="w-4 h-4" /> },
   { key: 'buttonBorder', label: '테두리색', icon: <Square className="w-4 h-4" /> },
@@ -240,7 +240,7 @@ export function Shop({ onBack }: ShopProps) {
                       {/* 카테고리 유형 표시 (상단) */}
                       <div className="text-center text-[10px] text-gray-400 mb-1">
                         {selectedCategory === 'emoji' && '이모지'}
-                        {selectedCategory === 'titlePermit' && '칭호권'}
+                        {selectedCategory === 'custom' && '커스텀'}
                         {selectedCategory === 'titleColor' && '칭호색상'}
                         {selectedCategory === 'animation' && '애니메이션'}
                         {selectedCategory === 'buttonBorder' && '테두리색'}
@@ -255,10 +255,10 @@ export function Shop({ onBack }: ShopProps) {
                         {selectedCategory === 'emoji' && (
                           <span className="text-3xl">{displayValue}</span>
                         )}
-                        {selectedCategory === 'titlePermit' && (
-                          <Badge className="bg-indigo-100 text-indigo-800">
-                            칭호
-                          </Badge>
+                        {selectedCategory === 'custom' && (
+                          <span className="text-3xl">
+                            {item.name.match(/(\p{Emoji_Presentation}|\p{Extended_Pictographic})/u)?.[0] || '⚙️'}
+                          </span>
                         )}
                         {selectedCategory === 'animation' && (
                           <span className="text-3xl">

@@ -3091,7 +3091,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       <option value="nameEffect">이름효과</option>
                       <option value="titleColor">칭호색상</option>
                       <option value="animation">애니메이션</option>
-                      <option value="titlePermit">칭호권</option>
+                      <option value="custom">커스텀</option>
                     </select>
                     <Input
                       placeholder="값 (예: 😎)"
@@ -3167,7 +3167,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     {[
                       { key: 'all', label: '전체', icon: '📦' },
                       { key: 'emoji', label: '이모지', icon: '😊' },
-                      { key: 'titlePermit', label: '칭호권', icon: '🏷️' },
+                      { key: 'custom', label: '커스텀', icon: '⚙️' },
                       { key: 'titleColor', label: '칭호색상', icon: '🎨' },
                       { key: 'nameEffect', label: '이름효과', icon: '✨' },
                       { key: 'animation', label: '애니메이션', icon: '🎬' },
