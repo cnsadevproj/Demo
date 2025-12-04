@@ -336,31 +336,33 @@ export function BulletDodgeTeacher() {
 
                   {!isTimerRunning && remainingTime === 0 ? (
                     // 타이머 설정 UI
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min="0"
-                        max="59"
-                        value={timerMinutes}
-                        onChange={(e) => setTimerMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-                        className="w-14 px-2 py-2 bg-white/20 text-white text-center rounded-lg font-bold"
-                      />
-                      <span className="text-white">분</span>
-                      <input
-                        type="number"
-                        min="0"
-                        max="59"
-                        value={timerSeconds}
-                        onChange={(e) => setTimerSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-                        className="w-14 px-2 py-2 bg-white/20 text-white text-center rounded-lg font-bold"
-                      />
-                      <span className="text-white">초</span>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="59"
+                          value={timerMinutes}
+                          onChange={(e) => setTimerMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                          className="w-16 px-2 py-2 bg-white/20 text-white text-center rounded-lg font-bold text-lg"
+                        />
+                        <span className="text-white font-bold">분</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="59"
+                          value={timerSeconds}
+                          onChange={(e) => setTimerSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                          className="w-16 px-2 py-2 bg-white/20 text-white text-center rounded-lg font-bold text-lg"
+                        />
+                        <span className="text-white font-bold">초</span>
+                      </div>
                       <button
                         onClick={startTimer}
                         disabled={timerMinutes === 0 && timerSeconds === 0}
-                        className="flex-1 py-2 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 disabled:opacity-50"
+                        className="w-full py-3 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 disabled:opacity-50 text-lg"
                       >
-                        ▶️ 시작
+                        ▶️ 타이머 시작
                       </button>
                     </div>
                   ) : (
