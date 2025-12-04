@@ -28,11 +28,11 @@ const PLAYER_SIZE = 16; // 작은 점 플레이어
 const BULLET_SIZE = 10; // 총알 시각적 크기
 const BULLET_HITBOX = 4; // 총알 히트박스 (시각적 크기보다 작음)
 const INITIAL_BULLET_INTERVAL = 1000; // 처음엔 1초마다 총알 생성 (느리게 시작)
-const MIN_BULLET_INTERVAL = 100; // 최소 0.1초
-const BULLET_SPEED_INCREASE = 0.2; // 시간에 따라 속도 증가
-const MAX_SIMULTANEOUS_BULLETS = 7; // 최대 동시 생성 총알 수 (18초 기준)
+const MIN_BULLET_INTERVAL = 150; // 최소 0.15초 (약간 여유 있게)
+const BULLET_SPEED_INCREASE = 0.15; // 시간에 따라 속도 증가 (천천히)
+const MAX_SIMULTANEOUS_BULLETS = 5; // 최대 동시 생성 총알 수 (~13초 수준)
 const STARTING_BULLETS = 1; // 시작 시 동시 총알 수 (1개로 시작)
-const MAX_DIFFICULTY_TIME = 18; // 난이도 증가 최대 시간 (초) - 이후 고정
+const MAX_DIFFICULTY_TIME = 20; // 난이도 증가 최대 시간 (초) - 20초에서 최대 도달 후 고정
 
 export function BulletDodge() {
   // URL에서 파라미터 추출
@@ -279,10 +279,10 @@ export function BulletDodge() {
       const effectiveElapsed = Math.min(elapsed, MAX_DIFFICULTY_TIME);
       const speed = 3 + effectiveElapsed * BULLET_SPEED_INCREASE;
 
-      // 시간에 따라 동시 생성 총알 수 증가 (1개에서 시작, 3초마다 1개씩 증가, 18초에서 고정)
+      // 시간에 따라 동시 생성 총알 수 증가 (1개에서 시작, 5초마다 1개씩 증가, 20초에서 5개로 고정)
       const simultaneousCount = Math.min(
         MAX_SIMULTANEOUS_BULLETS,
-        STARTING_BULLETS + Math.floor(effectiveElapsed / 3) // 3초마다 1개씩 증가
+        STARTING_BULLETS + Math.floor(effectiveElapsed / 5) // 5초마다 1개씩 증가 (20초에서 최대)
       );
 
       const newBullets: Bullet[] = [];
@@ -299,13 +299,13 @@ export function BulletDodge() {
       setBullets(prev => [...prev, ...newBullets]);
     };
 
-    // 동적 총알 생성 간격 (점진적으로 감소, 18초에서 고정)
+    // 동적 총알 생성 간격 (점진적으로 감소, 20초에서 고정)
     const updateSpawnInterval = () => {
       const elapsed = (Date.now() - startTimeRef.current) / 1000;
       const effectiveElapsed = Math.min(elapsed, MAX_DIFFICULTY_TIME);
       const interval = Math.max(
         MIN_BULLET_INTERVAL,
-        INITIAL_BULLET_INTERVAL - effectiveElapsed * 50 // 초당 50ms씩 감소 (18초 후 최소 간격 도달)
+        INITIAL_BULLET_INTERVAL - effectiveElapsed * 42 // 초당 42ms씩 감소 (20초에서 ~160ms 도달)
       );
 
       if (bulletSpawnRef.current) {

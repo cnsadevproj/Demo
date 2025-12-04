@@ -52,6 +52,9 @@ export function CookieBattle() {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 사용법 모달
+  const [showHelpModal, setShowHelpModal] = useState(false);
+
   // 내가 대표자인지 확인
   const isRepresentative = useMemo(() => {
     return myTeam?.representativeCode === studentCode;
@@ -261,9 +264,18 @@ export function CookieBattle() {
                 </p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-stone-500 text-xs">보유 재화</p>
-              <p className="text-2xl font-bold text-amber-400">🍪 {myTeam.resources}</p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowHelpModal(true)}
+                className="w-10 h-10 bg-stone-700 rounded-full flex items-center justify-center text-amber-400 hover:bg-stone-600 transition-colors"
+                title="게임 방법"
+              >
+                ❓
+              </button>
+              <div className="text-right">
+                <p className="text-stone-500 text-xs">보유 재화</p>
+                <p className="text-2xl font-bold text-amber-400">🍪 {myTeam.resources}</p>
+              </div>
             </div>
           </div>
 
@@ -398,7 +410,7 @@ export function CookieBattle() {
                         placeholder="0"
                         min="0"
                         max={myTeam.resources}
-                        className="w-full px-4 py-3 bg-stone-700 border border-stone-600 rounded-xl text-white text-center text-xl font-bold focus:border-red-500 focus:outline-none"
+                        className="w-full px-4 py-3 bg-white border-2 border-red-300 rounded-xl text-gray-900 text-center text-xl font-bold focus:border-red-500 focus:outline-none placeholder-gray-400"
                       />
                     </div>
                     <div>
@@ -410,7 +422,7 @@ export function CookieBattle() {
                         placeholder="0"
                         min="0"
                         max={myTeam.resources}
-                        className="w-full px-4 py-3 bg-stone-700 border border-stone-600 rounded-xl text-white text-center text-xl font-bold focus:border-blue-500 focus:outline-none"
+                        className="w-full px-4 py-3 bg-white border-2 border-blue-300 rounded-xl text-gray-900 text-center text-xl font-bold focus:border-blue-500 focus:outline-none placeholder-gray-400"
                       />
                     </div>
                   </div>
@@ -599,6 +611,84 @@ export function CookieBattle() {
             {isRepresentative && (
               <p className="text-yellow-400 mt-4">👑 당신이 팀 대표입니다. 배팅과 공격 대상을 결정합니다!</p>
             )}
+          </div>
+        )}
+
+        {/* 사용법 모달 */}
+        {showHelpModal && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-stone-800 rounded-2xl max-w-md w-full max-h-[80vh] overflow-y-auto border border-amber-600/30">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-amber-400">📖 게임 방법</h2>
+                  <button
+                    onClick={() => setShowHelpModal(false)}
+                    className="text-stone-400 hover:text-white text-2xl"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="space-y-4 text-stone-300">
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-amber-400 mb-2">🎯 게임 목표</h3>
+                    <p className="text-sm">
+                      팀의 쿠키를 지키면서 다른 팀의 쿠키를 빼앗으세요!<br/>
+                      마지막까지 살아남은 팀이 승리합니다.
+                    </p>
+                  </div>
+
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-amber-400 mb-2">👑 대표자 역할</h3>
+                    <p className="text-sm">
+                      각 팀의 대표자가 배팅과 공격 대상을 결정합니다.<br/>
+                      팀원은 대표자의 선택을 지켜볼 수 있습니다.
+                    </p>
+                  </div>
+
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-red-400 mb-2">⚔️ 공격 배팅</h3>
+                    <p className="text-sm">
+                      다른 팀을 공격할 때 사용합니다.<br/>
+                      공격 성공 시 <span className="text-amber-400 font-bold">상대가 잃은 쿠키만큼 획득</span>합니다!
+                    </p>
+                  </div>
+
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-blue-400 mb-2">🛡️ 수비 배팅</h3>
+                    <p className="text-sm">
+                      공격을 방어할 때 사용합니다.<br/>
+                      수비가 공격보다 크거나 같으면 방어 성공!
+                    </p>
+                  </div>
+
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-green-400 mb-2">💡 배팅 팁</h3>
+                    <ul className="text-sm space-y-1">
+                      <li>• 배팅은 보유 재화 이내에서 자유롭게 가능</li>
+                      <li>• 모든 재화를 쓸 필요 없어요!</li>
+                      <li>• 공격 0 배팅 = 수비에만 집중</li>
+                      <li>• 공격+수비 합계가 재화를 넘으면 안 됨</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-amber-900/30 rounded-xl p-4 border border-amber-600/30">
+                    <h3 className="font-bold text-amber-400 mb-2">⚠️ 탈락 조건</h3>
+                    <p className="text-sm text-amber-200">
+                      쿠키가 0개가 되면 탈락합니다!<br/>
+                      신중하게 배팅하세요.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setShowHelpModal(false)}
+                  className="w-full mt-6 py-3 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-colors"
+                >
+                  확인
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
