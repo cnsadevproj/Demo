@@ -110,7 +110,7 @@ export function ProfilePhotoUpload({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full max-h-[90vh] overflow-y-auto">
         {/* 헤더 */}
         <div className="p-4 border-b flex items-center justify-between bg-gradient-to-r from-purple-500 to-pink-500">
           <div className="flex items-center gap-2">
@@ -182,7 +182,7 @@ export function ProfilePhotoUpload({
               className="w-full py-3 px-4 bg-purple-100 text-purple-700 rounded-xl font-medium hover:bg-purple-200 transition-all flex items-center justify-center gap-2"
             >
               <Upload className="w-5 h-5" />
-              사진 선택하기
+              📷 사진 선택하기
             </button>
 
             {selectedFile && (
@@ -199,7 +199,7 @@ export function ProfilePhotoUpload({
                 ) : (
                   <>
                     <Check className="w-5 h-5" />
-                    업로드하기
+                    ✅ 프로필로 적용하기
                   </>
                 )}
               </button>
@@ -209,11 +209,19 @@ export function ProfilePhotoUpload({
               <button
                 onClick={handleRemovePhoto}
                 disabled={isUploading}
-                className="w-full py-3 px-4 bg-gray-100 text-gray-600 rounded-xl font-medium hover:bg-gray-200 transition-all"
+                className="w-full py-3 px-4 bg-red-100 text-red-600 rounded-xl font-medium hover:bg-red-200 transition-all"
               >
-                사진 삭제하기
+                🗑️ 사진 삭제하기
               </button>
             )}
+
+            {/* 닫기 버튼 */}
+            <button
+              onClick={onClose}
+              className="w-full py-3 px-4 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition-all"
+            >
+              닫기
+            </button>
           </div>
         </div>
       </div>

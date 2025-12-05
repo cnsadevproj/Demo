@@ -3794,7 +3794,6 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
         {/* 프로필 사진 업로드 모달 */}
         {showPhotoUpload && studentTeacherId && currentStudent && (
           <ProfilePhotoUpload
-            isOpen={showPhotoUpload}
             onClose={() => setShowPhotoUpload(false)}
             teacherId={studentTeacherId}
             studentCode={currentStudent.code}
