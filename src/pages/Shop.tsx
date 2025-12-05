@@ -36,7 +36,7 @@ interface ShopProps {
 // 카테고리 정보
 const CATEGORIES: { key: ItemCategory; label: string; icon: React.ReactNode }[] = [
   { key: 'emoji', label: '이모지', icon: <Sparkles className="w-4 h-4" /> },
-  { key: 'titlePermit', label: '칭호권', icon: <Tag className="w-4 h-4" /> },
+  { key: 'custom', label: '커스텀', icon: <Tag className="w-4 h-4" /> },
   { key: 'titleColor', label: '칭호색상', icon: <Palette className="w-4 h-4" /> },
   { key: 'animation', label: '애니메이션', icon: <Sparkles className="w-4 h-4" /> },
   { key: 'buttonBorder', label: '테두리색', icon: <Square className="w-4 h-4" /> },
@@ -57,6 +57,14 @@ export function Shop({ onBack }: ShopProps) {
 
   const isTeacher = role === 'teacher';
 
+  // 카테고리 정규화 (이전 카테고리를 새 카테고리로 매핑)
+  const normalizeCategory = (category: string): string => {
+    if (category === 'titlePermit' || category === 'profilePhoto') {
+      return 'custom';
+    }
+    return category;
+  };
+
   // 데이터 로드
   useEffect(() => {
     const loadData = async () => {
@@ -76,7 +84,16 @@ export function Shop({ onBack }: ShopProps) {
 
         setStudent(studentData);
         // Firebase에 상품이 없으면 기본 상품 목록 사용
-        setShopItems(items.length > 0 ? items : ALL_SHOP_ITEMS);
+        if (items.length > 0) {
+          // 카테고리 정규화 적용
+          const normalizedItems = items.map(item => ({
+            ...item,
+            category: normalizeCategory(item.category) as typeof item.category
+          }));
+          setShopItems(normalizedItems);
+        } else {
+          setShopItems(ALL_SHOP_ITEMS);
+        }
       } catch (error) {
         console.error('데이터 로드 오류:', error);
         // 에러 시에도 기본 상품 표시
@@ -237,10 +254,34 @@ export function Shop({ onBack }: ShopProps) {
                         </Badge>
                       )}
 
-                      {/* 아이템 미리보기 */}
-                      <div className="text-center mb-2">
+                      {/* 카테고리 유형 표시 (상단) */}
+                      <div className="text-center text-[10px] text-gray-400 mb-1">
+                        {selectedCategory === 'emoji' && '이모지'}
+                        {selectedCategory === 'custom' && '커스텀'}
+                        {selectedCategory === 'titleColor' && '칭호색상'}
+                        {selectedCategory === 'animation' && '애니메이션'}
+                        {selectedCategory === 'buttonBorder' && '테두리색'}
+                        {selectedCategory === 'buttonFill' && '채우기'}
+                        {selectedCategory === 'border' && '프로필테두리'}
+                        {selectedCategory === 'nameEffect' && '이름효과'}
+                        {selectedCategory === 'background' && '배경'}
+                      </div>
+
+                      {/* 아이템 미리보기 (중앙 - 크게) */}
+                      <div className="text-center mb-1">
                         {selectedCategory === 'emoji' && (
-                          <span className="text-2xl">{displayValue}</span>
+                          <span className="text-3xl">{displayValue}</span>
+                        )}
+                        {selectedCategory === 'custom' && (
+                          <span className="text-3xl">
+                            {item.name.match(/(\p{Emoji_Presentation}|\p{Extended_Pictographic})/u)?.[0] || '⚙️'}
+                          </span>
+                        )}
+                        {selectedCategory === 'animation' && (
+                          <span className="text-3xl">
+                            {item.name.match(/(\p{Emoji_Presentation}|\p{Extended_Pictographic})/u)?.[0] ||
+                             item.name.slice(0, 2).trim() || '✨'}
+                          </span>
                         )}
                         {selectedCategory === 'border' && (
                           <div
@@ -361,7 +402,7 @@ export function Shop({ onBack }: ShopProps) {
                         )}
                       </div>
 
-                      {/* 아이템 이름 */}
+                      {/* 아이템 이름 (하단) */}
                       <p className="text-center font-medium text-xs mb-1 truncate">{item.name}</p>
 
                       {/* 가격 / 구매 버튼 */}

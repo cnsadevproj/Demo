@@ -70,8 +70,10 @@ export interface Student {
     animationCode?: string;
     titlePermitActive?: boolean; // 칭호권 활성화 여부
     profileBadgeKey?: string; // 프로필에 표시할 뱃지 키
+    profilePhotoActive?: boolean; // 프로필사진권 활성화 여부
   };
   ownedItems: string[];
+  profilePhotoUrl?: string; // 프로필 사진 URL
   badges?: Record<string, Badge>;
   lastUpdate: Timestamp | null;
   // 소원 streak 관련
@@ -775,6 +777,19 @@ export async function activateTitlePermit(
 
   await updateDoc(studentRef, {
     'profile.titlePermitActive': true,
+    lastUpdate: serverTimestamp()
+  });
+}
+
+// 프로필사진권 활성화
+export async function activateProfilePhoto(
+  teacherId: string,
+  studentCode: string
+): Promise<void> {
+  const studentRef = doc(db, 'teachers', teacherId, 'students', studentCode);
+
+  await updateDoc(studentRef, {
+    'profile.profilePhotoActive': true,
     lastUpdate: serverTimestamp()
   });
 }

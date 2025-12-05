@@ -281,12 +281,31 @@ export function BulletDodgeTeacher() {
       <div className="max-w-md mx-auto">
         {/* 헤더 */}
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-4 border border-white/20">
-          <div className="flex items-center gap-4">
-            <span className="text-4xl">🚀</span>
-            <div>
-              <h1 className="text-xl font-bold text-white">총알피하기</h1>
-              <p className="text-white/70 text-sm">교사 관리 페이지</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <span className="text-4xl">🚀</span>
+              <div>
+                <h1 className="text-xl font-bold text-white">총알피하기</h1>
+                <p className="text-white/70 text-sm">교사 관리 페이지</p>
+              </div>
             </div>
+            <button
+              onClick={() => {
+                if (gameId && gameData?.status === 'playing') {
+                  window.open(`${window.location.origin}?game=bullet-dodge&gameId=${gameId}&studentCode=teacher&studentName=${encodeURIComponent('선생님')}`, '_blank');
+                } else {
+                  alert('게임이 진행 중일 때만 참여할 수 있습니다.');
+                }
+              }}
+              disabled={gameData?.status !== 'playing'}
+              className={`px-4 py-2 rounded-xl font-bold transition-all ${
+                gameData?.status === 'playing'
+                  ? 'bg-green-500 text-white hover:bg-green-600'
+                  : 'bg-white/10 text-white/50 cursor-not-allowed'
+              }`}
+            >
+              🎮 참여하기
+            </button>
           </div>
         </div>
 
@@ -336,31 +355,33 @@ export function BulletDodgeTeacher() {
 
                   {!isTimerRunning && remainingTime === 0 ? (
                     // 타이머 설정 UI
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min="0"
-                        max="59"
-                        value={timerMinutes}
-                        onChange={(e) => setTimerMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-                        className="w-14 px-2 py-2 bg-white/20 text-white text-center rounded-lg font-bold"
-                      />
-                      <span className="text-white">분</span>
-                      <input
-                        type="number"
-                        min="0"
-                        max="59"
-                        value={timerSeconds}
-                        onChange={(e) => setTimerSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-                        className="w-14 px-2 py-2 bg-white/20 text-white text-center rounded-lg font-bold"
-                      />
-                      <span className="text-white">초</span>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="59"
+                          value={timerMinutes}
+                          onChange={(e) => setTimerMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                          className="w-16 px-2 py-2 bg-white/20 text-white text-center rounded-lg font-bold text-lg"
+                        />
+                        <span className="text-white font-bold">분</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="59"
+                          value={timerSeconds}
+                          onChange={(e) => setTimerSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                          className="w-16 px-2 py-2 bg-white/20 text-white text-center rounded-lg font-bold text-lg"
+                        />
+                        <span className="text-white font-bold">초</span>
+                      </div>
                       <button
                         onClick={startTimer}
                         disabled={timerMinutes === 0 && timerSeconds === 0}
-                        className="flex-1 py-2 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 disabled:opacity-50"
+                        className="w-full py-3 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 disabled:opacity-50 text-lg"
                       >
-                        ▶️ 시작
+                        ▶️ 타이머 시작
                       </button>
                     </div>
                   ) : (

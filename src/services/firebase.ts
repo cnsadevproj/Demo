@@ -4,6 +4,7 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getStorage } from "firebase/storage";
 
 // Firebase 설정 (Firebase 콘솔에서 받은 값)
 const firebaseConfig = {
@@ -23,3 +24,6 @@ export const db = getFirestore(app);
 
 // Authentication (인증) - 로그인/회원가입에 사용
 export const auth = getAuth(app);
+
+// Storage (파일 저장) - 프로필 사진 등 파일 업로드에 사용
+export const storage = getStorage(app);

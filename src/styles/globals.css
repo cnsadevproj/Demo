@@ -2527,3 +2527,93 @@ button {
 .space-y-1 > :not([hidden]) ~ :not([hidden]) {
   margin-top: 0.25rem;
 }
+
+/* ========================================
+   Indigo 500 gradient - FeedbackButton용
+   ======================================== */
+
+.from-indigo-500 {
+  --tw-gradient-from: rgb(99 102 241);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(99 102 241 / 0));
+}
+
+.to-purple-500 {
+  --tw-gradient-to: rgb(168 85 247);
+}
+
+.hover\:from-indigo-600:hover {
+  --tw-gradient-from: rgb(79 70 229);
+}
+
+.hover\:to-purple-600:hover {
+  --tw-gradient-to: rgb(147 51 234);
+}
+
+.text-\[10px\] {
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+/* py-1.5 */
+.py-1\.5 {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+}
+
+/* ========================================
+   Purple/Pink gradient - ProfilePhotoUpload용
+   ======================================== */
+
+.from-purple-500 {
+  --tw-gradient-from: rgb(168 85 247);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(168 85 247 / 0));
+}
+
+.to-pink-500 {
+  --tw-gradient-to: rgb(236 72 153);
+}
+
+.hover\:from-purple-600:hover {
+  --tw-gradient-from: rgb(147 51 234);
+}
+
+.hover\:to-pink-600:hover {
+  --tw-gradient-to: rgb(219 39 119);
+}
+
+/* Purple 배경색 */
+.bg-purple-100 {
+  background-color: rgb(243 232 255);
+}
+
+.bg-purple-200 {
+  background-color: rgb(233 213 255);
+}
+
+.hover\:bg-purple-200:hover {
+  background-color: rgb(233 213 255);
+}
+
+/* Purple 텍스트 */
+.text-purple-700 {
+  color: rgb(126 34 206);
+}
+
+/* Purple 테두리 */
+.border-purple-200 {
+  border-color: rgb(233 213 255);
+}
+
+/* Red 배경색 (삭제 버튼용) */
+.bg-red-100 {
+  background-color: rgb(254 226 226);
+}
+
+.hover\:bg-red-200:hover {
+  background-color: rgb(254 202 202);
+}
+
+/* Red 텍스트 */
+.text-red-600 {
+  color: rgb(220 38 38);
+}

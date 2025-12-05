@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
+import { FeedbackModal, FeedbackButton } from '../components/FeedbackModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
@@ -116,6 +117,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
   // 전체 동기화
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // To개발자 모달
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // 학급 선택 시 학생 목록 로드
   useEffect(() => {
@@ -645,6 +649,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
   // 상점 모드 (캔디/쿠키)
   const [shopMode, setShopMode] = useState<'candy' | 'cookie'>('candy');
+
+  // 팀 탭 모드 (관리/현황)
+  const [teamTabMode, setTeamTabMode] = useState<'manage' | 'status'>('manage');
 
   // 쿠키 상점 상태
   const [cookieShopItems, setCookieShopItems] = useState<CookieShopItem[]>([]);
@@ -1878,13 +1885,26 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     return getLastWeekdays(10);
   };
 
+  // 카테고리 정규화 (이전 카테고리를 새 카테고리로 매핑)
+  const normalizeCategory = (category: string): string => {
+    if (category === 'titlePermit' || category === 'profilePhoto') {
+      return 'custom';
+    }
+    return category;
+  };
+
   // ========== 상점 핸들러 ==========
   const loadShopItems = async () => {
     if (!user) return;
     setIsLoadingShop(true);
     try {
       const items = await getTeacherShopItems(user.uid);
-      setShopItems(items);
+      // 카테고리 정규화 적용
+      const normalizedItems = items.map(item => ({
+        ...item,
+        category: normalizeCategory(item.category) as typeof item.category
+      }));
+      setShopItems(normalizedItems);
     } catch (error) {
       console.error('Failed to load shop items:', error);
     }
@@ -1903,7 +1923,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
         price: parseInt(newItemPrice),
         category: newItemCategory,
         description: newItemDescription,
-        value: newItemName
+        value: newItemDescription || newItemName
       });
       setNewItemName('');
       setNewItemPrice('');
@@ -2396,6 +2416,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <FeedbackButton onClick={() => setShowFeedbackModal(true)} variant="outline" />
               <Button
                 variant="outline"
                 onClick={handleSync}
@@ -2440,8 +2461,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             <TabsTrigger value="students">👨‍🎓 학생</TabsTrigger>
             <TabsTrigger value="grass" onClick={loadGrassData}>🌱 잔디</TabsTrigger>
             <TabsTrigger value="shop" onClick={loadShopItems}>🏪 상점</TabsTrigger>
-            <TabsTrigger value="teams" onClick={loadTeams}>👥 팀</TabsTrigger>
-            <TabsTrigger value="teamStatus" onClick={loadTeamStatus}>📊 팀 현황</TabsTrigger>
+            <TabsTrigger value="teams" onClick={() => { loadTeams(); if (teamTabMode === 'status') loadTeamStatus(); }}>👥 팀</TabsTrigger>
             <TabsTrigger value="gameCenter">🎮 게임센터</TabsTrigger>
             <TabsTrigger value="wishes" onClick={loadWishes}>⭐ 소원</TabsTrigger>
             <TabsTrigger value="profiles">👤 프로필</TabsTrigger>
@@ -3084,7 +3104,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       <option value="nameEffect">이름효과</option>
                       <option value="titleColor">칭호색상</option>
                       <option value="animation">애니메이션</option>
-                      <option value="titlePermit">칭호권</option>
+                      <option value="custom">커스텀</option>
                     </select>
                     <Input
                       placeholder="값 (예: 😎)"
@@ -3160,7 +3180,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     {[
                       { key: 'all', label: '전체', icon: '📦' },
                       { key: 'emoji', label: '이모지', icon: '😊' },
-                      { key: 'titlePermit', label: '칭호권', icon: '🏷️' },
+                      { key: 'custom', label: '커스텀', icon: '⚙️' },
                       { key: 'titleColor', label: '칭호색상', icon: '🎨' },
                       { key: 'nameEffect', label: '이름효과', icon: '✨' },
                       { key: 'animation', label: '애니메이션', icon: '🎬' },
@@ -3451,13 +3471,42 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
           {/* 팀 탭 */}
           <TabsContent value="teams" className="space-y-6">
+            {/* 팀 모드 토글 */}
+            <div className="flex gap-2 p-1 bg-gray-100 rounded-lg w-fit">
+              <button
+                onClick={() => setTeamTabMode('manage')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  teamTabMode === 'manage'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                👥 팀 관리
+              </button>
+              <button
+                onClick={() => {
+                  setTeamTabMode('status');
+                  if (selectedClass) {
+                    loadTeamStatus();
+                  }
+                }}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  teamTabMode === 'status'
+                    ? 'bg-white text-green-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                📊 팀 현황
+              </button>
+            </div>
+
             {!selectedClass ? (
               <Card>
                 <CardContent className="py-12 text-center text-gray-500">
                   👆 상단에서 학급을 선택해주세요
                 </CardContent>
               </Card>
-            ) : (
+            ) : teamTabMode === 'manage' ? (
               <>
                 {/* 팀 생성 */}
                 <Card>
@@ -3715,18 +3764,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   </Card>
                 )}
               </>
-            )}
-          </TabsContent>
-
-          {/* 팀 현황 탭 */}
-          <TabsContent value="teamStatus" className="space-y-6">
-            {!selectedClass ? (
-              <Card>
-                <CardContent className="py-12 text-center text-gray-500">
-                  👆 먼저 학급 관리 탭에서 학급을 선택해주세요.
-                </CardContent>
-              </Card>
-            ) : isLoadingTeamStatus ? (
+            ) : (
+              /* 팀 현황 모드 */
+              isLoadingTeamStatus ? (
               <Card>
                 <CardContent className="py-12 text-center text-gray-500">
                   📊 팀 현황을 불러오는 중...
@@ -3735,7 +3775,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             ) : teams.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center text-gray-500">
-                  생성된 팀이 없습니다. 팀 탭에서 팀을 먼저 만들어주세요.
+                  생성된 팀이 없습니다. 팀 관리에서 팀을 먼저 만들어주세요.
                 </CardContent>
               </Card>
             ) : (
@@ -3890,6 +3930,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   );
                 })}
               </>
+            )
             )}
           </TabsContent>
 
@@ -5817,6 +5858,15 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           </div>
         </div>
       )}
+
+      {/* To개발자 모달 */}
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+        userType="teacher"
+        userName={teacher?.name}
+        userCode={user?.uid}
+      />
     </div>
   );
 }
