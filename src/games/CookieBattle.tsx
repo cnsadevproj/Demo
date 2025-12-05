@@ -829,6 +829,12 @@ export function CookieBattle() {
               {/* 하단 버튼 */}
               <div className="p-4 border-t border-stone-700 flex gap-2">
                 <button
+                  onClick={() => { setShowHelpModal(false); setHelpPage(0); }}
+                  className="py-3 px-4 bg-stone-600 text-white font-bold rounded-xl hover:bg-stone-500 transition-colors"
+                >
+                  닫기
+                </button>
+                <button
                   onClick={() => setHelpPage(Math.max(0, helpPage - 1))}
                   disabled={helpPage === 0}
                   className="flex-1 py-3 bg-stone-700 text-white font-bold rounded-xl hover:bg-stone-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
