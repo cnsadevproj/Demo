@@ -38,6 +38,7 @@ import {
   ItemSuggestion
 } from '../services/firestoreApi';
 import { ProfilePhotoUpload } from '../components/ProfilePhotoUpload';
+import { StudentWordCloud } from '../components/wordcloud/StudentWordCloud';
 import { getItemByCode, ALL_SHOP_ITEMS } from '../types/shop';
 import { getKoreanDateString } from '../utils/dateUtils';
 
@@ -63,7 +64,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [currentStudent, setCurrentStudent] = useState<Student | null>(student);
   const [wishes, setWishes] = useState<Wish[]>([]);
   const [grassData, setGrassData] = useState<Array<{ date: string; cookieChange: number; count: number }>>([]);
-  const [activeTab, setActiveTab] = useState<'home' | 'wish' | 'grass' | 'shop' | 'profile' | 'classmates' | 'team' | 'gameCenter'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'wish' | 'grass' | 'shop' | 'profile' | 'classmates' | 'team' | 'gameCenter' | 'features'>('home');
 
   // To개발자 모달
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
@@ -1438,6 +1439,16 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
             }`}
           >
             🎮 게임
+          </button>
+          <button
+            onClick={() => setActiveTab('features')}
+            className={`flex-1 min-w-[60px] py-3 text-center font-medium transition-colors text-sm ${
+              activeTab === 'features'
+                ? 'text-indigo-600 border-b-2 border-indigo-600'
+                : 'text-gray-500'
+            }`}
+          >
+            🔧 기능
           </button>
         </div>
       </div>
@@ -3188,6 +3199,46 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
               <CardContent className="py-4 text-center text-gray-500 text-sm">
                 <p>🔜 더 많은 게임이 곧 추가될 예정이에요!</p>
                 <p className="text-xs mt-1">숫자야구는 선생님이 게임을 열면 참가할 수 있어요</p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* 기능 탭 */}
+        {activeTab === 'features' && studentTeacherId && student && (
+          <div className="space-y-6">
+            {/* 헤더 */}
+            <div className="bg-gradient-to-r from-indigo-100 to-purple-100 rounded-2xl p-6 text-center border-2 border-indigo-200">
+              <div className="text-5xl mb-3">🔧</div>
+              <h2 className="text-xl font-bold text-indigo-800 mb-2">학습 도구</h2>
+              <p className="text-indigo-600 text-sm">
+                다양한 학습 도구를 활용해보세요!
+              </p>
+            </div>
+
+            {/* 워드클라우드 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="text-2xl">☁️</span>
+                  <span>워드클라우드</span>
+                </CardTitle>
+                <CardDescription>키워드를 입력하고 실시간 결과를 확인하세요</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <StudentWordCloud
+                  teacherId={studentTeacherId}
+                  classId={student.classId}
+                  studentCode={student.code}
+                  studentName={currentStudent?.name || student.name}
+                />
+              </CardContent>
+            </Card>
+
+            {/* 안내 문구 */}
+            <Card className="bg-gray-50 border-dashed">
+              <CardContent className="py-4 text-center text-gray-500 text-sm">
+                <p>🔜 더 많은 학습 도구가 곧 추가될 예정이에요!</p>
               </CardContent>
             </Card>
           </div>
