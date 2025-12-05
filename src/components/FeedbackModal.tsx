@@ -40,8 +40,9 @@ export function FeedbackModal({ isOpen, onClose, userType, userName, userCode }:
       `시간: ${new Date().toLocaleString('ko-KR')}`
     );
 
-    // mailto 링크로 이메일 앱 열기
-    window.open(`mailto:${FEEDBACK_EMAIL}?subject=${emailSubject}&body=${emailBody}`, '_blank');
+    // Gmail 웹으로 열기
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${FEEDBACK_EMAIL}&su=${emailSubject}&body=${emailBody}`;
+    window.open(gmailUrl, '_blank');
 
     setSubmitted(true);
     setTimeout(() => {
@@ -173,10 +174,10 @@ export function FeedbackModal({ isOpen, onClose, userType, userName, userCode }:
                   : 'bg-blue-500 hover:bg-blue-600'
               } text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
             >
-              📧 이메일로 보내기
+              📧 Gmail로 보내기
             </button>
             <p className="text-xs text-gray-400 text-center mt-2">
-              이메일 앱이 열리면 보내기를 눌러주세요
+              Gmail이 열리면 보내기를 눌러주세요
             </p>
           </div>
         )}
