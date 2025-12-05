@@ -74,6 +74,7 @@ import { parseXlsxFile, downloadCsvTemplate, exportStudentsToCsv, parsePastGrass
 import { getKoreanDateString, getLastWeekdays, getLastWeekdaysWithData } from '../utils/dateUtils';
 import { TEAM_FLAGS, generateRandomTeamNameWithEmoji } from '../types/game';
 import { ALL_SHOP_ITEMS } from '../types/shop';
+import { TeacherWordCloud } from '../components/wordcloud/TeacherWordCloud';
 
 interface TeacherDashboardProps {
   onLogout: () => void;
@@ -2464,6 +2465,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             <TabsTrigger value="teams" onClick={() => { loadTeams(); if (teamTabMode === 'status') loadTeamStatus(); }}>👥 팀</TabsTrigger>
             <TabsTrigger value="gameCenter">🎮 게임센터</TabsTrigger>
             <TabsTrigger value="wishes" onClick={loadWishes}>⭐ 소원</TabsTrigger>
+            <TabsTrigger value="features">🔧 기능</TabsTrigger>
             <TabsTrigger value="profiles">👤 프로필</TabsTrigger>
             <TabsTrigger value="settings">⚙️ 설정</TabsTrigger>
           </TabsList>
@@ -4802,6 +4804,48 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     </>
                   )}
                 </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* 기능 탭 */}
+          <TabsContent value="features" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>🔧 학습 도구</CardTitle>
+                <CardDescription>다양한 학습 도구를 활용하여 수업을 진행하세요</CardDescription>
+              </CardHeader>
+            </Card>
+
+            {/* 워드클라우드 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="text-2xl">☁️</span>
+                  <span>워드클라우드</span>
+                </CardTitle>
+                <CardDescription>
+                  학생들의 키워드를 실시간으로 수집하고 시각화하세요
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {selectedClass ? (
+                  <TeacherWordCloud
+                    teacherId={user?.uid || ''}
+                    classId={selectedClass.id}
+                  />
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    학급을 먼저 선택해주세요
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* 안내 문구 */}
+            <Card className="bg-gray-50 border-dashed">
+              <CardContent className="py-4 text-center text-gray-500 text-sm">
+                <p>🔜 더 많은 학습 도구가 곧 추가될 예정입니다!</p>
+              </CardContent>
             </Card>
           </TabsContent>
 

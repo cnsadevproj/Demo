@@ -1743,3 +1743,359 @@ export async function getPendingItemSuggestionsCount(
   const snapshot = await getDocs(q);
   return snapshot.size;
 }
+
+// ========================================
+// 워드클라우드 API
+// ========================================
+
+// 워드클라우드 세션
+export interface WordCloudSession {
+  id: string;
+  title: string;
+  createdAt: Timestamp;
+  status: 'active' | 'ended';
+  maxSubmissions: number | null; // null이면 무제한
+  totalResponses: number;
+}
+
+// 학생이 제출한 단어
+export interface WordCloudWord {
+  id: string;
+  word: string;
+  timestamp: Timestamp;
+}
+
+// 학생 응답
+export interface WordCloudResponse {
+  studentCode: string;
+  studentName: string;
+  words: WordCloudWord[];
+  lastUpdate: Timestamp;
+}
+
+// 워드클라우드 집계 데이터
+export interface WordCloudData {
+  word: string;
+  count: number;
+  students: string[]; // 제출한 학생 코드 목록
+}
+
+// 워드클라우드 세션 생성
+export async function createWordCloudSession(
+  teacherId: string,
+  classId: string,
+  title: string,
+  maxSubmissions: number | null
+): Promise<string> {
+  const sessionsRef = collection(db, 'teachers', teacherId, 'classes', classId, 'wordclouds');
+  const sessionRef = doc(sessionsRef);
+
+  await setDoc(sessionRef, {
+    id: sessionRef.id,
+    title,
+    createdAt: serverTimestamp(),
+    status: 'active',
+    maxSubmissions,
+    totalResponses: 0
+  });
+
+  return sessionRef.id;
+}
+
+// 워드클라우드 세션 목록 조회
+export async function getWordCloudSessions(
+  teacherId: string,
+  classId: string
+): Promise<WordCloudSession[]> {
+  const sessionsRef = collection(db, 'teachers', teacherId, 'classes', classId, 'wordclouds');
+  const q = query(sessionsRef, orderBy('createdAt', 'desc'));
+  const snapshot = await getDocs(q);
+
+  return snapshot.docs.map(doc => doc.data()) as WordCloudSession[];
+}
+
+// 워드클라우드 세션 상태 변경
+export async function updateWordCloudSessionStatus(
+  teacherId: string,
+  classId: string,
+  sessionId: string,
+  status: 'active' | 'ended'
+): Promise<void> {
+  const sessionRef = doc(db, 'teachers', teacherId, 'classes', classId, 'wordclouds', sessionId);
+  await updateDoc(sessionRef, { status });
+}
+
+// 워드클라우드 세션 삭제
+export async function deleteWordCloudSession(
+  teacherId: string,
+  classId: string,
+  sessionId: string
+): Promise<void> {
+  const sessionRef = doc(db, 'teachers', teacherId, 'classes', classId, 'wordclouds', sessionId);
+
+  // 모든 응답 삭제
+  const responsesRef = collection(db, 'teachers', teacherId, 'classes', classId, 'wordclouds', sessionId, 'responses');
+  const responsesSnapshot = await getDocs(responsesRef);
+
+  for (const responseDoc of responsesSnapshot.docs) {
+    await deleteDoc(responseDoc.ref);
+  }
+
+  // 세션 삭제
+  await deleteDoc(sessionRef);
+}
+
+// 단어 제출 (학생)
+export async function submitWordToCloud(
+  teacherId: string,
+  classId: string,
+  sessionId: string,
+  studentCode: string,
+  studentName: string,
+  word: string
+): Promise<{ success: boolean; error?: string }> {
+  const trimmedWord = word.trim();
+
+  if (!trimmedWord) {
+    return { success: false, error: '단어를 입력해주세요.' };
+  }
+
+  // 세션 확인
+  const sessionRef = doc(db, 'teachers', teacherId, 'classes', classId, 'wordclouds', sessionId);
+  const sessionSnap = await getDoc(sessionRef);
+
+  if (!sessionSnap.exists()) {
+    return { success: false, error: '세션을 찾을 수 없습니다.' };
+  }
+
+  const session = sessionSnap.data() as WordCloudSession;
+
+  if (session.status !== 'active') {
+    return { success: false, error: '종료된 세션입니다.' };
+  }
+
+  // 학생 응답 확인
+  const responseRef = doc(db, 'teachers', teacherId, 'classes', classId, 'wordclouds', sessionId, 'responses', studentCode);
+  const responseSnap = await getDoc(responseRef);
+
+  let words: WordCloudWord[] = [];
+
+  if (responseSnap.exists()) {
+    const response = responseSnap.data() as WordCloudResponse;
+    words = response.words || [];
+
+    // 중복 단어 확인
+    if (words.some(w => w.word.toLowerCase() === trimmedWord.toLowerCase())) {
+      return { success: false, error: '이미 제출한 단어입니다.' };
+    }
+
+    // 제출 횟수 제한 확인
+    if (session.maxSubmissions !== null && words.length >= session.maxSubmissions) {
+      return { success: false, error: `최대 ${session.maxSubmissions}개까지 제출할 수 있습니다.` };
+    }
+  }
+
+  // 새 단어 추가
+  const newWord: WordCloudWord = {
+    id: doc(collection(db, 'temp')).id,
+    word: trimmedWord,
+    timestamp: Timestamp.now()
+  };
+
+  words.push(newWord);
+
+  await setDoc(responseRef, {
+    studentCode,
+    studentName,
+    words,
+    lastUpdate: serverTimestamp()
+  });
+
+  // 총 응답 수 업데이트
+  await updateDoc(sessionRef, {
+    totalResponses: increment(1)
+  });
+
+  return { success: true };
+}
+
+// 단어 수정
+export async function updateWordInCloud(
+  teacherId: string,
+  classId: string,
+  sessionId: string,
+  studentCode: string,
+  wordId: string,
+  newWord: string
+): Promise<{ success: boolean; error?: string }> {
+  const trimmedWord = newWord.trim();
+
+  if (!trimmedWord) {
+    return { success: false, error: '단어를 입력해주세요.' };
+  }
+
+  const responseRef = doc(db, 'teachers', teacherId, 'classes', classId, 'wordclouds', sessionId, 'responses', studentCode);
+  const responseSnap = await getDoc(responseRef);
+
+  if (!responseSnap.exists()) {
+    return { success: false, error: '응답을 찾을 수 없습니다.' };
+  }
+
+  const response = responseSnap.data() as WordCloudResponse;
+  const words = response.words || [];
+
+  // 중복 단어 확인 (자기 자신 제외)
+  if (words.some(w => w.id !== wordId && w.word.toLowerCase() === trimmedWord.toLowerCase())) {
+    return { success: false, error: '이미 제출한 단어입니다.' };
+  }
+
+  const wordIndex = words.findIndex(w => w.id === wordId);
+
+  if (wordIndex === -1) {
+    return { success: false, error: '단어를 찾을 수 없습니다.' };
+  }
+
+  words[wordIndex] = {
+    ...words[wordIndex],
+    word: trimmedWord,
+    timestamp: Timestamp.now()
+  };
+
+  await updateDoc(responseRef, {
+    words,
+    lastUpdate: serverTimestamp()
+  });
+
+  return { success: true };
+}
+
+// 단어 삭제
+export async function deleteWordFromCloud(
+  teacherId: string,
+  classId: string,
+  sessionId: string,
+  studentCode: string,
+  wordId: string
+): Promise<void> {
+  const responseRef = doc(db, 'teachers', teacherId, 'classes', classId, 'wordclouds', sessionId, 'responses', studentCode);
+  const responseSnap = await getDoc(responseRef);
+
+  if (!responseSnap.exists()) return;
+
+  const response = responseSnap.data() as WordCloudResponse;
+  const words = response.words || [];
+
+  const filteredWords = words.filter(w => w.id !== wordId);
+
+  if (filteredWords.length === 0) {
+    // 모든 단어가 삭제되면 응답 문서도 삭제
+    await deleteDoc(responseRef);
+  } else {
+    await updateDoc(responseRef, {
+      words: filteredWords,
+      lastUpdate: serverTimestamp()
+    });
+  }
+
+  // 총 응답 수 업데이트
+  const sessionRef = doc(db, 'teachers', teacherId, 'classes', classId, 'wordclouds', sessionId);
+  await updateDoc(sessionRef, {
+    totalResponses: increment(-1)
+  });
+}
+
+// 학생이 제출한 단어 목록 조회
+export async function getStudentWords(
+  teacherId: string,
+  classId: string,
+  sessionId: string,
+  studentCode: string
+): Promise<WordCloudWord[]> {
+  const responseRef = doc(db, 'teachers', teacherId, 'classes', classId, 'wordclouds', sessionId, 'responses', studentCode);
+  const responseSnap = await getDoc(responseRef);
+
+  if (!responseSnap.exists()) return [];
+
+  const response = responseSnap.data() as WordCloudResponse;
+  return response.words || [];
+}
+
+// 모든 응답 조회
+export async function getAllWordCloudResponses(
+  teacherId: string,
+  classId: string,
+  sessionId: string
+): Promise<WordCloudResponse[]> {
+  const responsesRef = collection(db, 'teachers', teacherId, 'classes', classId, 'wordclouds', sessionId, 'responses');
+  const snapshot = await getDocs(responsesRef);
+
+  return snapshot.docs.map(doc => doc.data()) as WordCloudResponse[];
+}
+
+// 워드클라우드 집계 데이터 조회
+export async function getWordCloudData(
+  teacherId: string,
+  classId: string,
+  sessionId: string
+): Promise<WordCloudData[]> {
+  const responses = await getAllWordCloudResponses(teacherId, classId, sessionId);
+
+  const wordMap = new Map<string, { count: number; students: Set<string> }>();
+
+  for (const response of responses) {
+    for (const wordObj of response.words) {
+      const wordLower = wordObj.word.toLowerCase();
+
+      if (!wordMap.has(wordLower)) {
+        wordMap.set(wordLower, { count: 0, students: new Set() });
+      }
+
+      const data = wordMap.get(wordLower)!;
+
+      // 같은 학생이 같은 단어를 여러 번 제출해도 1번만 카운트
+      if (!data.students.has(response.studentCode)) {
+        data.students.add(response.studentCode);
+        data.count++;
+      }
+    }
+  }
+
+  return Array.from(wordMap.entries()).map(([word, data]) => ({
+    word,
+    count: data.count,
+    students: Array.from(data.students)
+  })).sort((a, b) => b.count - a.count);
+}
+
+// 실시간 세션 구독
+export function subscribeToWordCloudSession(
+  teacherId: string,
+  classId: string,
+  sessionId: string,
+  callback: (session: WordCloudSession | null) => void
+): () => void {
+  const sessionRef = doc(db, 'teachers', teacherId, 'classes', classId, 'wordclouds', sessionId);
+
+  return onSnapshot(sessionRef, (snapshot) => {
+    if (snapshot.exists()) {
+      callback(snapshot.data() as WordCloudSession);
+    } else {
+      callback(null);
+    }
+  });
+}
+
+// 실시간 응답 구독
+export function subscribeToWordCloudResponses(
+  teacherId: string,
+  classId: string,
+  sessionId: string,
+  callback: (responses: WordCloudResponse[]) => void
+): () => void {
+  const responsesRef = collection(db, 'teachers', teacherId, 'classes', classId, 'wordclouds', sessionId, 'responses');
+
+  return onSnapshot(responsesRef, (snapshot) => {
+    const responses = snapshot.docs.map(doc => doc.data()) as WordCloudResponse[];
+    callback(responses);
+  });
+}
