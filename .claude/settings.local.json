@@ -30,7 +30,8 @@
       "Bash(firebase hosting:releases:list:*)",
       "Bash(firebase hosting:releases:*)",
       "Bash(git merge:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(npm run dev:*)"
     ],
     "deny": [],
     "ask": []
