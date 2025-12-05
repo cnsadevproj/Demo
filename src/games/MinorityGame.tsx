@@ -18,6 +18,8 @@ interface GameData {
     optionB: string;
   } | null;
   createdAt: any;
+  gameMode?: 'elimination' | 'score'; // 탈락전 또는 점수전
+  maxRounds?: number; // 점수전 최대 라운드
 }
 
 interface PlayerData {
@@ -26,6 +28,7 @@ interface PlayerData {
   isAlive: boolean;
   currentChoice: 'A' | 'B' | null;
   survivedRounds: number;
+  score?: number; // 점수 모드에서 사용
 }
 
 interface RoundResult {
@@ -36,6 +39,7 @@ interface RoundResult {
   countB: number;
   winningChoice: 'A' | 'B';
   eliminated: string[];
+  gameMode?: 'elimination' | 'score';
 }
 
 export function MinorityGame() {
@@ -168,8 +172,8 @@ export function MinorityGame() {
     );
   }
 
-  // 탈락한 경우
-  if (playerData && !playerData.isAlive) {
+  // 탈락한 경우 (탈락전 모드에서만)
+  if (playerData && !playerData.isAlive && gameData?.gameMode !== 'score') {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-100 to-gray-200 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl p-8 shadow-xl text-center max-w-md">
@@ -202,10 +206,27 @@ export function MinorityGame() {
         <div className="bg-white rounded-2xl p-8 shadow-xl text-center max-w-md">
           <div className="text-6xl mb-4 animate-pulse">🎯</div>
           <h1 className="text-2xl font-bold text-pink-800 mb-2">소수결 게임</h1>
+          <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold mb-2 ${
+            gameData.gameMode === 'score'
+              ? 'bg-yellow-100 text-yellow-700'
+              : 'bg-purple-100 text-purple-700'
+          }`}>
+            {gameData.gameMode === 'score' ? '⭐ 점수전 모드' : '💀 탈락전 모드'}
+          </span>
           <p className="text-gray-600 mb-4">{studentName}님, 게임 시작을 기다리는 중...</p>
           <div className="bg-pink-50 rounded-xl p-4">
-            <p className="text-pink-700 font-medium">소수파가 되어 살아남으세요!</p>
-            <p className="text-sm text-pink-600 mt-1">적은 쪽을 선택해야 생존!</p>
+            {gameData.gameMode === 'score' ? (
+              <>
+                <p className="text-pink-700 font-medium">소수파가 되어 점수를 얻으세요!</p>
+                <p className="text-sm text-pink-600 mt-1">소수파: 1점, 다수파: 0점</p>
+                <p className="text-sm text-pink-600">총 {gameData.maxRounds || 10}문제!</p>
+              </>
+            ) : (
+              <>
+                <p className="text-pink-700 font-medium">소수파가 되어 살아남으세요!</p>
+                <p className="text-sm text-pink-600 mt-1">적은 쪽을 선택해야 생존!</p>
+              </>
+            )}
           </div>
           <div className="mt-6 flex items-center justify-center gap-2">
             <div className="w-3 h-3 bg-pink-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
@@ -217,37 +238,70 @@ export function MinorityGame() {
     );
   }
 
-  // 게임 종료 - 최종 생존자
-  if (gameData.status === 'finished' && playerData?.isAlive) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-yellow-100 to-amber-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl p-8 shadow-xl text-center max-w-md">
-          <div className="text-8xl mb-4 animate-bounce">🏆</div>
-          <h1 className="text-3xl font-bold text-amber-600 mb-2">최종 생존!</h1>
-          <p className="text-gray-600 mb-2">{studentName}님, 축하합니다!</p>
-          <div className="bg-amber-50 rounded-xl p-4">
-            <p className="text-amber-700">생존 라운드: <span className="font-bold">{playerData.survivedRounds}</span></p>
+  // 게임 종료
+  if (gameData.status === 'finished') {
+    // 점수 모드 종료 화면
+    if (gameData.gameMode === 'score') {
+      return (
+        <div className="min-h-screen bg-gradient-to-b from-yellow-100 to-amber-100 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-8 shadow-xl text-center max-w-md">
+            <div className="text-8xl mb-4">🏆</div>
+            <h1 className="text-3xl font-bold text-amber-600 mb-2">게임 종료!</h1>
+            <p className="text-gray-600 mb-2">{studentName}님, 수고하셨습니다!</p>
+            <div className="bg-amber-50 rounded-xl p-4">
+              <p className="text-amber-700 text-lg">최종 점수</p>
+              <p className="text-4xl font-bold text-amber-600 mt-2">⭐ {playerData?.score || 0}점</p>
+              <p className="text-sm text-amber-600 mt-2">{gameData.maxRounds || 10}문제 중 {playerData?.score || 0}번 소수파!</p>
+            </div>
+            {closeCountdown !== null && (
+              <p className="text-sm text-amber-600 mt-4">
+                ⏰ {closeCountdown}초 후 자동으로 닫힙니다
+              </p>
+            )}
+            <button
+              onClick={() => window.close()}
+              className="mt-4 px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+            >
+              창 닫기
+            </button>
           </div>
-          {closeCountdown !== null && (
-            <p className="text-sm text-amber-600 mt-4">
-              ⏰ {closeCountdown}초 후 자동으로 닫힙니다
-            </p>
-          )}
-          <button
-            onClick={() => window.close()}
-            className="mt-4 px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
-          >
-            창 닫기
-          </button>
         </div>
-      </div>
-    );
+      );
+    }
+
+    // 탈락전 종료 화면 - 생존자
+    if (playerData?.isAlive) {
+      return (
+        <div className="min-h-screen bg-gradient-to-b from-yellow-100 to-amber-100 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-8 shadow-xl text-center max-w-md">
+            <div className="text-8xl mb-4 animate-bounce">🏆</div>
+            <h1 className="text-3xl font-bold text-amber-600 mb-2">최종 생존!</h1>
+            <p className="text-gray-600 mb-2">{studentName}님, 축하합니다!</p>
+            <div className="bg-amber-50 rounded-xl p-4">
+              <p className="text-amber-700">생존 라운드: <span className="font-bold">{playerData.survivedRounds}</span></p>
+            </div>
+            {closeCountdown !== null && (
+              <p className="text-sm text-amber-600 mt-4">
+                ⏰ {closeCountdown}초 후 자동으로 닫힙니다
+              </p>
+            )}
+            <button
+              onClick={() => window.close()}
+              className="mt-4 px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+            >
+              창 닫기
+            </button>
+          </div>
+        </div>
+      );
+    }
   }
 
   // 결과 화면
   if (gameData.status === 'result' && lastResult) {
     const myChoice = selectedChoice;
     const iWon = myChoice === lastResult.winningChoice;
+    const isScoreMode = gameData.gameMode === 'score';
 
     return (
       <div className={`min-h-screen flex items-center justify-center p-4 ${
@@ -255,9 +309,16 @@ export function MinorityGame() {
       }`}>
         <div className="bg-white rounded-2xl p-8 shadow-xl text-center max-w-md w-full">
           <div className="text-6xl mb-4">{iWon ? '✅' : '❌'}</div>
-          <h1 className={`text-2xl font-bold mb-4 ${iWon ? 'text-green-600' : 'text-red-600'}`}>
-            {iWon ? '생존!' : '위험!'}
+          <h1 className={`text-2xl font-bold mb-2 ${iWon ? 'text-green-600' : 'text-red-600'}`}>
+            {isScoreMode
+              ? (iWon ? '+1점!' : '0점')
+              : (iWon ? '생존!' : '위험!')}
           </h1>
+          {isScoreMode && (
+            <p className="text-yellow-600 font-bold mb-4">
+              현재 점수: ⭐ {playerData?.score || 0}점
+            </p>
+          )}
 
           {/* 질문 */}
           <div className="bg-gray-50 rounded-xl p-4 mb-4">
@@ -274,7 +335,7 @@ export function MinorityGame() {
               <p className="font-bold text-lg">{lastResult.optionA}</p>
               <p className="text-2xl font-bold mt-2">{lastResult.countA}명</p>
               {lastResult.winningChoice === 'A' && (
-                <span className="text-green-600 text-sm">소수파 승리!</span>
+                <span className="text-green-600 text-sm">소수파 {isScoreMode ? '+1점!' : '승리!'}</span>
               )}
             </div>
             <div className={`p-4 rounded-xl ${
@@ -285,13 +346,15 @@ export function MinorityGame() {
               <p className="font-bold text-lg">{lastResult.optionB}</p>
               <p className="text-2xl font-bold mt-2">{lastResult.countB}명</p>
               {lastResult.winningChoice === 'B' && (
-                <span className="text-green-600 text-sm">소수파 승리!</span>
+                <span className="text-green-600 text-sm">소수파 {isScoreMode ? '+1점!' : '승리!'}</span>
               )}
             </div>
           </div>
 
           <p className="text-sm text-gray-500">
-            {lastResult.eliminated.length}명 탈락 / 다음 라운드 대기중...
+            {isScoreMode
+              ? `${gameData.currentRound}/${gameData.maxRounds || 10}라운드 완료 / 다음 라운드 대기중...`
+              : `${lastResult.eliminated.length}명 탈락 / 다음 라운드 대기중...`}
           </p>
         </div>
       </div>
@@ -300,13 +363,21 @@ export function MinorityGame() {
 
   // 질문 화면
   if (gameData.status === 'question' && gameData.currentQuestion) {
+    const isScoreMode = gameData.gameMode === 'score';
     return (
       <div className="min-h-screen bg-gradient-to-b from-pink-100 to-purple-100 p-4">
         <div className="max-w-md mx-auto">
           {/* 헤더 */}
           <div className="bg-white rounded-2xl p-4 shadow-lg mb-4 text-center">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-500">Round {gameData.currentRound}</span>
+              <span className="text-sm text-gray-500">
+                Round {gameData.currentRound}{isScoreMode ? `/${gameData.maxRounds || 10}` : ''}
+              </span>
+              {isScoreMode && (
+                <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-bold">
+                  ⭐ {playerData?.score || 0}점
+                </span>
+              )}
               <span className="px-3 py-1 bg-pink-100 text-pink-700 rounded-full text-sm font-medium">
                 소수파가 되세요!
               </span>
@@ -370,8 +441,17 @@ export function MinorityGame() {
 
           {/* 도움말 */}
           <div className="bg-white/50 rounded-xl p-4 text-center text-sm text-gray-600">
-            <p>💡 적은 수가 선택한 쪽이 생존합니다!</p>
-            <p className="mt-1">남들이 고를 것 같은 선택지를 피하세요</p>
+            {isScoreMode ? (
+              <>
+                <p>💡 소수파에 속하면 1점을 얻어요!</p>
+                <p className="mt-1">남들이 고를 것 같은 선택지를 피하세요</p>
+              </>
+            ) : (
+              <>
+                <p>💡 적은 수가 선택한 쪽이 생존합니다!</p>
+                <p className="mt-1">남들이 고를 것 같은 선택지를 피하세요</p>
+              </>
+            )}
           </div>
         </div>
       </div>
