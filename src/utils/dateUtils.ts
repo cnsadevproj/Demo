@@ -20,11 +20,13 @@ export function getTodayKoreanDateString(): string {
 /**
  * 최근 N일의 평일(월~금) 날짜 목록 반환 (과거순 - 오른쪽이 최신)
  * @param count 가져올 평일 수
+ * @param offset 건너뛸 평일 수 (과거로 이동)
  * @returns 날짜 문자열 배열 (오래된 날짜가 첫 번째, 최신 날짜가 마지막)
  */
-export function getLastWeekdays(count: number): string[] {
+export function getLastWeekdays(count: number, offset: number = 0): string[] {
   const dates: string[] = [];
   let daysAdded = 0;
+  let daysSkipped = 0;
   let daysBack = 0;
 
   while (daysAdded < count) {
@@ -34,8 +36,12 @@ export function getLastWeekdays(count: number): string[] {
 
     // 평일만 (월~금)
     if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-      dates.unshift(getKoreanDateString(date)); // 앞에 추가하여 오래된 날짜가 먼저 오도록
-      daysAdded++;
+      if (daysSkipped < offset) {
+        daysSkipped++;
+      } else {
+        dates.unshift(getKoreanDateString(date)); // 앞에 추가하여 오래된 날짜가 먼저 오도록
+        daysAdded++;
+      }
     }
     daysBack++;
   }

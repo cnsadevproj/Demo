@@ -616,6 +616,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [isResettingGrass, setIsResettingGrass] = useState(false);
   const [isUploadingPastGrass, setIsUploadingPastGrass] = useState(false);
   const [pastGrassYear, setPastGrassYear] = useState(new Date().getFullYear());
+  const [grassOffset, setGrassOffset] = useState(0); // 잔디 네비게이션 오프셋 (10일 단위)
 
   // 학생 상세 모달
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -1884,7 +1885,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
   // 최근 10일 날짜 목록 (평일만, 한국 시간 기준, 최신순)
   const getLast14Days = () => {
-    return getLastWeekdays(10);
+    return getLastWeekdays(10, grassOffset);
   };
 
   // 카테고리 정규화 (이전 카테고리를 새 카테고리로 매핑)
@@ -2899,17 +2900,42 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   <CardHeader>
                     <CardTitle>🌱 학급 잔디 현황</CardTitle>
                     <CardDescription>
-                      {classes.find((c: ClassInfo) => c.id === selectedClass)?.name} - 최근 14일간 쿠키 변화량
+                      {classes.find((c: ClassInfo) => c.id === selectedClass)?.name} - 평일 기준 쿠키 변화량
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex flex-wrap gap-2 mb-4">
+                    <div className="flex flex-wrap items-center gap-2 mb-4">
+                      {/* 네비게이션 버튼 */}
+                      <div className="flex items-center gap-1 mr-2">
+                        <Button
+                          onClick={() => setGrassOffset(grassOffset + 10)}
+                          variant="outline"
+                          size="sm"
+                          className="px-2"
+                          title="이전 10일"
+                        >
+                          ◀
+                        </Button>
+                        <span className="text-sm text-gray-600 min-w-[80px] text-center">
+                          {grassOffset === 0 ? '최근 10일' : `${grassOffset}일 전`}
+                        </span>
+                        <Button
+                          onClick={() => setGrassOffset(Math.max(0, grassOffset - 10))}
+                          variant="outline"
+                          size="sm"
+                          className="px-2"
+                          disabled={grassOffset === 0}
+                          title="다음 10일"
+                        >
+                          ▶
+                        </Button>
+                      </div>
                       <Button
                         onClick={loadGrassData}
                         disabled={isLoadingGrass}
                         variant="outline"
                       >
-                        {isLoadingGrass ? '로딩 중...' : '🔄 잔디 새로고침'}
+                        {isLoadingGrass ? '로딩 중...' : '🔄 새로고침'}
                       </Button>
                       <Button
                         onClick={handleResetGrass}
@@ -2917,38 +2943,28 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         variant="outline"
                         className="text-red-600 hover:bg-red-50"
                       >
-                        {isResettingGrass ? '초기화 중...' : '🗑️ 잔디 초기화'}
+                        {isResettingGrass ? '초기화 중...' : '🗑️ 초기화'}
                       </Button>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="number"
-                          value={pastGrassYear}
-                          onChange={(e) => setPastGrassYear(parseInt(e.target.value) || new Date().getFullYear())}
-                          className="w-20 text-sm"
-                          min={2020}
-                          max={2030}
+                      <label className="relative cursor-pointer">
+                        <input
+                          type="file"
+                          accept=".xlsx"
+                          multiple
+                          onChange={(e) => handlePastGrassUpload(e.target.files)}
+                          className="hidden"
+                          disabled={isUploadingPastGrass}
                         />
-                        <label className="relative cursor-pointer">
-                          <input
-                            type="file"
-                            accept=".xlsx"
-                            multiple
-                            onChange={(e) => handlePastGrassUpload(e.target.files)}
-                            className="hidden"
-                            disabled={isUploadingPastGrass}
-                          />
-                          <Button
-                            variant="outline"
-                            className="text-green-600 hover:bg-green-50"
-                            disabled={isUploadingPastGrass}
-                            asChild
-                          >
-                            <span>
-                              {isUploadingPastGrass ? '업로드 중...' : '📂 과거 잔디 추가'}
-                            </span>
-                          </Button>
-                        </label>
-                      </div>
+                        <Button
+                          variant="outline"
+                          className="text-green-600 hover:bg-green-50"
+                          disabled={isUploadingPastGrass}
+                          asChild
+                        >
+                          <span>
+                            {isUploadingPastGrass ? '업로드 중...' : '📂 과거 잔디 추가'}
+                          </span>
+                        </Button>
+                      </label>
                     </div>
 
                     {isLoadingGrass ? (
