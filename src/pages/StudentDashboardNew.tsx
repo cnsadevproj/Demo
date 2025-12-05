@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { FeedbackModal, FeedbackButton } from '../components/FeedbackModal';
 import { toast } from 'sonner';
 import { db } from '../services/firebase';
 import { collection, onSnapshot, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -17,6 +18,7 @@ import {
   getTeacherShopItems,
   purchaseItem,
   activateTitlePermit,
+  activateProfilePhoto,
   saveProfile,
   getTeams,
   getClassStudents,
@@ -35,6 +37,7 @@ import {
   getStudentItemSuggestions,
   ItemSuggestion
 } from '../services/firestoreApi';
+import { ProfilePhotoUpload } from '../components/ProfilePhotoUpload';
 import { getItemByCode, ALL_SHOP_ITEMS } from '../types/shop';
 import { getKoreanDateString } from '../utils/dateUtils';
 
@@ -62,6 +65,9 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [grassData, setGrassData] = useState<Array<{ date: string; cookieChange: number; count: number }>>([]);
   const [activeTab, setActiveTab] = useState<'home' | 'wish' | 'grass' | 'shop' | 'profile' | 'classmates' | 'team' | 'gameCenter'>('home');
 
+  // To개발자 모달
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+
   // 새 소원 작성
   const [newWishContent, setNewWishContent] = useState('');
   const [isSubmittingWish, setIsSubmittingWish] = useState(false);
@@ -81,8 +87,11 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [shopItems, setShopItems] = useState<ShopItem[]>([]);
   const [isLoadingShop, setIsLoadingShop] = useState(false);
   const [isPurchasing, setIsPurchasing] = useState(false);
-  const [shopCategory, setShopCategory] = useState<'all' | 'emoji' | 'titlePermit' | 'titleColor' | 'nameEffect' | 'animation' | 'buttonBorder' | 'buttonFill'>('all');
+  const [shopCategory, setShopCategory] = useState<'all' | 'emoji' | 'custom' | 'titleColor' | 'nameEffect' | 'animation' | 'buttonBorder' | 'buttonFill'>('all');
   const [previewItem, setPreviewItem] = useState<ShopItem | null>(null);
+
+  // 프로필 사진 업로드 모달
+  const [showPhotoUpload, setShowPhotoUpload] = useState(false);
 
   // 상점 모드 (캔디/쿠키)
   const [shopMode, setShopMode] = useState<'candy' | 'cookie'>('candy');
@@ -122,7 +131,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // 인벤토리 탭
-  const [inventoryTab, setInventoryTab] = useState<'all' | 'emoji' | 'nameEffect' | 'titleColor' | 'animation' | 'titlePermit' | 'buttonBorder' | 'buttonFill'>('all');
+  const [inventoryTab, setInventoryTab] = useState<'all' | 'emoji' | 'nameEffect' | 'titleColor' | 'animation' | 'custom' | 'buttonBorder' | 'buttonFill'>('all');
 
   // 숫자야구 게임 상태
   interface BaseballGame {
@@ -649,6 +658,15 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     setIsRefreshingCookie(false);
   };
 
+  // 카테고리 정규화 (이전 카테고리를 새 카테고리로 매핑)
+  const normalizeCategory = (category: string): string => {
+    // titlePermit, profilePhoto → custom으로 통합
+    if (category === 'titlePermit' || category === 'profilePhoto') {
+      return 'custom';
+    }
+    return category;
+  };
+
   // 상점 로드 (Firebase에 없으면 기본 아이템 사용)
   const loadShop = async () => {
     // teacherId 없어도 기본 상품 표시
@@ -661,7 +679,16 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     try {
       const items = await getTeacherShopItems(studentTeacherId);
       // Firebase에 상품이 없으면 기본 상품 목록 사용
-      setShopItems(items.length > 0 ? items : ALL_SHOP_ITEMS);
+      if (items.length > 0) {
+        // 카테고리 정규화 적용
+        const normalizedItems = items.map(item => ({
+          ...item,
+          category: normalizeCategory(item.category) as typeof item.category
+        }));
+        setShopItems(normalizedItems);
+      } else {
+        setShopItems(ALL_SHOP_ITEMS);
+      }
     } catch (error) {
       console.error('Failed to load shop:', error);
       // 에러 시에도 기본 상품 표시
@@ -746,6 +773,32 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
       toast.error('칭호권 활성화에 실패했습니다.');
     }
     setIsPurchasing(false);
+  };
+
+  // 프로필사진권 활성화
+  const handleActivateProfilePhoto = async () => {
+    if (!studentTeacherId || !currentStudent) return;
+
+    setIsPurchasing(true);
+    try {
+      await activateProfilePhoto(studentTeacherId, currentStudent.code);
+      await loadData();
+      toast.success('프로필사진권이 활성화되었습니다! 이제 사진을 업로드할 수 있습니다. 📷');
+    } catch (error) {
+      toast.error('프로필사진권 활성화에 실패했습니다.');
+    }
+    setIsPurchasing(false);
+  };
+
+  // 프로필 사진 업데이트 핸들러
+  const handlePhotoUpdated = (url: string) => {
+    if (currentStudent) {
+      setCurrentStudent({
+        ...currentStudent,
+        profilePhotoUrl: url || undefined
+      });
+    }
+    loadData();
   };
 
   // 쿠키 상점 로드 (전체 클래스 공유)
@@ -863,8 +916,20 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const hasTitlePermitOwned = () => {
     if (!currentStudent?.ownedItems) return false;
     return currentStudent.ownedItems.some(code =>
-      code.startsWith('title_permit') ||
-      getItemByCode(code)?.category === 'titlePermit'
+      code.startsWith('title_permit')
+    );
+  };
+
+  // 프로필사진권 활성화 여부 확인
+  const hasProfilePhotoPermit = () => {
+    return currentStudent?.profile?.profilePhotoActive === true;
+  };
+
+  // 프로필사진권 보유 여부 확인 (구매는 했지만 활성화 안 됨)
+  const hasProfilePhotoOwned = () => {
+    if (!currentStudent?.ownedItems) return false;
+    return currentStudent.ownedItems.some(code =>
+      code === 'profile_photo_permit'
     );
   };
 
@@ -1231,15 +1296,27 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
               <p className="text-xs text-gray-500">{studentTeacher.schoolName}</p>
             </div>
           </div>
-          <button
-            onClick={onLogout}
-            className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg flex items-center gap-1"
-          >
-            <span>🚪</span>
-            <span>나가기</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <FeedbackButton onClick={() => setShowFeedbackModal(true)} />
+            <button
+              onClick={onLogout}
+              className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg flex items-center gap-1"
+            >
+              <span>🚪</span>
+              <span>나가기</span>
+            </button>
+          </div>
         </div>
       </header>
+
+      {/* To개발자 모달 */}
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+        userType="student"
+        userName={currentStudent.name}
+        userCode={currentStudent.code}
+      />
 
       {/* 쿠키 & 캔디 현황 */}
       <div className="max-w-4xl mx-auto px-4 py-6">
@@ -1429,7 +1506,13 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                   ),
                 }}>
                 <div className={`text-center ${getAnimationClass(currentStudent.profile.animationCode || 'none')}`}>
-                  {currentStudent.profile.emojiCode && getEmojiFromCode(currentStudent.profile.emojiCode) ? (
+                  {currentStudent.profilePhotoUrl && currentStudent.profile.profilePhotoActive ? (
+                    <img
+                      src={currentStudent.profilePhotoUrl}
+                      alt="프로필 사진"
+                      className="w-12 h-12 mx-auto mb-1 rounded-full object-cover border-2 border-white shadow-md"
+                    />
+                  ) : currentStudent.profile.emojiCode && getEmojiFromCode(currentStudent.profile.emojiCode) ? (
                     <div className="text-4xl mb-1">{getEmojiFromCode(currentStudent.profile.emojiCode)}</div>
                   ) : (
                     <div className="w-12 h-12 mx-auto mb-1 bg-gray-200 rounded-full flex items-center justify-center">
@@ -1747,7 +1830,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 }
 
                 return (
-                  <div className="w-full overflow-x-auto">
+                  <div className="w-full overflow-x-auto flex justify-center">
                     <div className="inline-block min-w-fit">
                       {/* 월 표시 - 각 주 위치에 맞춤 */}
                       <div className="flex mb-2 ml-7" style={{ gap: `${GAP}px` }}>
@@ -1880,7 +1963,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                       {[
                         { key: 'all', label: '전체', icon: '📦' },
                         { key: 'emoji', label: '이모지', icon: '😊' },
-                        { key: 'titlePermit', label: '칭호권', icon: '🏷️' },
+                        { key: 'custom', label: '커스텀', icon: '⚙️' },
                         { key: 'titleColor', label: '칭호색상', icon: '🎨' },
                         { key: 'nameEffect', label: '이름효과', icon: '✨' },
                         { key: 'animation', label: '애니메이션', icon: '🎬' },
@@ -1930,7 +2013,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                             const getCategoryIcon = () => {
                               switch (item.category) {
                                 case 'emoji': return item.value || '😊';
-                                case 'titlePermit': return '🏷️';
+                                case 'custom': return '⚙️';
                                 case 'titleColor': return '🎨';
                                 case 'nameEffect': return '✨';
                                 case 'animation': return '🎬';
@@ -1940,6 +2023,13 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                               }
                             };
 
+                            // 상품 이름에서 이모지 추출
+                            const extractEmoji = (name: string) => {
+                              const match = name.match(/(\p{Emoji_Presentation}|\p{Extended_Pictographic})/u);
+                              return match ? match[0] : null;
+                            };
+                            const itemEmoji = extractEmoji(item.name);
+
                             return (
                               <div
                                 key={item.code}
@@ -1947,20 +2037,39 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                                 className={`p-2 rounded-lg border-2 cursor-pointer hover:shadow-md transition-all ${isOwned ? 'bg-green-50 border-green-300' : 'bg-white border-gray-200'}`}
                               >
                                 <div className="text-center">
-                                  <p className="text-xs font-medium truncate mb-1">{item.name}</p>
+                                  {/* 카테고리 유형 (상단) */}
+                                  <p className="text-[10px] text-gray-400 mb-0.5">{getCategoryIcon()}</p>
+                                  {/* 상품 이모지 (중앙 - 크게) */}
                                   <div className="text-2xl mb-1">
-                                    {getCategoryIcon()}
+                                    {itemEmoji || getCategoryIcon()}
                                   </div>
+                                  {/* 상품 이름 */}
+                                  <p className="text-xs font-medium truncate mb-1">{item.name}</p>
                                   <p className="text-xs font-bold text-pink-600">{item.price} 🍭</p>
                                   <div className="mt-1">
                                     {isOwned ? (
-                                      item.category === 'titlePermit' && !hasTitlePermit() ? (
+                                      item.code.startsWith('title_permit') && !hasTitlePermit() ? (
                                         <button
                                           onClick={(e) => { e.stopPropagation(); handleActivateTitlePermit(); }}
                                           disabled={isPurchasing}
                                           className="w-full px-1 py-0.5 rounded text-xs font-medium bg-purple-500 hover:bg-purple-600 text-white"
                                         >
                                           활성화
+                                        </button>
+                                      ) : item.code === 'profile_photo_permit' && !hasProfilePhotoPermit() ? (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); handleActivateProfilePhoto(); }}
+                                          disabled={isPurchasing}
+                                          className="w-full px-1 py-0.5 rounded text-xs font-medium bg-purple-500 hover:bg-purple-600 text-white"
+                                        >
+                                          활성화
+                                        </button>
+                                      ) : item.code === 'profile_photo_permit' && hasProfilePhotoPermit() ? (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setShowPhotoUpload(true); }}
+                                          className="w-full px-1 py-0.5 rounded text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white"
+                                        >
+                                          📷 업로드
                                         </button>
                                       ) : (
                                         <span className="text-xs text-green-600">보유</span>
@@ -2163,39 +2272,49 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 <CardDescription>나만의 프로필을 만들어보세요</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* 미리보기 - 프로필 효과 적용 */}
-                <div className="text-center p-6 rounded-xl bg-gradient-to-b from-amber-50 to-orange-50">
-                  <p className="text-xs text-gray-500 mb-3">미리보기</p>
-                  <div
-                    className={`inline-block px-6 py-4 rounded-xl ${getAnimationClass(selectedAnimation)}`}
-                    style={{
-                      border: `2px solid ${getBorderColor(selectedBtnBorder)}`,
-                      ...(isGradientFill(selectedBtnFill)
-                        ? { backgroundImage: getGradientStyle(selectedBtnFill) }
-                        : { backgroundColor: getFillColor(selectedBtnFill) || 'transparent' }
-                      ),
-                    }}
-                  >
-                    {/* 뱃지가 선택되어 있으면 뱃지 표시, 없으면 이모지 표시 */}
-                    {selectedBadge && currentStudent?.badges?.[selectedBadge]?.hasBadge ? (
-                      <div className={`mb-2 ${getAnimationClass(selectedAnimation)}`}>
-                        <img
-                          src={currentStudent.badges[selectedBadge].imgUrl}
-                          alt={currentStudent.badges[selectedBadge].title}
-                          className="w-16 h-16 mx-auto rounded"
-                        />
-                      </div>
-                    ) : selectedEmoji && getOwnedEmojis().includes(selectedEmoji) ? (
-                      <div className={`text-4xl mb-2 ${getAnimationClass(selectedAnimation)}`}>{selectedEmoji}</div>
-                    ) : (
-                      <div className="w-12 h-12 mx-auto mb-2 bg-gray-200 rounded-full flex items-center justify-center">
-                        <span className="text-gray-400 text-xs">없음</span>
-                      </div>
-                    )}
-                    <p className={`font-bold text-lg ${getNameEffectClass(selectedNameEffect)}`}>{currentStudent.name}</p>
-                    {hasTitlePermit() && selectedTitle && (
-                      <p className={`text-sm mt-1 ${getTitleColorClass(selectedTitleColor)}`}>{selectedTitle}</p>
-                    )}
+                {/* 미리보기 - 상단 고정 (sticky) */}
+                <div className="sticky top-0 z-10 bg-white pb-4">
+                  <div className="text-center p-4 rounded-xl bg-gradient-to-b from-amber-50 to-orange-50 shadow-md">
+                    <p className="text-xs text-gray-500 mb-2">👁️ 미리보기</p>
+                    <div
+                      className={`inline-block px-6 py-4 rounded-xl ${getAnimationClass(selectedAnimation)}`}
+                      style={{
+                        border: `2px solid ${getBorderColor(selectedBtnBorder)}`,
+                        ...(isGradientFill(selectedBtnFill)
+                          ? { backgroundImage: getGradientStyle(selectedBtnFill) }
+                          : { backgroundColor: getFillColor(selectedBtnFill) || 'transparent' }
+                        ),
+                      }}
+                    >
+                      {/* 프로필 사진, 뱃지, 이모지 우선순위로 표시 */}
+                      {currentStudent.profilePhotoUrl && currentStudent.profile.profilePhotoActive ? (
+                        <div className={`mb-2 ${getAnimationClass(selectedAnimation)}`}>
+                          <img
+                            src={currentStudent.profilePhotoUrl}
+                            alt="프로필 사진"
+                            className="w-16 h-16 mx-auto rounded-full object-cover border-2 border-white shadow-md"
+                          />
+                        </div>
+                      ) : selectedBadge && currentStudent?.badges?.[selectedBadge]?.hasBadge ? (
+                        <div className={`mb-2 ${getAnimationClass(selectedAnimation)}`}>
+                          <img
+                            src={currentStudent.badges[selectedBadge].imgUrl}
+                            alt={currentStudent.badges[selectedBadge].title}
+                            className="w-16 h-16 mx-auto rounded"
+                          />
+                        </div>
+                      ) : selectedEmoji && getOwnedEmojis().includes(selectedEmoji) ? (
+                        <div className={`text-4xl mb-2 ${getAnimationClass(selectedAnimation)}`}>{selectedEmoji}</div>
+                      ) : (
+                        <div className="w-12 h-12 mx-auto mb-2 bg-gray-200 rounded-full flex items-center justify-center">
+                          <span className="text-gray-400 text-xs">없음</span>
+                        </div>
+                      )}
+                      <p className={`font-bold text-lg ${getNameEffectClass(selectedNameEffect)}`}>{currentStudent.name}</p>
+                      {hasTitlePermit() && selectedTitle && (
+                        <p className={`text-sm mt-1 ${getTitleColorClass(selectedTitleColor)}`}>{selectedTitle}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -2217,15 +2336,70 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         <button
                           key={emoji}
                           onClick={() => setSelectedEmoji(selectedEmoji === emoji ? '' : emoji)}
-                          className={`text-2xl px-3 py-1 rounded-lg transition-all shadow-md hover:shadow-lg ${
+                          className={`relative text-2xl px-3 py-1 rounded-lg transition-all shadow-md hover:shadow-lg ${
                             selectedEmoji === emoji
-                              ? 'bg-amber-100 ring-2 ring-amber-400 scale-110'
+                              ? 'bg-green-100 ring-2 ring-green-500 scale-110'
                               : 'bg-white hover:bg-gray-50'
                           }`}
                         >
                           {emoji}
+                          {selectedEmoji === emoji && <span className="absolute -top-1 -right-1 text-green-600 text-xs bg-white rounded-full">✓</span>}
                         </button>
                       ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 프로필 사진 관리 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    📷 프로필 사진
+                    <span className="text-xs text-gray-400 ml-2">(상점에서 구매 필요)</span>
+                  </label>
+                  {hasProfilePhotoPermit() ? (
+                    <div className="p-4 bg-blue-50 rounded-lg">
+                      <div className="flex items-center gap-4">
+                        {currentStudent.profilePhotoUrl ? (
+                          <img
+                            src={currentStudent.profilePhotoUrl}
+                            alt="프로필 사진"
+                            className="w-16 h-16 rounded-full object-cover border-2 border-blue-300 shadow-md"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center border-2 border-gray-300">
+                            <span className="text-2xl">📷</span>
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-blue-700">
+                            {currentStudent.profilePhotoUrl ? '사진이 설정되어 있어요!' : '사진을 업로드해보세요!'}
+                          </p>
+                          <p className="text-xs text-blue-500 mb-2">3MB 이하, 원형으로 표시됩니다</p>
+                          <button
+                            onClick={() => setShowPhotoUpload(true)}
+                            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-all"
+                          >
+                            {currentStudent.profilePhotoUrl ? '📷 사진 변경' : '📷 사진 업로드'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : hasProfilePhotoOwned() ? (
+                    <div className="p-4 bg-purple-50 rounded-lg text-center">
+                      <p className="text-sm text-purple-700 mb-2">프로필사진권을 활성화하면 사진을 업로드할 수 있어요!</p>
+                      <button
+                        onClick={handleActivateProfilePhoto}
+                        disabled={isPurchasing}
+                        className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50"
+                      >
+                        {isPurchasing ? '활성화 중...' : '프로필사진권 활성화'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-gray-100 rounded-lg text-center text-gray-500">
+                      <p className="text-2xl mb-2">📷</p>
+                      <p className="text-sm">프로필사진권이 없습니다</p>
+                      <p className="text-xs text-gray-400">상점에서 프로필사진권을 구매해보세요!</p>
                     </div>
                   )}
                 </div>
@@ -2255,14 +2429,15 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                           <button
                             key={key}
                             onClick={() => setSelectedBadge(selectedBadge === key ? '' : key)}
-                            className={`p-2 rounded-lg transition-all shadow-md hover:shadow-lg ${
+                            className={`relative p-2 rounded-lg transition-all shadow-md hover:shadow-lg ${
                               selectedBadge === key
-                                ? 'bg-amber-100 ring-2 ring-amber-400 scale-110'
+                                ? 'bg-green-100 ring-2 ring-green-500 scale-110'
                                 : 'bg-white hover:bg-gray-50'
                             }`}
                             title={badge.title}
                           >
                             <img src={badge.imgUrl} alt={badge.title} className="w-16 h-16 rounded" />
+                            {selectedBadge === key && <span className="absolute -top-1 -right-1 text-green-600 text-xs bg-white rounded-full px-1">✓</span>}
                           </button>
                         ))}
                     </div>
@@ -2317,13 +2492,14 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                       <button
                         key={item.code}
                         onClick={() => setSelectedTitleColor(selectedTitleColor === item.value ? '0' : item.value)}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
+                        className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
                           selectedTitleColor === item.value
-                            ? 'ring-2 ring-amber-400 scale-105'
+                            ? 'ring-2 ring-green-500 scale-105'
                             : 'hover:scale-105'
                         } ${getTitleColorClass(item.value)} bg-white border`}
                       >
                         {item.name}
+                        {selectedTitleColor === item.value && <span className="absolute -top-1 -right-1 text-green-600 text-xs bg-white rounded-full px-1">✓</span>}
                       </button>
                     ))}
                   </div>
@@ -2346,13 +2522,14 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         <button
                           key={item.code}
                           onClick={() => setSelectedNameEffect(selectedNameEffect === item.value ? 'none' : item.value)}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
+                          className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
                             selectedNameEffect === item.value
-                              ? 'ring-2 ring-amber-400 scale-105'
+                              ? 'ring-2 ring-green-500 scale-105'
                               : 'hover:scale-105'
                           } ${getNameEffectClass(item.value)} bg-white border`}
                         >
                           {item.name}
+                          {selectedNameEffect === item.value && <span className="absolute -top-1 -right-1 text-green-600 text-xs bg-white rounded-full px-1">✓</span>}
                         </button>
                       ))}
                     </div>
@@ -2376,13 +2553,14 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         <button
                           key={item.code}
                           onClick={() => setSelectedAnimation(selectedAnimation === item.value ? 'none' : item.value)}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
+                          className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
                             selectedAnimation === item.value
-                              ? 'ring-2 ring-amber-400 scale-105'
+                              ? 'ring-2 ring-green-500 scale-105'
                               : 'hover:scale-105'
                           } ${selectedAnimation === item.value ? getAnimationClass(item.value) : ''} bg-white border`}
                         >
                           {item.name}
+                          {selectedAnimation === item.value && <span className="absolute -top-1 -right-1 text-green-600 text-xs bg-white rounded-full px-1">✓</span>}
                         </button>
                       ))}
                     </div>
@@ -2406,14 +2584,15 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         <button
                           key={item.code}
                           onClick={() => setSelectedBtnBorder(selectedBtnBorder === item.value ? 'gray-300' : item.value)}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg bg-white ${
+                          className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg bg-white ${
                             selectedBtnBorder === item.value
-                              ? 'ring-2 ring-amber-400 scale-105'
+                              ? 'ring-2 ring-green-500 scale-105'
                               : 'hover:scale-105'
                           }`}
                           style={{ border: `2px solid ${getBorderColor(item.value)}` }}
                         >
                           {item.name}
+                          {selectedBtnBorder === item.value && <span className="absolute -top-1 -right-1 text-green-600 text-xs bg-white rounded-full px-1">✓</span>}
                         </button>
                       ))}
                     </div>
@@ -2437,9 +2616,9 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         <button
                           key={item.code}
                           onClick={() => setSelectedBtnFill(selectedBtnFill === item.value ? 'none' : item.value)}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
+                          className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg ${
                             selectedBtnFill === item.value
-                              ? 'ring-2 ring-amber-400 scale-105'
+                              ? 'ring-2 ring-green-500 scale-105'
                               : 'hover:scale-105'
                           }`}
                           style={{
@@ -2451,6 +2630,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                           }}
                         >
                           {item.name}
+                          {selectedBtnFill === item.value && <span className="absolute -top-1 -right-1 text-green-600 text-xs bg-white rounded-full px-1">✓</span>}
                         </button>
                       ))}
                     </div>
@@ -3278,8 +3458,8 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                     </div>
                   )}
 
-                  {/* 칭호권 미리보기 */}
-                  {previewItem.category === 'titlePermit' && (
+                  {/* 커스텀 아이템 미리보기 */}
+                  {previewItem.category === 'custom' && previewItem.code.startsWith('title_permit') && (
                     <div className="space-y-2">
                       <div className="text-4xl">🏷️</div>
                       <div className="inline-block px-4 py-2 bg-white rounded-lg shadow">
@@ -3287,6 +3467,18 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         <p className="text-amber-600 text-sm font-medium">예시칭호</p>
                       </div>
                       <p className="text-sm text-gray-600">칭호를 {previewItem.value}글자까지 설정 가능!</p>
+                    </div>
+                  )}
+                  {previewItem.category === 'custom' && previewItem.code === 'profile_photo_permit' && (
+                    <div className="space-y-2">
+                      <div className="text-4xl">📷</div>
+                      <div className="inline-block px-4 py-2 bg-white rounded-lg shadow">
+                        <div className="w-16 h-16 mx-auto bg-gray-200 rounded-full flex items-center justify-center mb-2">
+                          <span className="text-2xl">👤</span>
+                        </div>
+                        <p className="font-bold">{currentStudent.name}</p>
+                      </div>
+                      <p className="text-sm text-gray-600">나만의 프로필 사진을 업로드할 수 있어요!</p>
                     </div>
                   )}
 
@@ -3597,6 +3789,17 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
               </div>
             </div>
           </div>
+        )}
+
+        {/* 프로필 사진 업로드 모달 */}
+        {showPhotoUpload && studentTeacherId && currentStudent && (
+          <ProfilePhotoUpload
+            onClose={() => setShowPhotoUpload(false)}
+            teacherId={studentTeacherId}
+            studentCode={currentStudent.code}
+            currentPhotoUrl={currentStudent.profilePhotoUrl}
+            onPhotoUpdated={handlePhotoUpdated}
+          />
         )}
       </div>
     </div>

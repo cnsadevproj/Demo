@@ -1,7 +1,7 @@
 // 상점 아이템 타입 정의
 
 // 아이템 카테고리
-export type ItemCategory = 'emoji' | 'nameEffect' | 'titleColor' | 'animation' | 'titlePermit' | 'buttonBorder' | 'buttonFill';
+export type ItemCategory = 'emoji' | 'nameEffect' | 'titleColor' | 'animation' | 'custom' | 'buttonBorder' | 'buttonFill';
 
 // 상점 아이템
 export interface ShopItem {
@@ -149,10 +149,10 @@ export const ANIMATION_ITEMS: ShopItem[] = [
   { code: 'anim_10', category: 'animation', name: '❄️ 눈송이', price: 25, value: 'snow', description: '눈이 내려요' },
 ];
 
-// 칭호권 아이템 (5글자 칭호권 하나만)
-export const TITLE_PERMIT_ITEMS: ShopItem[] = [
-  // 유료 - 5글자 칭호권만
-  { code: 'title_permit_5', category: 'titlePermit', name: '🏷️ 5글자 칭호권', price: 20, value: '5', description: '칭호를 5글자까지 설정할 수 있어요!' },
+// 커스텀 아이템 (칭호권 + 프로필사진권)
+export const CUSTOM_ITEMS: ShopItem[] = [
+  { code: 'title_permit_5', category: 'custom', name: '🏷️ 5글자 칭호권', price: 20, value: '5', description: '칭호를 5글자까지 설정할 수 있어요!' },
+  { code: 'profile_photo_permit', category: 'custom', name: '📷 프로필사진권', price: 30, value: 'enabled', description: '나만의 프로필 사진을 업로드할 수 있어요! (3MB 이하)' },
 ];
 
 // 버튼 테두리 아이템
@@ -195,7 +195,7 @@ export const ALL_SHOP_ITEMS: ShopItem[] = [
   ...NAME_EFFECT_ITEMS,
   ...TITLE_COLOR_ITEMS,
   ...ANIMATION_ITEMS,
-  ...TITLE_PERMIT_ITEMS,
+  ...CUSTOM_ITEMS,
   ...BUTTON_BORDER_ITEMS,
   ...BUTTON_FILL_ITEMS,
 ];

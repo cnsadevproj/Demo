@@ -631,3 +631,118 @@ export const manualCookieShopEmail = functions.https.onRequest(async (req, res) 
     res.status(500).json({ error: String(error) });
   }
 });
+
+// ============================================================
+// 피드백(버그보고/기능요청) 이메일 발송 기능
+// ============================================================
+
+const DEVELOPER_EMAIL = 'pantarei01@cnsa.hs.kr';
+
+/**
+ * 피드백 제출 시 개발자에게 이메일 발송
+ * Firestore Trigger: feedback 컬렉션에 문서 생성 시 실행
+ */
+export const onFeedbackCreated = functions.firestore
+  .document('feedback/{feedbackId}')
+  .onCreate(async (snap, context) => {
+    const feedback = snap.data();
+    const feedbackId = context.params.feedbackId;
+
+    console.log(`New feedback created: ${feedbackId}`);
+
+    // Gmail SMTP 설정 확인
+    const gmailUser = functions.config().gmail?.user;
+    const gmailPass = functions.config().gmail?.pass;
+
+    if (!gmailUser || !gmailPass) {
+      console.error('Gmail credentials not configured');
+      return null;
+    }
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: gmailUser,
+        pass: gmailPass
+      }
+    });
+
+    const typeLabel = feedback.type === 'bug' ? '🐛 버그 보고' : '💡 기능 요청';
+    const typeColor = feedback.type === 'bug' ? '#dc3545' : '#007bff';
+    const userTypeLabel = feedback.userType === 'teacher' ? '교사' : '학생';
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>다했니? 피드백</title>
+      </head>
+      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 24px; border-radius: 12px; margin-bottom: 24px;">
+          <h1 style="margin: 0;">💬 새로운 피드백</h1>
+          <p style="margin: 8px 0 0 0; opacity: 0.9;">다했니? 피드백 알림</p>
+        </div>
+
+        <div style="background-color: ${typeColor}15; border-left: 4px solid ${typeColor}; padding: 16px; margin-bottom: 24px; border-radius: 0 8px 8px 0;">
+          <span style="font-size: 24px;">${typeLabel}</span>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+          <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #eee; font-weight: bold; width: 100px;">제출자</td>
+            <td style="padding: 12px; border-bottom: 1px solid #eee;">${feedback.userName || '익명'} (${userTypeLabel})</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #eee; font-weight: bold;">제목</td>
+            <td style="padding: 12px; border-bottom: 1px solid #eee;">${feedback.title}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #eee; font-weight: bold; vertical-align: top;">내용</td>
+            <td style="padding: 12px; border-bottom: 1px solid #eee; white-space: pre-wrap;">${feedback.description}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px; font-weight: bold;">제출 시간</td>
+            <td style="padding: 12px;">${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</td>
+          </tr>
+        </table>
+
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;">
+
+        <p style="color: #666; font-size: 14px;">
+          이 메일은 다했니? 서비스에서 자동 발송되었습니다.<br>
+          피드백 ID: ${feedbackId}
+        </p>
+      </body>
+      </html>
+    `;
+
+    const mailOptions = {
+      from: `"다했니? 피드백" <${gmailUser}>`,
+      to: DEVELOPER_EMAIL,
+      subject: `[다했니? 피드백] ${typeLabel} - ${feedback.title}`,
+      html: emailHtml
+    };
+
+    try {
+      await transporter.sendMail(mailOptions);
+      console.log(`Feedback email sent to ${DEVELOPER_EMAIL}`);
+
+      // 이메일 발송 상태 업데이트
+      await snap.ref.update({
+        emailSent: true,
+        emailSentAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to send feedback email:', error);
+
+      await snap.ref.update({
+        emailSent: false,
+        emailError: String(error)
+      });
+
+      return { success: false, error: String(error) };
+    }
+  });

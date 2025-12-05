@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // 프로필 사진 업로드 규칙
+    match /profile-photos/{teacherId}/{studentCode} {
+      // 읽기: 모두 허용
+      allow read: if true;
+      // 쓰기: 3MB 이하 이미지만 허용
+      allow write: if request.resource.size < 3 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // 기타 파일은 기본적으로 차단
+    match /{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
