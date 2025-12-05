@@ -64,6 +64,7 @@ export function CookieBattle() {
   const [defenseBetInput, setDefenseBetInput] = useState('');
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lastRound, setLastRound] = useState<number>(0); // 라운드 추적 (입력 초기화용)
 
   // 사용법 모달
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -71,7 +72,7 @@ export function CookieBattle() {
 
   // 전투 결과 모달
   const [showBattleModal, setShowBattleModal] = useState(false);
-  const [allBattleResults, setAllBattleResults] = useState<BattleResult[][]>([]);
+  const [allBattleResults, setAllBattleResults] = useState<{ [round: string]: BattleResult[] }>({});
   const [myTeamBattles, setMyTeamBattles] = useState<BattleResult[]>([]);
 
   // 내가 대표자인지 확인
@@ -88,13 +89,23 @@ export function CookieBattle() {
       if (snapshot.exists()) {
         const data = snapshot.data() as GameData;
         setGameData(data);
-        setAllBattleResults(data.battleResults || []);
+        setAllBattleResults(data.battleResults || {});
+
+        // 새 라운드 시작 시 입력 초기화
+        if (data.round > lastRound) {
+          setLastRound(data.round);
+          setAttackBetInput('');
+          setDefenseBetInput('');
+          setSelectedTarget(null);
+        }
 
         // 결과 단계로 진입 시 자동으로 전투 결과 모달 표시
-        if (data.status === 'result' && data.battleResults && data.battleResults.length > 0) {
-          const latestBattles = data.battleResults[data.battleResults.length - 1];
-          setMyTeamBattles(latestBattles);
-          setShowBattleModal(true);
+        if (data.status === 'result' && data.battleResults) {
+          const latestBattles = data.battleResults[`round_${data.round}`];
+          if (latestBattles) {
+            setMyTeamBattles(latestBattles);
+            setShowBattleModal(true);
+          }
         }
 
         // 게임 종료 시 카운트다운
@@ -127,12 +138,8 @@ export function CookieBattle() {
       const myTeamData = teamList.find(t => t.members.includes(studentCode || ''));
       setMyTeam(myTeamData || null);
 
-      // 새 라운드 시작 시 입력 초기화
-      if (myTeamData && !myTeamData.isReady) {
-        setAttackBetInput('');
-        setDefenseBetInput('');
-        setSelectedTarget(null);
-      }
+      // 새 라운드 시작 시 입력 초기화 (라운드가 변경되고 아직 ready가 아닐 때만)
+      // 라운드 변경 감지는 게임 데이터 구독에서 처리
     });
 
     return () => unsubscribe();
@@ -360,7 +367,7 @@ export function CookieBattle() {
                     !team.isEliminated &&
                     team.id !== myTeam.id &&
                     myTeam.attackBet > 0
-                      ? 'cursor-pointer hover:scale-110'
+                      ? 'cursor-pointer hover:scale-110 group'
                       : ''
                   }`}
                   style={{
@@ -368,14 +375,16 @@ export function CookieBattle() {
                     top: `calc(50% + ${y}px)`,
                   }}
                 >
-                  <div className={`bg-gradient-to-b from-stone-700 to-stone-800 rounded-xl p-3 border-2 min-w-[100px] ${
+                  <div className={`bg-gradient-to-b from-stone-700 to-stone-800 rounded-xl p-3 border-2 min-w-[100px] transition-all ${
                     isMyTeam
                       ? 'border-amber-400 ring-2 ring-amber-400/50'
                       : isTarget
                         ? 'border-red-500 ring-2 ring-red-500/50'
                         : team.isEliminated
                           ? 'border-stone-700'
-                          : 'border-stone-600'
+                          : gameData.status === 'targeting' && isRepresentative && myTeam.attackBet > 0 && team.id !== myTeam.id
+                            ? 'border-stone-600 group-hover:border-red-400 group-hover:ring-2 group-hover:ring-red-400/50'
+                            : 'border-stone-600'
                   } shadow-lg`}>
                     <div className="text-center">
                       <div className="text-3xl mb-1">{team.emoji}</div>

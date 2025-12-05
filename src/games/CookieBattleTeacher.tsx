@@ -107,7 +107,7 @@ interface GameData {
   createdAt: any;
   accumulationStartDate: string; // 팀 결성일
   battleLog: string[];
-  battleResults?: BattleResult[][]; // 라운드별 전투 결과 저장
+  battleResults?: { [round: string]: BattleResult[] }; // 라운드별 전투 결과 저장 (객체 형태)
 }
 
 interface BattleResult {
@@ -144,7 +144,7 @@ export function CookieBattleTeacher() {
   // 전투 결과 모달
   const [showBattleModal, setShowBattleModal] = useState(false);
   const [selectedBattleIndex, setSelectedBattleIndex] = useState<number>(0);
-  const [allBattleResults, setAllBattleResults] = useState<BattleResult[][]>([]);
+  const [allBattleResults, setAllBattleResults] = useState<{ [round: string]: BattleResult[] }>({});
 
   // 선택된 팀 (팀 상세 보기용)
   const [selectedTeam, setSelectedTeam] = useState<TeamData | null>(null);
@@ -159,7 +159,7 @@ export function CookieBattleTeacher() {
         const data = snapshot.data() as GameData;
         setGameData(data);
         setBattleLog(data.battleLog || []);
-        setAllBattleResults(data.battleResults || []);
+        setAllBattleResults(data.battleResults || {});
       } else {
         alert('게임이 삭제되었습니다.');
         window.close();
@@ -453,8 +453,11 @@ export function CookieBattleTeacher() {
         });
       });
 
-      // 기존 battleResults에 현재 라운드 결과 추가
-      const updatedBattleResults = [...allBattleResults, results];
+      // 기존 battleResults에 현재 라운드 결과 추가 (객체 형태)
+      const updatedBattleResults = {
+        ...allBattleResults,
+        [`round_${gameData.round}`]: results,
+      };
 
       const gameRef = doc(db, 'games', gameId);
       batch.update(gameRef, {
