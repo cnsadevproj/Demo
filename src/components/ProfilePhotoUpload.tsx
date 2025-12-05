@@ -1,11 +1,12 @@
 // src/components/ProfilePhotoUpload.tsx
-// 프로필 사진 업로드 컴포넌트
+// 프로필 사진 업로드 컴포넌트 (이미지 크롭 기능 포함)
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { storage, db } from '../services/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { doc, updateDoc } from 'firebase/firestore';
 import { Camera, X, Upload, Check } from 'lucide-react';
+import { Slider } from './ui/slider';
 
 interface ProfilePhotoUploadProps {
   studentCode: string;
@@ -30,6 +31,14 @@ export function ProfilePhotoUpload({
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 이미지 편집 상태
+  const [zoom, setZoom] = useState(100);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const imageRef = useRef<HTMLImageElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -53,8 +62,91 @@ export function ProfilePhotoUpload({
     const reader = new FileReader();
     reader.onload = (e) => {
       setPreviewUrl(e.target?.result as string);
+      // 초기화
+      setZoom(100);
+      setPosition({ x: 0, y: 0 });
     };
     reader.readAsDataURL(file);
+  };
+
+  // 마우스 드래그 시작
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!selectedFile) return;
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y
+    });
+  };
+
+  // 마우스 이동
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !selectedFile) return;
+    setPosition({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y
+    });
+  };
+
+  // 마우스 드래그 종료
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Canvas에 원형 크롭된 이미지 그리기
+  const drawCroppedImage = (): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const canvas = canvasRef.current;
+      const image = imageRef.current;
+
+      if (!canvas || !image) {
+        reject(new Error('Canvas or image not found'));
+        return;
+      }
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+
+      // 캔버스 크기 설정 (출력 크기)
+      const size = 400;
+      canvas.width = size;
+      canvas.height = size;
+
+      // 원형 클리핑 경로
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+
+      // 배경 채우기
+      ctx.fillStyle = '#f3f4f6';
+      ctx.fillRect(0, 0, size, size);
+
+      // 이미지 그리기
+      const scale = zoom / 100;
+      const previewSize = 280; // 미리보기 컨테이너 크기
+      const scaledWidth = image.naturalWidth * (previewSize / image.width) * scale;
+      const scaledHeight = image.naturalHeight * (previewSize / image.height) * scale;
+
+      // 위치를 캔버스 크기에 맞게 조정
+      const scaleFactor = size / previewSize;
+      const drawX = (size / 2) - (scaledWidth / 2) + (position.x * scaleFactor);
+      const drawY = (size / 2) - (scaledHeight / 2) + (position.y * scaleFactor);
+
+      ctx.drawImage(image, drawX, drawY, scaledWidth, scaledHeight);
+
+      // Blob으로 변환
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('Failed to create blob'));
+        }
+      }, 'image/jpeg', 0.9);
+    });
   };
 
   const handleUpload = async () => {
@@ -64,9 +156,12 @@ export function ProfilePhotoUpload({
     setError(null);
 
     try {
+      // 크롭된 이미지 생성
+      const croppedBlob = await drawCroppedImage();
+
       // Storage에 업로드
       const storageRef = ref(storage, `profile-photos/${teacherId}/${studentCode}`);
-      await uploadBytes(storageRef, selectedFile);
+      await uploadBytes(storageRef, croppedBlob);
 
       // 다운로드 URL 가져오기
       const downloadUrl = await getDownloadURL(storageRef);
@@ -110,61 +205,94 @@ export function ProfilePhotoUpload({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[95vh] overflow-y-auto">
         {/* 헤더 */}
-        <div className="p-4 border-b flex items-center justify-between bg-gradient-to-r from-purple-500 to-pink-500">
+        <div className="p-4 border-b flex items-center justify-between bg-gradient-to-r from-purple-500 to-pink-500 sticky top-0 z-10">
           <div className="flex items-center gap-2">
             <Camera className="w-5 h-5 text-white" />
             <h2 className="text-lg font-bold text-white">프로필 사진</h2>
           </div>
           <button
             onClick={onClose}
-            className="text-white/80 hover:text-white"
+            className="text-white/80 hover:text-white transition-colors"
           >
             <X className="w-6 h-6" />
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 space-y-4">
           {/* 미리보기 영역 */}
-          <div className="flex justify-center mb-6">
+          <div className="flex justify-center">
             <div className="relative">
-              <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-purple-200 bg-gray-100 flex items-center justify-center">
+              <div
+                className="w-[280px] h-[280px] rounded-full overflow-hidden border-4 border-purple-200 bg-gray-100 flex items-center justify-center relative"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                style={{ cursor: selectedFile ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+              >
                 {previewUrl ? (
                   <img
+                    ref={imageRef}
                     src={previewUrl}
                     alt="프로필 미리보기"
-                    className="w-full h-full object-cover"
+                    className="absolute select-none"
+                    draggable={false}
+                    style={{
+                      transform: `translate(${position.x}px, ${position.y}px) scale(${zoom / 100})`,
+                      transformOrigin: 'center',
+                      maxWidth: 'none',
+                      maxHeight: 'none',
+                      width: '280px',
+                      height: 'auto'
+                    }}
                   />
                 ) : (
-                  <Camera className="w-12 h-12 text-gray-400" />
+                  <Camera className="w-16 h-16 text-gray-400" />
                 )}
               </div>
-              {previewUrl && (
-                <button
-                  onClick={() => {
-                    setPreviewUrl(null);
-                    setSelectedFile(null);
-                  }}
-                  className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+              {selectedFile && (
+                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-purple-600 text-white text-xs px-3 py-1 rounded-full">
+                  드래그로 위치 조정
+                </div>
               )}
             </div>
           </div>
 
+          {/* 줌 조절 슬라이더 */}
+          {selectedFile && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 flex items-center justify-between">
+                <span>크기 조절</span>
+                <span className="text-purple-600">{zoom}%</span>
+              </label>
+              <Slider
+                value={[zoom]}
+                onValueChange={(values) => setZoom(values[0])}
+                min={50}
+                max={200}
+                step={1}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>50%</span>
+                <span>200%</span>
+              </div>
+            </div>
+          )}
+
           {/* 에러 메시지 */}
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
               {error}
             </div>
           )}
 
           {/* 안내 문구 */}
-          <p className="text-center text-sm text-gray-500 mb-4">
-            📷 최대 3MB 이하의 이미지 파일만 업로드할 수 있어요.<br/>
-            사진은 원형으로 표시됩니다.
+          <p className="text-center text-sm text-gray-500">
+            📷 최대 3MB 이하의 이미지 파일<br/>
+            {selectedFile && '🖱️ 드래그로 위치 조정, 슬라이더로 크기 조절'}
           </p>
 
           {/* 파일 선택 버튼 */}
@@ -205,11 +333,11 @@ export function ProfilePhotoUpload({
               </button>
             )}
 
-            {currentPhotoUrl && (
+            {currentPhotoUrl && !selectedFile && (
               <button
                 onClick={handleRemovePhoto}
                 disabled={isUploading}
-                className="w-full py-3 px-4 bg-red-100 text-red-600 rounded-xl font-medium hover:bg-red-200 transition-all"
+                className="w-full py-3 px-4 bg-red-100 text-red-600 rounded-xl font-medium hover:bg-red-200 transition-all disabled:opacity-50"
               >
                 🗑️ 사진 삭제하기
               </button>
@@ -218,13 +346,17 @@ export function ProfilePhotoUpload({
             {/* 닫기 버튼 */}
             <button
               onClick={onClose}
-              className="w-full py-3 px-4 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition-all"
+              disabled={isUploading}
+              className="w-full py-3 px-4 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition-all disabled:opacity-50"
             >
               닫기
             </button>
           </div>
         </div>
       </div>
+
+      {/* Hidden canvas for image processing */}
+      <canvas ref={canvasRef} className="hidden" />
     </div>
   );
 }
