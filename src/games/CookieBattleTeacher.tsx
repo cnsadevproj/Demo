@@ -149,6 +149,10 @@ export function CookieBattleTeacher() {
   // 선택된 팀 (팀 상세 보기용)
   const [selectedTeam, setSelectedTeam] = useState<TeamData | null>(null);
 
+  // 팀별 전투 결과 모달
+  const [showTeamBattleModal, setShowTeamBattleModal] = useState(false);
+  const [teamBattleTarget, setTeamBattleTarget] = useState<TeamData | null>(null);
+
   // 게임 데이터 구독
   useEffect(() => {
     if (!gameId) return;
@@ -755,11 +759,27 @@ export function CookieBattleTeacher() {
                       <span className="text-blue-400">🛡️{team.defenseBet}</span>
                       {team.targetTeamId && (
                         <span className="text-amber-400 ml-2">
-                          → {teams.find(t => t.id === team.targetTeamId)?.emoji}
+                          → {teams.find(t => t.id === team.targetTeamId)?.emoji} {teams.find(t => t.id === team.targetTeamId)?.name}
                         </span>
                       )}
                     </div>
                   )}
+
+                  {/* 공격 대상 표시 (타겟팅 단계에서 모두 선택 완료시에만, 결과 단계에서는 항상) */}
+                  {(() => {
+                    const allTargeted = teams
+                      .filter(t => !t.isEliminated && t.attackBet > 0)
+                      .every(t => t.targetTeamId);
+                    const showTargets = gameData.status === 'result' || (gameData.status === 'targeting' && allTargeted);
+
+                    return showTargets && team.targetTeamId && !team.isEliminated && gameData.status === 'targeting' && (
+                      <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
+                        <span className="text-xs font-bold text-amber-400">
+                          → {teams.find(t => t.id === team.targetTeamId)?.emoji}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -773,7 +793,14 @@ export function CookieBattleTeacher() {
             return (
               <button
                 key={team.id}
-                onClick={() => setSelectedTeam(team)}
+                onClick={() => {
+                  if (gameData.status === 'result') {
+                    setTeamBattleTarget(team);
+                    setShowTeamBattleModal(true);
+                  } else {
+                    setSelectedTeam(team);
+                  }
+                }}
                 className={`bg-stone-800/80 rounded-xl p-3 border transition-all hover:scale-105 ${
                   team.isEliminated
                     ? 'border-stone-700 opacity-60'
@@ -1270,6 +1297,118 @@ export function CookieBattleTeacher() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 팀별 전투 결과 모달 */}
+      {showTeamBattleModal && teamBattleTarget && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setShowTeamBattleModal(false)}
+        >
+          <div
+            className="bg-stone-800 rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-stone-700 flex items-center justify-between">
+              <h3 className="font-bold text-white text-lg">
+                {teamBattleTarget.emoji} {teamBattleTarget.name} 전투 결과
+              </h3>
+              <button
+                onClick={() => setShowTeamBattleModal(false)}
+                className="text-stone-400 hover:text-white text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto max-h-[60vh]">
+              {(() => {
+                // 현재 라운드의 팀 관련 전투 필터링
+                const roundKey = `round_${gameData?.round}`;
+                const roundBattles = allBattleResults[roundKey] || [];
+                const teamBattles = roundBattles.filter(
+                  b => b.attackerTeamId === teamBattleTarget.id || b.defenderTeamId === teamBattleTarget.id
+                );
+
+                if (teamBattles.length === 0) {
+                  return (
+                    <div className="text-center py-8">
+                      <span className="text-4xl block mb-2">🛡️</span>
+                      <p className="text-stone-400">이번 라운드에 이 팀은 전투에 참여하지 않았습니다.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-4">
+                    {teamBattles.map((battle, idx) => {
+                      const isAttacker = battle.attackerTeamId === teamBattleTarget.id;
+                      const isWinner = (isAttacker && battle.result === 'attackWin') ||
+                                      (!isAttacker && battle.result === 'defenseWin');
+                      const isTie = battle.result === 'tie';
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`rounded-xl p-4 ${
+                            isWinner
+                              ? 'bg-green-900/30 border border-green-600/50'
+                              : isTie
+                                ? 'bg-stone-700/30 border border-stone-600/50'
+                                : 'bg-red-900/30 border border-red-600/50'
+                          }`}
+                        >
+                          {/* 결과 배너 */}
+                          <div className="text-center mb-4">
+                            <span className={`inline-block px-4 py-2 rounded-full text-lg font-bold ${
+                              isWinner
+                                ? 'bg-green-600 text-white'
+                                : isTie
+                                  ? 'bg-stone-600 text-white'
+                                  : 'bg-red-600 text-white'
+                            }`}>
+                              {isWinner ? '🎉 승리!' : isTie ? '⚖️ 동점' : '💔 패배'}
+                            </span>
+                          </div>
+
+                          {/* 전투 정보 */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div className={`text-center flex-1 ${isAttacker ? 'ring-2 ring-amber-400/50 rounded-lg p-2' : ''}`}>
+                              <span className="text-2xl block">{battle.attackerEmoji}</span>
+                              <span className="text-white font-bold text-sm block">{battle.attackerName}</span>
+                              <span className="text-red-400 block text-sm">⚔️ {battle.attackBet}</span>
+                            </div>
+                            <div className="px-3">
+                              <span className="text-xl">VS</span>
+                            </div>
+                            <div className={`text-center flex-1 ${!isAttacker ? 'ring-2 ring-amber-400/50 rounded-lg p-2' : ''}`}>
+                              <span className="text-2xl block">{battle.defenderEmoji}</span>
+                              <span className="text-white font-bold text-sm block">{battle.defenderName}</span>
+                              <span className="text-blue-400 block text-sm">🛡️ {battle.defenseBet}</span>
+                            </div>
+                          </div>
+
+                          {/* 재화 변화 */}
+                          <div className="bg-black/30 rounded-lg p-3 text-center">
+                            <p className="text-stone-400 text-sm mb-1">재화 변화</p>
+                            <p className={`text-2xl font-bold ${
+                              (isAttacker ? battle.attackerChange : battle.defenderChange) >= 0
+                                ? 'text-green-400'
+                                : 'text-red-400'
+                            }`}>
+                              {(isAttacker ? battle.attackerChange : battle.defenderChange) >= 0 ? '+' : ''}
+                              {isAttacker ? battle.attackerChange : battle.defenderChange} 🍪
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

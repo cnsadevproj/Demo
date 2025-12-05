@@ -353,8 +353,8 @@ export function CookieBattle() {
                       gameData.status === 'targeting' &&
                       isRepresentative &&
                       !team.isEliminated &&
-                      team.id !== myTeam.id &&
-                      myTeam.attackBet > 0
+                      myTeam &&
+                      team.id !== myTeam.id
                     ) {
                       setSelectedTarget(team.id);
                     }
@@ -365,8 +365,8 @@ export function CookieBattle() {
                     gameData.status === 'targeting' &&
                     isRepresentative &&
                     !team.isEliminated &&
-                    team.id !== myTeam.id &&
-                    myTeam.attackBet > 0
+                    myTeam &&
+                    team.id !== myTeam.id
                       ? 'cursor-pointer hover:scale-110 group'
                       : ''
                   }`}
@@ -386,7 +386,7 @@ export function CookieBattle() {
                         ? 'border-red-500 ring-2 ring-red-500/50'
                         : team.isEliminated
                           ? 'border-stone-700'
-                          : gameData.status === 'targeting' && isRepresentative && myTeam.attackBet > 0 && team.id !== myTeam.id
+                          : gameData.status === 'targeting' && isRepresentative && myTeam && team.id !== myTeam.id
                             ? 'border-stone-600 group-hover:border-red-400 group-hover:ring-2 group-hover:ring-red-400/50'
                             : 'border-stone-600'
                   } shadow-lg`}>
@@ -406,6 +406,21 @@ export function CookieBattle() {
                       )}
                     </div>
                   </div>
+                  {/* 공격 대상 표시 (결과 단계에서만, 또는 타겟팅 단계에서 모두 선택 완료시) */}
+                  {(() => {
+                    const allTargeted = teams
+                      .filter(t => !t.isEliminated && t.attackBet > 0)
+                      .every(t => t.targetTeamId);
+                    const showTargets = gameData.status === 'result' || (gameData.status === 'targeting' && allTargeted);
+
+                    return showTargets && team.targetTeamId && !team.isEliminated && (
+                      <div className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
+                        <span className={`text-xs font-bold ${team.id === myTeam?.id ? 'text-green-400' : 'text-red-400'}`}>
+                          → {teams.find(t => t.id === team.targetTeamId)?.emoji}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
