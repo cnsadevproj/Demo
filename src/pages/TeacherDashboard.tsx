@@ -750,6 +750,8 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [minorityGame, setMinorityGame] = useState<MinorityGame | null>(null);
   const [isCreatingMinorityGame, setIsCreatingMinorityGame] = useState(false);
   const [minorityEntryFee, setMinorityEntryFee] = useState(0); // 소수결 참가비
+  type MinorityGameMode = 'elimination' | 'score';
+  const [minorityGameMode, setMinorityGameMode] = useState<MinorityGameMode>('elimination');
 
   // 소수결게임 생성
   const createMinorityGame = async () => {
@@ -772,7 +774,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
         usedQuestions: [],
         createdAt: serverTimestamp(),
         className: currentClassName,
-        entryFee: minorityEntryFee // 참가비
+        entryFee: minorityEntryFee, // 참가비
+        gameMode: minorityGameMode, // 게임 모드: elimination(탈락) 또는 score(점수)
+        maxRounds: minorityGameMode === 'score' ? 10 : 0 // 점수 모드: 10라운드 고정
       };
 
       await setDoc(doc(db, 'games', gameId), gameData);
@@ -4171,12 +4175,51 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   ) : !minorityGame ? (
                     // 게임 생성 UI
                     <div className="space-y-3">
+                      {/* 게임 모드 선택 */}
+                      <div className="bg-white p-3 rounded-lg">
+                        <p className="font-medium text-teal-700 mb-2 text-sm">🎮 게임 모드</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => setMinorityGameMode('elimination')}
+                            className={`p-2 rounded-lg text-xs font-medium transition-all ${
+                              minorityGameMode === 'elimination'
+                                ? 'bg-teal-500 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            💀 탈락전
+                            <p className="font-normal mt-0.5 opacity-80">소수파만 생존</p>
+                          </button>
+                          <button
+                            onClick={() => setMinorityGameMode('score')}
+                            className={`p-2 rounded-lg text-xs font-medium transition-all ${
+                              minorityGameMode === 'score'
+                                ? 'bg-teal-500 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            ⭐ 점수전
+                            <p className="font-normal mt-0.5 opacity-80">10문제 점수제</p>
+                          </button>
+                        </div>
+                      </div>
                       <div className="bg-white p-3 rounded-lg text-sm text-gray-600">
                         <p className="font-medium text-teal-700 mb-1">📋 게임 규칙</p>
-                        <p>· 밸런스 질문이 출제됩니다</p>
-                        <p>· A 또는 B 중 하나를 선택!</p>
-                        <p>· 소수파(적은 쪽)가 생존</p>
-                        <p>· 최후의 1~2명이 승자</p>
+                        {minorityGameMode === 'elimination' ? (
+                          <>
+                            <p>· 밸런스 질문이 출제됩니다</p>
+                            <p>· A 또는 B 중 하나를 선택!</p>
+                            <p>· 소수파(적은 쪽)가 생존</p>
+                            <p>· 최후의 1~2명이 승자</p>
+                          </>
+                        ) : (
+                          <>
+                            <p>· 총 10개의 질문이 출제됩니다</p>
+                            <p>· A 또는 B 중 하나를 선택!</p>
+                            <p>· 소수파: 1점, 다수파: 0점</p>
+                            <p>· 최종 점수로 순위 결정</p>
+                          </>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-600">참가비:</span>
