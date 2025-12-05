@@ -4840,7 +4840,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 {selectedClass ? (
                   <TeacherWordCloud
                     teacherId={user?.uid || ''}
-                    classId={selectedClass.id}
+                    classId={selectedClass}
                   />
                 ) : (
                   <div className="text-center py-8 text-gray-500">
