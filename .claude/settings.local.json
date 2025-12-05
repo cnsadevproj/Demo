@@ -28,7 +28,9 @@
       "Bash(if not exist \"c:\\Users\\신도경\\Documents\\Demo\\src\\components\\teacher\" mkdir \"c:\\Users\\신도경\\Documents\\Demo\\src\\components\\teacher\")",
       "Bash(cat:*)",
       "Bash(firebase hosting:releases:list:*)",
-      "Bash(firebase hosting:releases:*)"
+      "Bash(firebase hosting:releases:*)",
+      "Bash(git merge:*)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []

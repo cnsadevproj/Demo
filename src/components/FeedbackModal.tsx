@@ -2,8 +2,8 @@
 // To개발자 - 버그보고/기능요청 모달 컴포넌트
 
 import React, { useState } from 'react';
-import { db } from '../services/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+
+const FEEDBACK_EMAIL = 'pantarei01@cnsa.hr.kr';
 
 interface FeedbackModalProps {
   isOpen: boolean;
@@ -17,40 +17,40 @@ export function FeedbackModal({ isOpen, onClose, userType, userName, userCode }:
   const [feedbackType, setFeedbackType] = useState<'bug' | 'feature'>('bug');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!title.trim() || !description.trim()) {
       alert('제목과 내용을 모두 입력해주세요.');
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      await addDoc(collection(db, 'feedback'), {
-        type: feedbackType,
-        title: title.trim(),
-        description: description.trim(),
-        userType,
-        userName: userName || '익명',
-        userCode: userCode || '',
-        status: 'pending',
-        createdAt: serverTimestamp()
-      });
-      setSubmitted(true);
-      setTimeout(() => {
-        onClose();
-        setSubmitted(false);
-        setTitle('');
-        setDescription('');
-        setFeedbackType('bug');
-      }, 2000);
-    } catch (error) {
-      console.error('Failed to submit feedback:', error);
-      alert('제출에 실패했습니다. 다시 시도해주세요.');
-    }
-    setIsSubmitting(false);
+    // 이메일 본문 작성
+    const typeLabel = feedbackType === 'bug' ? '🐛 버그 보고' : '💡 기능 요청';
+    const userInfo = userName ? `${userName}${userCode ? ` (${userCode})` : ''}` : '익명';
+    const userTypeLabel = userType === 'teacher' ? '선생님' : '학생';
+
+    const emailSubject = encodeURIComponent(`[다했니? ${typeLabel}] ${title.trim()}`);
+    const emailBody = encodeURIComponent(
+      `${typeLabel}\n\n` +
+      `제목: ${title.trim()}\n\n` +
+      `내용:\n${description.trim()}\n\n` +
+      `---\n` +
+      `보낸이: ${userInfo} (${userTypeLabel})\n` +
+      `시간: ${new Date().toLocaleString('ko-KR')}`
+    );
+
+    // mailto 링크로 이메일 앱 열기
+    window.open(`mailto:${FEEDBACK_EMAIL}?subject=${emailSubject}&body=${emailBody}`, '_blank');
+
+    setSubmitted(true);
+    setTimeout(() => {
+      onClose();
+      setSubmitted(false);
+      setTitle('');
+      setDescription('');
+      setFeedbackType('bug');
+    }, 2000);
   };
 
   if (!isOpen) return null;
@@ -166,15 +166,18 @@ export function FeedbackModal({ isOpen, onClose, userType, userName, userCode }:
             {/* 제출 버튼 */}
             <button
               onClick={handleSubmit}
-              disabled={isSubmitting || !title.trim() || !description.trim()}
+              disabled={!title.trim() || !description.trim()}
               className={`w-full py-3 rounded-xl font-bold transition-all ${
                 feedbackType === 'bug'
                   ? 'bg-red-500 hover:bg-red-600'
                   : 'bg-blue-500 hover:bg-blue-600'
-              } text-white disabled:opacity-50 disabled:cursor-not-allowed`}
+              } text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
             >
-              {isSubmitting ? '제출 중...' : '제출하기'}
+              📧 이메일로 보내기
             </button>
+            <p className="text-xs text-gray-400 text-center mt-2">
+              이메일 앱이 열리면 보내기를 눌러주세요
+            </p>
           </div>
         )}
       </div>
