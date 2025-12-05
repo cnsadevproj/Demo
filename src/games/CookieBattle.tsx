@@ -377,7 +377,11 @@ export function CookieBattle() {
                 >
                   <div className={`bg-gradient-to-b from-stone-700 to-stone-800 rounded-xl p-3 border-2 min-w-[100px] transition-all ${
                     isMyTeam
-                      ? 'border-amber-400 ring-2 ring-amber-400/50'
+                      ? myTeam.targetTeamId
+                        ? 'border-blue-500 ring-2 ring-blue-500/50'
+                        : myTeam.isReady
+                          ? 'border-green-500 ring-2 ring-green-500/50'
+                          : 'border-amber-400 ring-2 ring-amber-400/50'
                       : isTarget
                         ? 'border-red-500 ring-2 ring-red-500/50'
                         : team.isEliminated
