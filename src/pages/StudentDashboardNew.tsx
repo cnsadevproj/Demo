@@ -203,7 +203,6 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     teacherId: string;
     classId: string;
     status: 'waiting' | 'betting' | 'targeting' | 'battle' | 'result' | 'finished';
-    lossMode: 'basic' | 'zeroSum' | 'soft';
     round: number;
     className?: string;
   }
@@ -563,6 +562,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   useEffect(() => {
     if (studentTeacherId && student) {
       loadData();
+      loadShop(); // 상점 아이템도 초기 로드 (프로필에서 구매 물품 표시용)
     }
   }, [studentTeacherId, student]);
 

@@ -47,6 +47,8 @@ interface GameData {
   } | null;
   usedQuestions: number[];
   createdAt: any;
+  gameMode?: 'elimination' | 'score'; // 탈락전 또는 점수전
+  maxRounds?: number; // 점수전일 경우 최대 라운드 수
 }
 
 interface PlayerData {
@@ -56,6 +58,7 @@ interface PlayerData {
   isAlive: boolean;
   currentChoice: 'A' | 'B' | null;
   survivedRounds: number;
+  score?: number; // 점수 모드에서 사용
 }
 
 interface StudentData {
@@ -171,6 +174,11 @@ export function MinorityGameTeacher() {
           playerList.push({ code: doc.id, ...doc.data() } as PlayerData);
         });
         playerList.sort((a, b) => {
+          // 점수 모드: 점수 높은 순
+          if (gameData?.gameMode === 'score') {
+            return (b.score || 0) - (a.score || 0);
+          }
+          // 탈락전 모드: 생존자 우선, 그 다음 생존 라운드 높은 순
           if (a.isAlive && !b.isAlive) return -1;
           if (!a.isAlive && b.isAlive) return 1;
           return b.survivedRounds - a.survivedRounds;
@@ -257,12 +265,15 @@ export function MinorityGameTeacher() {
   const calculateResult = async () => {
     if (!gameId || !gameData || !gameData.currentQuestion) return;
 
-    try {
-      const alivePlayers = players.filter(p => p.isAlive);
-      const countA = alivePlayers.filter(p => p.currentChoice === 'A').length;
-      const countB = alivePlayers.filter(p => p.currentChoice === 'B').length;
+    const isScoreMode = gameData.gameMode === 'score';
 
-      // 동점이면 랜덤 또는 둘 다 탈락 방지
+    try {
+      // 점수 모드: 모든 플레이어, 탈락전: 생존자만
+      const activePlayers = isScoreMode ? players : players.filter(p => p.isAlive);
+      const countA = activePlayers.filter(p => p.currentChoice === 'A').length;
+      const countB = activePlayers.filter(p => p.currentChoice === 'B').length;
+
+      // 소수파 결정 (동점이면 랜덤)
       let winningChoice: 'A' | 'B';
       if (countA === countB) {
         winningChoice = Math.random() < 0.5 ? 'A' : 'B';
@@ -270,52 +281,88 @@ export function MinorityGameTeacher() {
         winningChoice = countA < countB ? 'A' : 'B';
       }
 
-      // 탈락자 처리
-      const eliminated: string[] = [];
       const playersRef = collection(db, 'games', gameId, 'players');
       const playersSnap = await getDocs(playersRef);
 
-      for (const playerDoc of playersSnap.docs) {
-        const data = playerDoc.data();
-        if (data.isAlive) {
-          if (data.currentChoice !== winningChoice) {
-            await updateDoc(playerDoc.ref, {
-              isAlive: false,
-              survivedRounds: gameData.currentRound
-            });
-            eliminated.push(data.name);
-          } else {
-            await updateDoc(playerDoc.ref, {
-              survivedRounds: gameData.currentRound
-            });
+      if (isScoreMode) {
+        // 점수 모드: 소수파에게 1점 부여
+        for (const playerDoc of playersSnap.docs) {
+          const data = playerDoc.data();
+          const currentScore = data.score || 0;
+          const earnedPoint = data.currentChoice === winningChoice ? 1 : 0;
+          await updateDoc(playerDoc.ref, {
+            score: currentScore + earnedPoint,
+            survivedRounds: gameData.currentRound
+          });
+        }
+
+        // 라운드 결과 저장
+        await setDoc(doc(db, 'games', gameId, 'rounds', `round_${gameData.currentRound}`), {
+          question: gameData.currentQuestion.text,
+          optionA: gameData.currentQuestion.optionA,
+          optionB: gameData.currentQuestion.optionB,
+          countA,
+          countB,
+          winningChoice,
+          eliminated: [],
+          gameMode: 'score'
+        });
+
+        // 10라운드 완료 시 게임 종료
+        if (gameData.currentRound >= (gameData.maxRounds || 10)) {
+          await updateDoc(doc(db, 'games', gameId), {
+            status: 'finished'
+          });
+        } else {
+          await updateDoc(doc(db, 'games', gameId), {
+            status: 'result'
+          });
+        }
+      } else {
+        // 탈락전 모드: 다수파 탈락
+        const eliminated: string[] = [];
+
+        for (const playerDoc of playersSnap.docs) {
+          const data = playerDoc.data();
+          if (data.isAlive) {
+            if (data.currentChoice !== winningChoice) {
+              await updateDoc(playerDoc.ref, {
+                isAlive: false,
+                survivedRounds: gameData.currentRound
+              });
+              eliminated.push(data.name);
+            } else {
+              await updateDoc(playerDoc.ref, {
+                survivedRounds: gameData.currentRound
+              });
+            }
           }
         }
-      }
 
-      // 라운드 결과 저장
-      await setDoc(doc(db, 'games', gameId, 'rounds', `round_${gameData.currentRound}`), {
-        question: gameData.currentQuestion.text,
-        optionA: gameData.currentQuestion.optionA,
-        optionB: gameData.currentQuestion.optionB,
-        countA,
-        countB,
-        winningChoice,
-        eliminated
-      });
-
-      // 생존자 수 확인
-      const survivors = alivePlayers.filter(p => p.currentChoice === winningChoice).length;
-
-      if (survivors <= 2) {
-        // 게임 종료
-        await updateDoc(doc(db, 'games', gameId), {
-          status: 'finished'
+        // 라운드 결과 저장
+        await setDoc(doc(db, 'games', gameId, 'rounds', `round_${gameData.currentRound}`), {
+          question: gameData.currentQuestion.text,
+          optionA: gameData.currentQuestion.optionA,
+          optionB: gameData.currentQuestion.optionB,
+          countA,
+          countB,
+          winningChoice,
+          eliminated,
+          gameMode: 'elimination'
         });
-      } else {
-        // 결과 표시
-        await updateDoc(doc(db, 'games', gameId), {
-          status: 'result'
-        });
+
+        // 생존자 수 확인
+        const survivors = activePlayers.filter(p => p.currentChoice === winningChoice).length;
+
+        if (survivors <= 2) {
+          await updateDoc(doc(db, 'games', gameId), {
+            status: 'finished'
+          });
+        } else {
+          await updateDoc(doc(db, 'games', gameId), {
+            status: 'result'
+          });
+        }
       }
     } catch (error) {
       console.error('Failed to calculate result:', error);
@@ -394,18 +441,29 @@ export function MinorityGameTeacher() {
         <div className="bg-white rounded-2xl p-6 shadow-lg mb-4 text-center">
           <h1 className="text-3xl font-bold text-pink-800 mb-2">🎯 소수결 게임</h1>
           <p className="text-gray-600">{gameData.className || '게임'}</p>
-          <div className="mt-3 flex justify-center gap-4">
+          <div className="mt-2">
+            <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${
+              gameData.gameMode === 'score'
+                ? 'bg-yellow-100 text-yellow-700'
+                : 'bg-purple-100 text-purple-700'
+            }`}>
+              {gameData.gameMode === 'score' ? '⭐ 점수전 모드' : '💀 탈락전 모드'}
+            </span>
+          </div>
+          <div className="mt-3 flex justify-center gap-4 flex-wrap">
             <span className={`px-4 py-2 rounded-full text-white font-bold ${
               gameData.status === 'waiting' ? 'bg-amber-500' :
               gameData.status === 'question' ? 'bg-green-500' :
               gameData.status === 'result' ? 'bg-blue-500' : 'bg-gray-500'
             }`}>
               {gameData.status === 'waiting' ? '⏳ 대기중' :
-               gameData.status === 'question' ? `🎮 ${gameData.currentRound}라운드` :
+               gameData.status === 'question' ? `🎮 ${gameData.currentRound}${gameData.gameMode === 'score' ? `/${gameData.maxRounds || 10}` : ''}라운드` :
                gameData.status === 'result' ? '📊 결과' : '🏁 종료'}
             </span>
             <span className="px-4 py-2 bg-pink-100 text-pink-700 rounded-full font-bold">
-              👥 생존: {alivePlayers.length}명
+              {gameData.gameMode === 'score'
+                ? `👥 참가: ${players.length}명`
+                : `👥 생존: ${alivePlayers.length}명`}
             </span>
           </div>
         </div>
@@ -430,18 +488,24 @@ export function MinorityGameTeacher() {
               <div className="bg-pink-100 rounded-xl p-4">
                 <p className="font-bold text-pink-800">{gameData.currentQuestion.optionA}</p>
                 <p className="text-2xl font-bold mt-2">
-                  {alivePlayers.filter(p => p.currentChoice === 'A').length}명
+                  {gameData.gameMode === 'score'
+                    ? players.filter(p => p.currentChoice === 'A').length
+                    : alivePlayers.filter(p => p.currentChoice === 'A').length}명
                 </p>
               </div>
               <div className="bg-purple-100 rounded-xl p-4">
                 <p className="font-bold text-purple-800">{gameData.currentQuestion.optionB}</p>
                 <p className="text-2xl font-bold mt-2">
-                  {alivePlayers.filter(p => p.currentChoice === 'B').length}명
+                  {gameData.gameMode === 'score'
+                    ? players.filter(p => p.currentChoice === 'B').length
+                    : alivePlayers.filter(p => p.currentChoice === 'B').length}명
                 </p>
               </div>
             </div>
             <p className="text-center text-gray-500 mt-3">
-              투표: {votedCount} / {alivePlayers.length}명
+              투표: {gameData.gameMode === 'score'
+                ? `${players.filter(p => p.currentChoice !== null).length} / ${players.length}명`
+                : `${votedCount} / ${alivePlayers.length}명`}
             </p>
           </div>
         )}
@@ -452,27 +516,42 @@ export function MinorityGameTeacher() {
             👥 참가자 ({players.length}명)
           </h2>
           <div className="max-h-60 overflow-y-auto space-y-2">
-            {players.map((player) => (
+            {players.map((player, index) => (
               <div
                 key={player.code}
                 onClick={() => openStudentModal(player)}
                 className={`flex items-center justify-between p-3 rounded-xl cursor-pointer hover:ring-2 hover:ring-pink-400 transition-all ${
-                  player.isAlive ? 'bg-green-50' : 'bg-gray-100'
+                  gameData.gameMode === 'score'
+                    ? 'bg-yellow-50'
+                    : player.isAlive ? 'bg-green-50' : 'bg-gray-100'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">{player.isAlive ? '💚' : '💀'}</span>
-                  <span className={player.isAlive ? 'font-medium' : 'text-gray-400 line-through'}>
-                    {player.name}
-                  </span>
+                  {gameData.gameMode === 'score' ? (
+                    <>
+                      <span className="text-xl font-bold text-yellow-600">#{index + 1}</span>
+                      <span className="font-medium">{player.name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-xl">{player.isAlive ? '💚' : '💀'}</span>
+                      <span className={player.isAlive ? 'font-medium' : 'text-gray-400 line-through'}>
+                        {player.name}
+                      </span>
+                    </>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  {gameData.status === 'question' && player.isAlive && (
+                  {gameData.status === 'question' && (gameData.gameMode === 'score' || player.isAlive) && (
                     <span className={player.currentChoice ? 'text-green-600' : 'text-amber-600'}>
                       {player.currentChoice ? '✅ 투표완료' : '⏳ 대기중'}
                     </span>
                   )}
-                  <span className="text-gray-500">R{player.survivedRounds}</span>
+                  {gameData.gameMode === 'score' ? (
+                    <span className="text-yellow-600 font-bold">⭐{player.score || 0}점</span>
+                  ) : (
+                    <span className="text-gray-500">R{player.survivedRounds}</span>
+                  )}
                 </div>
               </div>
             ))}
@@ -550,8 +629,16 @@ export function MinorityGameTeacher() {
         <div className="mt-4 text-center text-white/80 text-sm">
           {gameData.status === 'waiting' && <p>3명 이상이 참가하면 시작할 수 있어요</p>}
           {gameData.status === 'question' && <p>모두 투표하면 마감 버튼을 눌러주세요</p>}
-          {gameData.status === 'result' && <p>결과 확인 후 다음 라운드를 시작하세요</p>}
-          {gameData.status === 'finished' && <p>게임이 종료되었습니다!</p>}
+          {gameData.status === 'result' && (
+            <p>
+              {gameData.gameMode === 'score'
+                ? `결과 확인 후 다음 라운드를 시작하세요 (${gameData.currentRound}/${gameData.maxRounds || 10})`
+                : '결과 확인 후 다음 라운드를 시작하세요'}
+            </p>
+          )}
+          {gameData.status === 'finished' && (
+            <p>{gameData.gameMode === 'score' ? '🏆 최종 순위가 결정되었습니다!' : '게임이 종료되었습니다!'}</p>
+          )}
         </div>
       </div>
 
