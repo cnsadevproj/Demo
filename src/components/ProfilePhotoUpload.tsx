@@ -36,6 +36,7 @@ export function ProfilePhotoUpload({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
   const imageRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -67,6 +68,17 @@ export function ProfilePhotoUpload({
       setPosition({ x: 0, y: 0 });
     };
     reader.readAsDataURL(file);
+  };
+
+  // 이미지 로드 완료 핸들러
+  const handleImageLoad = () => {
+    if (imageRef.current) {
+      const img = imageRef.current;
+      setImageDimensions({
+        width: img.naturalWidth,
+        height: img.naturalHeight
+      });
+    }
   };
 
   // 마우스 드래그 시작
@@ -128,8 +140,24 @@ export function ProfilePhotoUpload({
       // 이미지 그리기
       const scale = zoom / 100;
       const previewSize = 280; // 미리보기 컨테이너 크기
-      const scaledWidth = image.naturalWidth * (previewSize / image.width) * scale;
-      const scaledHeight = image.naturalHeight * (previewSize / image.height) * scale;
+
+      // 이미지의 원본 비율 유지하면서 컨테이너를 채우는 크기 계산
+      const imgAspect = image.naturalWidth / image.naturalHeight;
+      const containerAspect = 1; // 원형이므로 1:1
+
+      let baseWidth, baseHeight;
+      if (imgAspect > containerAspect) {
+        // 이미지가 더 넓음 - 높이 기준으로 맞춤
+        baseHeight = previewSize;
+        baseWidth = baseHeight * imgAspect;
+      } else {
+        // 이미지가 더 높음 - 너비 기준으로 맞춤
+        baseWidth = previewSize;
+        baseHeight = baseWidth / imgAspect;
+      }
+
+      const scaledWidth = baseWidth * scale;
+      const scaledHeight = baseHeight * scale;
 
       // 위치를 캔버스 크기에 맞게 조정
       const scaleFactor = size / previewSize;
@@ -237,15 +265,20 @@ export function ProfilePhotoUpload({
                     ref={imageRef}
                     src={previewUrl}
                     alt="프로필 미리보기"
-                    className="absolute select-none"
+                    onLoad={handleImageLoad}
+                    className="absolute select-none pointer-events-none"
                     draggable={false}
                     style={{
-                      transform: `translate(${position.x}px, ${position.y}px) scale(${zoom / 100})`,
+                      transform: `translate(calc(-50% + ${position.x}px), calc(-50% + ${position.y}px)) scale(${zoom / 100})`,
                       transformOrigin: 'center',
+                      left: '50%',
+                      top: '50%',
+                      width: 'auto',
+                      height: 'auto',
+                      minWidth: '100%',
+                      minHeight: '100%',
                       maxWidth: 'none',
-                      maxHeight: 'none',
-                      width: '280px',
-                      height: 'auto'
+                      maxHeight: 'none'
                     }}
                   />
                 ) : (
