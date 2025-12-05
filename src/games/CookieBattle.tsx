@@ -7,8 +7,21 @@ import {
   doc, onSnapshot, updateDoc, collection, setDoc, serverTimestamp
 } from 'firebase/firestore';
 
-type LossMode = 'basic' | 'zeroSum' | 'soft';
 type GameStatus = 'waiting' | 'betting' | 'targeting' | 'battle' | 'result' | 'finished';
+
+interface BattleResult {
+  attackerTeamId: string;
+  defenderTeamId: string;
+  attackerName: string;
+  defenderName: string;
+  attackerEmoji: string;
+  defenderEmoji: string;
+  attackBet: number;
+  defenseBet: number;
+  result: 'attackWin' | 'defenseWin' | 'tie';
+  attackerChange: number;
+  defenderChange: number;
+}
 
 interface TeamData {
   id: string;
@@ -30,9 +43,9 @@ interface GameData {
   className?: string;
   gameType: 'cookieBattle';
   status: GameStatus;
-  lossMode: LossMode;
   round: number;
   battleLog: string[];
+  battleResults?: BattleResult[][];
 }
 
 export function CookieBattle() {
@@ -54,6 +67,12 @@ export function CookieBattle() {
 
   // 사용법 모달
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [helpPage, setHelpPage] = useState(0);
+
+  // 전투 결과 모달
+  const [showBattleModal, setShowBattleModal] = useState(false);
+  const [allBattleResults, setAllBattleResults] = useState<BattleResult[][]>([]);
+  const [myTeamBattles, setMyTeamBattles] = useState<BattleResult[]>([]);
 
   // 내가 대표자인지 확인
   const isRepresentative = useMemo(() => {
@@ -69,6 +88,14 @@ export function CookieBattle() {
       if (snapshot.exists()) {
         const data = snapshot.data() as GameData;
         setGameData(data);
+        setAllBattleResults(data.battleResults || []);
+
+        // 결과 단계로 진입 시 자동으로 전투 결과 모달 표시
+        if (data.status === 'result' && data.battleResults && data.battleResults.length > 0) {
+          const latestBattles = data.battleResults[data.battleResults.length - 1];
+          setMyTeamBattles(latestBattles);
+          setShowBattleModal(true);
+        }
 
         // 게임 종료 시 카운트다운
         if (data.status === 'finished' && closeCountdown === null) {
@@ -241,13 +268,6 @@ export function CookieBattle() {
   const aliveTeams = teams.filter(t => !t.isEliminated);
   const otherAliveTeams = aliveTeams.filter(t => t.id !== myTeam.id);
 
-  // 손실 모드 라벨
-  const lossModeLabels: Record<LossMode, { emoji: string; name: string }> = {
-    basic: { emoji: '⚔️', name: '기본' },
-    zeroSum: { emoji: '💀', name: '제로섬' },
-    soft: { emoji: '🌸', name: '부드러운' },
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-amber-900 via-stone-800 to-stone-900 p-4">
       <div className="max-w-4xl mx-auto">
@@ -283,10 +303,6 @@ export function CookieBattle() {
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-stone-700">
             <div className="flex items-center gap-4">
               <span className="text-stone-500">라운드 {gameData.round}</span>
-              <span className="text-stone-600">|</span>
-              <span className="text-stone-500">
-                {lossModeLabels[gameData.lossMode].emoji} {lossModeLabels[gameData.lossMode].name} 모드
-              </span>
             </div>
             <span className={`px-3 py-1 rounded-full text-sm font-bold ${
               gameData.status === 'waiting' ? 'bg-stone-600 text-stone-300' :
@@ -455,27 +471,18 @@ export function CookieBattle() {
                 </div>
               )
             ) : (
-              // 팀원: 대표자 배팅 현황 보기
+              // 팀원: 대표자 배팅 현황 보기 (숫자는 숨김)
               <div className="text-center py-4">
                 {myTeam.isReady ? (
                   <>
                     <p className="text-green-400 font-bold text-lg">✅ 대표자가 배팅 완료!</p>
-                    <div className="flex justify-center gap-8 mt-4">
-                      <div>
-                        <p className="text-red-400 text-2xl font-bold">⚔️ {myTeam.attackBet}</p>
-                        <p className="text-stone-500 text-sm">공격</p>
-                      </div>
-                      <div>
-                        <p className="text-blue-400 text-2xl font-bold">🛡️ {myTeam.defenseBet}</p>
-                        <p className="text-stone-500 text-sm">수비</p>
-                      </div>
-                    </div>
+                    <p className="text-stone-500 text-sm mt-2">전투 결과에서 배팅 내역을 확인할 수 있습니다.</p>
                   </>
                 ) : (
                   <>
                     <p className="text-amber-400 font-bold">⏳ 대표자가 배팅 중...</p>
                     <p className="text-stone-500 text-sm mt-2">
-                      👑 {teams.find(t => t.id === myTeam.id)?.representativeCode === studentCode ? '당신이' : '대표자가'} 결정합니다
+                      👑 대표자가 결정합니다
                     </p>
                   </>
                 )}
@@ -575,6 +582,14 @@ export function CookieBattle() {
               <p className="text-3xl font-bold text-amber-400 mt-2">
                 🍪 {myTeam.resources}
               </p>
+              {myTeamBattles.length > 0 && (
+                <button
+                  onClick={() => setShowBattleModal(true)}
+                  className="mt-4 px-6 py-2 bg-red-600/50 text-red-200 rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  ⚔️ 전투 결과 보기
+                </button>
+              )}
               <p className="text-stone-500 text-sm mt-4">
                 다음 라운드를 기다려주세요...
               </p>
@@ -614,76 +629,341 @@ export function CookieBattle() {
           </div>
         )}
 
-        {/* 사용법 모달 */}
+        {/* 사용법 모달 (페이지형) */}
         {showHelpModal && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-stone-800 rounded-2xl max-w-md w-full max-h-[80vh] overflow-y-auto border border-amber-600/30">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold text-amber-400">📖 게임 방법</h2>
-                  <button
-                    onClick={() => setShowHelpModal(false)}
-                    className="text-stone-400 hover:text-white text-2xl"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <div className="space-y-4 text-stone-300">
-                  <div className="bg-stone-700/50 rounded-xl p-4">
-                    <h3 className="font-bold text-amber-400 mb-2">🎯 게임 목표</h3>
-                    <p className="text-sm">
-                      팀의 쿠키를 지키면서 다른 팀의 쿠키를 빼앗으세요!<br/>
-                      마지막까지 살아남은 팀이 승리합니다.
-                    </p>
-                  </div>
-
-                  <div className="bg-stone-700/50 rounded-xl p-4">
-                    <h3 className="font-bold text-amber-400 mb-2">👑 대표자 역할</h3>
-                    <p className="text-sm">
-                      각 팀의 대표자가 배팅과 공격 대상을 결정합니다.<br/>
-                      팀원은 대표자의 선택을 지켜볼 수 있습니다.
-                    </p>
-                  </div>
-
-                  <div className="bg-stone-700/50 rounded-xl p-4">
-                    <h3 className="font-bold text-red-400 mb-2">⚔️ 공격 배팅</h3>
-                    <p className="text-sm">
-                      다른 팀을 공격할 때 사용합니다.<br/>
-                      공격 성공 시 <span className="text-amber-400 font-bold">상대가 잃은 쿠키만큼 획득</span>합니다!
-                    </p>
-                  </div>
-
-                  <div className="bg-stone-700/50 rounded-xl p-4">
-                    <h3 className="font-bold text-blue-400 mb-2">🛡️ 수비 배팅</h3>
-                    <p className="text-sm">
-                      공격을 방어할 때 사용합니다.<br/>
-                      수비가 공격보다 크거나 같으면 방어 성공!
-                    </p>
-                  </div>
-
-                  <div className="bg-stone-700/50 rounded-xl p-4">
-                    <h3 className="font-bold text-green-400 mb-2">💡 배팅 팁</h3>
-                    <ul className="text-sm space-y-1">
-                      <li>• 배팅은 보유 재화 이내에서 자유롭게 가능</li>
-                      <li>• 모든 재화를 쓸 필요 없어요!</li>
-                      <li>• 공격 0 배팅 = 수비에만 집중</li>
-                      <li>• 공격+수비 합계가 재화를 넘으면 안 됨</li>
-                    </ul>
-                  </div>
-
-                  <div className="bg-amber-900/30 rounded-xl p-4 border border-amber-600/30">
-                    <h3 className="font-bold text-amber-400 mb-2">⚠️ 탈락 조건</h3>
-                    <p className="text-sm text-amber-200">
-                      쿠키가 0개가 되면 탈락합니다!<br/>
-                      신중하게 배팅하세요.
-                    </p>
-                  </div>
-                </div>
-
+            <div className="bg-stone-800 rounded-2xl max-w-md w-full max-h-[85vh] overflow-hidden border border-amber-600/30">
+              {/* 헤더 */}
+              <div className="p-4 border-b border-stone-700 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-amber-400">📖 게임 방법</h2>
                 <button
-                  onClick={() => setShowHelpModal(false)}
-                  className="w-full mt-6 py-3 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-colors"
+                  onClick={() => { setShowHelpModal(false); setHelpPage(0); }}
+                  className="text-stone-400 hover:text-white text-2xl"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* 페이지 인디케이터 */}
+              <div className="flex justify-center gap-2 py-3 bg-stone-900/50">
+                {[0, 1, 2, 3].map(i => (
+                  <button
+                    key={i}
+                    onClick={() => setHelpPage(i)}
+                    className={`w-3 h-3 rounded-full transition-all ${
+                      helpPage === i ? 'bg-amber-400 scale-125' : 'bg-stone-600 hover:bg-stone-500'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              {/* 컨텐츠 */}
+              <div className="p-6 overflow-y-auto max-h-[50vh]">
+                {/* 페이지 1: 게임 소개 */}
+                {helpPage === 0 && (
+                  <div className="space-y-4 text-stone-300">
+                    <div className="text-center mb-6">
+                      <span className="text-5xl">🏰</span>
+                      <h3 className="text-2xl font-bold text-amber-400 mt-2">쿠키 배틀</h3>
+                      <p className="text-stone-400 mt-1">팀 대전 전략 게임</p>
+                    </div>
+
+                    <div className="bg-stone-700/50 rounded-xl p-4">
+                      <h3 className="font-bold text-amber-400 mb-2">🎯 게임 목표</h3>
+                      <p className="text-sm">
+                        팀의 쿠키를 지키면서 다른 팀의 쿠키를 빼앗으세요!<br/>
+                        쿠키가 0이 되면 탈락, 마지막까지 살아남은 팀이 승리합니다.
+                      </p>
+                    </div>
+
+                    <div className="bg-stone-700/50 rounded-xl p-4">
+                      <h3 className="font-bold text-amber-400 mb-2">👑 대표자 역할</h3>
+                      <p className="text-sm">
+                        각 팀의 대표자가 배팅과 공격 대상을 결정합니다.<br/>
+                        팀원은 대표자의 선택을 지켜볼 수 있습니다.
+                      </p>
+                    </div>
+
+                    <div className="bg-stone-700/50 rounded-xl p-4">
+                      <h3 className="font-bold text-amber-400 mb-2">🔄 게임 흐름</h3>
+                      <div className="text-sm space-y-1">
+                        <p>1️⃣ <span className="text-blue-400">배팅 단계</span> - 공격/수비 쿠키 배분</p>
+                        <p>2️⃣ <span className="text-purple-400">대상 선택</span> - 공격할 팀 선택</p>
+                        <p>3️⃣ <span className="text-red-400">전투</span> - 자동 계산</p>
+                        <p>4️⃣ <span className="text-green-400">결과</span> - 승패 확인</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 페이지 2: 배팅 시스템 */}
+                {helpPage === 1 && (
+                  <div className="space-y-4 text-stone-300">
+                    <div className="text-center mb-4">
+                      <span className="text-4xl">💰</span>
+                      <h3 className="text-xl font-bold text-amber-400 mt-2">배팅 시스템</h3>
+                    </div>
+
+                    <div className="bg-red-900/30 rounded-xl p-4 border border-red-600/30">
+                      <h3 className="font-bold text-red-400 mb-2">⚔️ 공격 배팅</h3>
+                      <p className="text-sm">
+                        다른 팀을 공격할 때 사용합니다.<br/>
+                        <span className="text-amber-300">공격 &gt; 수비</span>일 때 공격이 성공합니다!
+                      </p>
+                    </div>
+
+                    <div className="bg-blue-900/30 rounded-xl p-4 border border-blue-600/30">
+                      <h3 className="font-bold text-blue-400 mb-2">🛡️ 수비 배팅</h3>
+                      <p className="text-sm">
+                        다른 팀의 공격을 방어할 때 사용합니다.<br/>
+                        <span className="text-amber-300">수비 &ge; 공격</span>일 때 방어가 성공합니다!
+                      </p>
+                    </div>
+
+                    <div className="bg-stone-700/50 rounded-xl p-4">
+                      <h3 className="font-bold text-green-400 mb-2">💡 배팅 규칙</h3>
+                      <ul className="text-sm space-y-1">
+                        <li>• 공격 + 수비 합계 ≤ 보유 쿠키</li>
+                        <li>• 공격 0 = 수비에만 집중</li>
+                        <li>• 수비 0 = 공격에 올인 (위험!)</li>
+                        <li>• 배팅 후에는 변경 불가!</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                {/* 페이지 3: 점수 계산 */}
+                {helpPage === 2 && (
+                  <div className="space-y-4 text-stone-300">
+                    <div className="text-center mb-4">
+                      <span className="text-4xl">📊</span>
+                      <h3 className="text-xl font-bold text-amber-400 mt-2">점수 계산</h3>
+                    </div>
+
+                    {/* 공격 승리 */}
+                    <div className="bg-red-900/30 rounded-xl p-4 border border-red-600/30">
+                      <h3 className="font-bold text-red-400 mb-2">⚔️ 공격 승리 (공격 &gt; 수비)</h3>
+                      <div className="text-sm space-y-1">
+                        <p><span className="text-red-300">공격팀:</span> +(공격-수비) 차이만큼 획득</p>
+                        <p><span className="text-blue-300">방어팀:</span> +50% 환불 - 차이만큼 손실</p>
+                      </div>
+                      <div className="mt-2 p-2 bg-black/30 rounded text-xs">
+                        예) 공격 30, 수비 20 → 공격팀 +10, 방어팀 -20
+                      </div>
+                    </div>
+
+                    {/* 방어 승리 */}
+                    <div className="bg-blue-900/30 rounded-xl p-4 border border-blue-600/30">
+                      <h3 className="font-bold text-blue-400 mb-2">🛡️ 방어 승리 (공격 &lt; 수비)</h3>
+                      <div className="text-sm space-y-1">
+                        <p><span className="text-red-300">공격팀:</span> -배팅 전액 손실</p>
+                        <p><span className="text-blue-300">방어팀:</span> +10 보너스!</p>
+                      </div>
+                      <div className="mt-2 p-2 bg-black/30 rounded text-xs">
+                        예) 공격 20, 수비 30 → 공격팀 -20, 방어팀 +10
+                      </div>
+                    </div>
+
+                    {/* 동점 */}
+                    <div className="bg-stone-700/50 rounded-xl p-4">
+                      <h3 className="font-bold text-stone-400 mb-2">⚖️ 동점 (공격 = 수비)</h3>
+                      <div className="text-sm">
+                        <p>양팀 모두 배팅의 30% 손실</p>
+                      </div>
+                      <div className="mt-2 p-2 bg-black/30 rounded text-xs">
+                        예) 공격 20, 수비 20 → 공격팀 -6, 방어팀 -6
+                      </div>
+                    </div>
+
+                    {/* 공격 안 받음 */}
+                    <div className="bg-green-900/30 rounded-xl p-4 border border-green-600/30">
+                      <h3 className="font-bold text-green-400 mb-2">🛡️ 공격 안 받음</h3>
+                      <div className="text-sm">
+                        <p>수비 배팅의 80% 환불</p>
+                      </div>
+                      <div className="mt-2 p-2 bg-black/30 rounded text-xs">
+                        예) 수비 50 → +40 환불 (10 손실)
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 페이지 4: 전략 팁 */}
+                {helpPage === 3 && (
+                  <div className="space-y-4 text-stone-300">
+                    <div className="text-center mb-4">
+                      <span className="text-4xl">💡</span>
+                      <h3 className="text-xl font-bold text-amber-400 mt-2">전략 팁</h3>
+                    </div>
+
+                    <div className="bg-stone-700/50 rounded-xl p-4">
+                      <h3 className="font-bold text-green-400 mb-2">✅ 좋은 전략</h3>
+                      <ul className="text-sm space-y-2">
+                        <li>• 상대 팀의 쿠키 수를 파악하세요</li>
+                        <li>• 수비를 확실히 해두면 공격 실패 시 보너스!</li>
+                        <li>• 공격 안 받으면 80% 환불받아요</li>
+                        <li>• 동점은 양팀 손해! 차이를 만드세요</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-red-900/30 rounded-xl p-4 border border-red-600/30">
+                      <h3 className="font-bold text-red-400 mb-2">❌ 주의사항</h3>
+                      <ul className="text-sm space-y-2">
+                        <li>• 수비 없이 올인 공격은 위험해요!</li>
+                        <li>• 동점 노리기보다 확실한 승패를!</li>
+                        <li>• 쿠키 0이 되면 바로 탈락!</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-amber-900/30 rounded-xl p-4 border border-amber-600/30">
+                      <h3 className="font-bold text-amber-400 mb-2">🏆 승리 조건</h3>
+                      <p className="text-sm">
+                        마지막까지 살아남은 팀이 승리!<br/>
+                        쿠키를 잘 지키면서 상대를 공격하세요!
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 하단 버튼 */}
+              <div className="p-4 border-t border-stone-700 flex gap-2">
+                <button
+                  onClick={() => setHelpPage(Math.max(0, helpPage - 1))}
+                  disabled={helpPage === 0}
+                  className="flex-1 py-3 bg-stone-700 text-white font-bold rounded-xl hover:bg-stone-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  ← 이전
+                </button>
+                {helpPage < 3 ? (
+                  <button
+                    onClick={() => setHelpPage(helpPage + 1)}
+                    className="flex-1 py-3 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-colors"
+                  >
+                    다음 →
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { setShowHelpModal(false); setHelpPage(0); }}
+                    className="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-colors"
+                  >
+                    ✓ 이해했어요!
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 전투 결과 모달 (팀 관련 전투만 표시) */}
+        {showBattleModal && myTeamBattles.length > 0 && myTeam && (
+          <div
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setShowBattleModal(false)}
+          >
+            <div
+              className="bg-stone-800 rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-4 border-b border-stone-700 flex items-center justify-between">
+                <h3 className="font-bold text-white text-lg">⚔️ 라운드 {gameData?.round} 전투 결과</h3>
+                <button
+                  onClick={() => setShowBattleModal(false)}
+                  className="text-stone-400 hover:text-white text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="p-4 overflow-y-auto max-h-[60vh]">
+                {/* 내 팀 관련 전투만 표시 */}
+                {(() => {
+                  const relevantBattles = myTeamBattles.filter(
+                    b => b.attackerTeamId === myTeam.id || b.defenderTeamId === myTeam.id
+                  );
+
+                  if (relevantBattles.length === 0) {
+                    return (
+                      <div className="text-center py-8">
+                        <span className="text-4xl block mb-2">🛡️</span>
+                        <p className="text-stone-400">이번 라운드에 우리 팀은 전투에 참여하지 않았습니다.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      {relevantBattles.map((battle, idx) => {
+                        const isAttacker = battle.attackerTeamId === myTeam.id;
+                        const isWinner = (isAttacker && battle.result === 'attackWin') ||
+                                        (!isAttacker && battle.result === 'defenseWin');
+                        const isTie = battle.result === 'tie';
+
+                        return (
+                          <div
+                            key={idx}
+                            className={`rounded-xl p-4 ${
+                              isWinner
+                                ? 'bg-green-900/30 border border-green-600/50'
+                                : isTie
+                                  ? 'bg-stone-700/30 border border-stone-600/50'
+                                  : 'bg-red-900/30 border border-red-600/50'
+                            }`}
+                          >
+                            {/* 결과 배너 */}
+                            <div className="text-center mb-4">
+                              <span className={`inline-block px-4 py-2 rounded-full text-lg font-bold ${
+                                isWinner
+                                  ? 'bg-green-600 text-white'
+                                  : isTie
+                                    ? 'bg-stone-600 text-white'
+                                    : 'bg-red-600 text-white'
+                              }`}>
+                                {isWinner ? '🎉 승리!' : isTie ? '⚖️ 동점' : '💔 패배'}
+                              </span>
+                            </div>
+
+                            {/* 전투 정보 */}
+                            <div className="flex items-center justify-between mb-3">
+                              <div className={`text-center flex-1 ${isAttacker ? 'ring-2 ring-amber-400/50 rounded-lg p-2' : ''}`}>
+                                <span className="text-2xl block">{battle.attackerEmoji}</span>
+                                <span className="text-white font-bold text-sm block">{battle.attackerName}</span>
+                                <span className="text-red-400 block text-sm">⚔️ {battle.attackBet}</span>
+                              </div>
+                              <div className="px-3">
+                                <span className="text-xl">VS</span>
+                              </div>
+                              <div className={`text-center flex-1 ${!isAttacker ? 'ring-2 ring-amber-400/50 rounded-lg p-2' : ''}`}>
+                                <span className="text-2xl block">{battle.defenderEmoji}</span>
+                                <span className="text-white font-bold text-sm block">{battle.defenderName}</span>
+                                <span className="text-blue-400 block text-sm">🛡️ {battle.defenseBet}</span>
+                              </div>
+                            </div>
+
+                            {/* 재화 변화 */}
+                            <div className="bg-black/30 rounded-lg p-3 text-center">
+                              <p className="text-stone-400 text-sm mb-1">우리 팀 재화 변화</p>
+                              <p className={`text-2xl font-bold ${
+                                (isAttacker ? battle.attackerChange : battle.defenderChange) >= 0
+                                  ? 'text-green-400'
+                                  : 'text-red-400'
+                              }`}>
+                                {(isAttacker ? battle.attackerChange : battle.defenderChange) >= 0 ? '+' : ''}
+                                {isAttacker ? battle.attackerChange : battle.defenderChange} 🍪
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="p-4 border-t border-stone-700">
+                <button
+                  onClick={() => setShowBattleModal(false)}
+                  className="w-full py-3 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-colors"
                 >
                   확인
                 </button>
