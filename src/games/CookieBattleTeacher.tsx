@@ -67,7 +67,6 @@ const BATTLE_NARRATIVES = {
   ],
 };
 
-type LossMode = 'basic' | 'zeroSum' | 'soft';
 type CurrencyMode = 'current' | 'earned';
 type GameStatus = 'waiting' | 'betting' | 'targeting' | 'battle' | 'result' | 'finished';
 
@@ -103,21 +102,24 @@ interface GameData {
   className?: string;
   gameType: 'cookieBattle';
   status: GameStatus;
-  lossMode: LossMode;
   currencyMode: CurrencyMode;
   round: number;
   createdAt: any;
   accumulationStartDate: string; // 팀 결성일
   battleLog: string[];
+  battleResults?: BattleResult[][]; // 라운드별 전투 결과 저장
 }
 
 interface BattleResult {
   attackerTeamId: string;
   defenderTeamId: string;
+  attackerName: string;
+  defenderName: string;
+  attackerEmoji: string;
+  defenderEmoji: string;
   attackBet: number;
   defenseBet: number;
-  attackerWins: boolean;
-  winProbability: number;
+  result: 'attackWin' | 'defenseWin' | 'tie';
   attackerChange: number;
   defenderChange: number;
 }
@@ -139,6 +141,14 @@ export function CookieBattleTeacher() {
   const [candyAmount, setCandyAmount] = useState('');
   const [isAddingCandy, setIsAddingCandy] = useState(false);
 
+  // 전투 결과 모달
+  const [showBattleModal, setShowBattleModal] = useState(false);
+  const [selectedBattleIndex, setSelectedBattleIndex] = useState<number>(0);
+  const [allBattleResults, setAllBattleResults] = useState<BattleResult[][]>([]);
+
+  // 선택된 팀 (팀 상세 보기용)
+  const [selectedTeam, setSelectedTeam] = useState<TeamData | null>(null);
+
   // 게임 데이터 구독
   useEffect(() => {
     if (!gameId) return;
@@ -149,6 +159,7 @@ export function CookieBattleTeacher() {
         const data = snapshot.data() as GameData;
         setGameData(data);
         setBattleLog(data.battleLog || []);
+        setAllBattleResults(data.battleResults || []);
       } else {
         alert('게임이 삭제되었습니다.');
         window.close();
@@ -339,59 +350,46 @@ export function CookieBattleTeacher() {
 
         const attackBet = attacker.attackBet;
         const defenseBet = defender.defenseBet;
+        const diff = attackBet - defenseBet;
 
-        // 승률 계산 (10% ~ 90%)
-        let winProbability = attackBet / (attackBet + defenseBet);
-        winProbability = Math.max(0.1, Math.min(0.9, winProbability));
-
-        // 승패 결정
-        const attackerWins = Math.random() < winProbability;
-
-        // 손실 계산
+        // 승패 결정 (단순 비교)
+        let resultType: 'attackWin' | 'defenseWin' | 'tie';
         let attackerChange = 0;
         let defenderChange = 0;
 
-        if (attackerWins) {
-          // 공격 성공
-          switch (gameData.lossMode) {
-            case 'basic':
-              attackerChange = Math.floor(defenseBet * 0.3);
-              defenderChange = -defenseBet;
-              break;
-            case 'zeroSum':
-              attackerChange = defenseBet;
-              defenderChange = -defenseBet;
-              break;
-            case 'soft':
-              attackerChange = Math.floor(defenseBet * 0.2);
-              defenderChange = -Math.floor(defenseBet * 0.5);
-              break;
-          }
-          // 공격자는 배팅액 유지
-          attackerChange -= attackBet; // 배팅액 소모
-          attackerChange += attackBet; // 배팅액 회수 (승리)
+        if (attackBet > defenseBet) {
+          // 공격 승리
+          resultType = 'attackWin';
+          // 공격팀: +배팅 회수 + 차이 획득
+          attackerChange = diff; // 배팅은 이미 소모됨 -> 실질적으로 차이만큼 획득
+          // 방어팀: +배팅의 50%(올림) - 차이 손실
+          const defenderRefund = Math.ceil(defenseBet * 0.5);
+          defenderChange = defenderRefund - defenseBet - diff; // 배팅 소모 후 50% 회수 - 차이 손실
+        } else if (attackBet < defenseBet) {
+          // 방어 승리
+          resultType = 'defenseWin';
+          // 공격팀: -배팅 전액 손실
+          attackerChange = -attackBet;
+          // 방어팀: +배팅 회수 + 10 보너스
+          defenderChange = 10; // 배팅 회수는 0 변화, 보너스 +10
         } else {
-          // 공격 실패
-          switch (gameData.lossMode) {
-            case 'basic':
-            case 'zeroSum':
-              attackerChange = -attackBet;
-              defenderChange = Math.floor(attackBet * 0.3);
-              break;
-            case 'soft':
-              attackerChange = -Math.floor(attackBet * 0.5);
-              defenderChange = Math.floor(attackBet * 0.2);
-              break;
-          }
+          // 동점
+          resultType = 'tie';
+          // 둘다 30% 손실
+          attackerChange = -Math.ceil(attackBet * 0.3);
+          defenderChange = -Math.ceil(defenseBet * 0.3);
         }
 
         results.push({
           attackerTeamId: attacker.id,
           defenderTeamId: defender.id,
+          attackerName: attacker.name,
+          defenderName: defender.name,
+          attackerEmoji: attacker.emoji,
+          defenderEmoji: defender.emoji,
           attackBet,
           defenseBet,
-          attackerWins,
-          winProbability,
+          result: resultType,
           attackerChange,
           defenderChange,
         });
@@ -403,8 +401,8 @@ export function CookieBattleTeacher() {
         defenderData.resources = Math.max(0, defenderData.resources + defenderChange);
 
         // 내러티브 생성
-        const narrativeType = attackerWins ? 'attackWin' : 'attackLose';
-        const changeAmount = attackerWins ? attackerChange : -attackerChange;
+        const narrativeType = resultType === 'attackWin' ? 'attackWin' : 'attackLose';
+        const changeAmount = resultType === 'attackWin' ? attackerChange : -attackerChange;
         newBattleLog.push(generateNarrative(narrativeType, {
           attacker: `${attacker.emoji} ${attacker.name}`,
           defender: `${defender.emoji} ${defender.name}`,
@@ -412,17 +410,16 @@ export function CookieBattleTeacher() {
         }));
 
         // 학생 액션 내러티브
-        const studentNarratives = generateStudentNarratives(attacker.members, attackerWins);
+        const studentNarratives = generateStudentNarratives(attacker.members, resultType === 'attackWin');
         studentNarratives.forEach(n => newBattleLog.push(`  └ ${n}`));
       }
 
-      // 수비만 하고 공격 안 받은 팀 처리
+      // 수비만 하고 공격 안 받은 팀 처리 (80% 환불)
       for (const team of teams) {
         if (team.isEliminated || !team.defenseBet) continue;
         if (!attackedTeamIds.has(team.id)) {
           const teamData = teamUpdates.get(team.id)!;
-          const refundRate = gameData.lossMode === 'soft' ? 1.0 : 0.7;
-          const refund = Math.floor(team.defenseBet * refundRate);
+          const refund = Math.ceil(team.defenseBet * 0.8);
           teamData.resources = teamData.resources - team.defenseBet + refund;
 
           newBattleLog.push(generateNarrative('defenseUnused', {
@@ -456,15 +453,20 @@ export function CookieBattleTeacher() {
         });
       });
 
+      // 기존 battleResults에 현재 라운드 결과 추가
+      const updatedBattleResults = [...allBattleResults, results];
+
       const gameRef = doc(db, 'games', gameId);
       batch.update(gameRef, {
         status: 'result',
         battleLog: newBattleLog,
+        battleResults: updatedBattleResults,
       });
 
       await batch.commit();
       setBattleResults(results);
       setBattleLog(newBattleLog);
+      setAllBattleResults(updatedBattleResults);
 
     } catch (error) {
       console.error('Failed to execute battle:', error);
@@ -627,12 +629,6 @@ export function CookieBattleTeacher() {
   const onlineStudents = Array.from(students.values()).filter(s => s.isOnline);
   const totalStudents = students.size;
 
-  // 손실 모드 라벨
-  const lossModeLabels: Record<LossMode, { emoji: string; name: string }> = {
-    basic: { emoji: '⚔️', name: '기본' },
-    zeroSum: { emoji: '💀', name: '제로섬' },
-    soft: { emoji: '🌸', name: '부드러운' },
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-amber-900 via-stone-800 to-stone-900 p-4">
@@ -657,12 +653,6 @@ export function CookieBattleTeacher() {
               <div className="text-center">
                 <p className="text-stone-500 text-xs">라운드</p>
                 <p className="text-2xl font-bold text-amber-400">{gameData.round}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-stone-500 text-xs">모드</p>
-                <p className="text-lg">
-                  {lossModeLabels[gameData.lossMode].emoji} {lossModeLabels[gameData.lossMode].name}
-                </p>
               </div>
               <span className={`px-4 py-2 rounded-full font-bold ${
                 gameData.status === 'waiting' ? 'bg-stone-600 text-stone-300' :
@@ -754,8 +744,8 @@ export function CookieBattleTeacher() {
                     )}
                   </div>
 
-                  {/* 배팅 정보 (교사에게만 보임) */}
-                  {(gameData.status === 'betting' || gameData.status === 'targeting') && !team.isEliminated && (
+                  {/* 배팅 정보 (결과 단계에서만 보임) */}
+                  {gameData.status === 'result' && !team.isEliminated && (team.attackBet > 0 || team.defenseBet > 0) && (
                     <div className="absolute -bottom-12 left-1/2 transform -translate-x-1/2 bg-black/80 rounded-lg px-3 py-1 text-xs whitespace-nowrap">
                       <span className="text-red-400">⚔️{team.attackBet}</span>
                       <span className="text-stone-500 mx-1">/</span>
@@ -773,70 +763,40 @@ export function CookieBattleTeacher() {
           </div>
         </div>
 
-        {/* 팀 상세 목록 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {teams.map(team => (
-            <div
-              key={team.id}
-              className={`bg-stone-800/80 rounded-xl p-4 border ${
-                team.isEliminated ? 'border-stone-700 opacity-60' : 'border-amber-600/30'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{team.emoji}</span>
-                  <span className="font-bold text-white">{team.name}</span>
+        {/* 팀 버튼 목록 (4열 그리드) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-6">
+          {teams.map(team => {
+            const onlineCount = team.members.filter(code => students.get(code)?.isOnline).length;
+            return (
+              <button
+                key={team.id}
+                onClick={() => setSelectedTeam(team)}
+                className={`bg-stone-800/80 rounded-xl p-3 border transition-all hover:scale-105 ${
+                  team.isEliminated
+                    ? 'border-stone-700 opacity-60'
+                    : team.isReady
+                      ? 'border-green-500'
+                      : 'border-amber-600/30 hover:border-amber-500'
+                }`}
+              >
+                <div className="text-center">
+                  <span className="text-3xl block mb-1">{team.emoji}</span>
+                  <span className="font-bold text-white text-sm block">{team.name}</span>
+                  <span className="text-amber-400 font-bold block mt-1">🍪 {team.resources}</span>
+                  <div className="flex items-center justify-center gap-1 mt-1 text-xs">
+                    <span className={`w-2 h-2 rounded-full ${onlineCount > 0 ? 'bg-green-400' : 'bg-stone-600'}`}></span>
+                    <span className="text-stone-400">{onlineCount}/{team.members.length}</span>
+                    {team.representativeCode && (
+                      <span className="text-yellow-400 ml-1">👑</span>
+                    )}
+                  </div>
+                  {team.isEliminated && (
+                    <span className="text-red-400 text-xs">💀 탈락</span>
+                  )}
                 </div>
-                <span className="text-amber-400 font-bold">🍪 {team.resources}</span>
-              </div>
-
-              {/* 팀원 목록 */}
-              <div className="space-y-1">
-                {team.members.map(code => {
-                  const student = students.get(code);
-                  const isRepresentative = team.representativeCode === code;
-                  return (
-                    <div
-                      key={code}
-                      className={`flex items-center justify-between px-2 py-1 rounded ${
-                        student?.isOnline
-                          ? 'bg-green-900/30 ring-1 ring-green-500/50'
-                          : student?.hasReflected === false
-                            ? 'bg-red-900/30'
-                            : 'bg-stone-700/30'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        {/* 온라인 상태 표시 */}
-                        <span className={`w-2 h-2 rounded-full ${
-                          student?.isOnline ? 'bg-green-400 animate-pulse' : 'bg-stone-600'
-                        }`}></span>
-                        {isRepresentative && <span className="text-yellow-400">👑</span>}
-                        <span className={`text-sm ${
-                          student?.hasReflected === false ? 'text-red-400' :
-                          student?.isOnline ? 'text-green-300' : 'text-stone-400'
-                        }`}>
-                          {student?.name || code}
-                        </span>
-                      </div>
-                      {gameData.status === 'waiting' && !team.isEliminated && (
-                        <button
-                          onClick={() => setRepresentative(team.id, code)}
-                          className={`text-xs px-2 py-0.5 rounded ${
-                            isRepresentative
-                              ? 'bg-yellow-600 text-white'
-                              : 'bg-stone-600 text-stone-300 hover:bg-stone-500'
-                          }`}
-                        >
-                          {isRepresentative ? '대표' : '지정'}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+              </button>
+            );
+          })}
         </div>
 
         {/* 전투 로그 */}
@@ -927,6 +887,27 @@ export function CookieBattleTeacher() {
               </>
             )}
 
+            {/* 전투 결과 버튼들 (결과 또는 종료 단계에서 표시) */}
+            {(gameData.status === 'result' || gameData.status === 'finished') && allBattleResults.length > 0 && (
+              <div className="w-full mt-3 pt-3 border-t border-stone-700">
+                <p className="text-stone-500 text-sm mb-2">⚔️ 전투 결과 보기</p>
+                <div className="flex flex-wrap gap-2">
+                  {allBattleResults.map((_, roundIndex) => (
+                    <button
+                      key={roundIndex}
+                      onClick={() => {
+                        setSelectedBattleIndex(roundIndex);
+                        setShowBattleModal(true);
+                      }}
+                      className="px-4 py-2 rounded-lg bg-red-600/50 text-red-200 font-bold hover:bg-red-600 transition-colors"
+                    >
+                      전투 {roundIndex + 1}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {gameData.status === 'finished' && (
               <>
                 <button
@@ -966,7 +947,7 @@ export function CookieBattleTeacher() {
       {/* 정산 모달 */}
       {showSettlement && (
         <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
           onClick={() => !selectedStudent && setShowSettlement(false)}
         >
           <div
@@ -1020,7 +1001,7 @@ export function CookieBattleTeacher() {
       {/* 학생 캔디 조정 모달 */}
       {selectedStudent && (
         <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[70] p-4"
           onClick={() => setSelectedStudent(null)}
         >
           <div
@@ -1095,6 +1076,197 @@ export function CookieBattleTeacher() {
                   {isAddingCandy ? '...' : '적용'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 팀 상세 모달 */}
+      {selectedTeam && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedTeam(null)}
+        >
+          <div
+            className="bg-stone-800 rounded-2xl shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-stone-700 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">{selectedTeam.emoji}</span>
+                <div>
+                  <h3 className="font-bold text-white text-lg">{selectedTeam.name}</h3>
+                  <p className="text-amber-400 font-bold">🍪 {selectedTeam.resources}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedTeam(null)}
+                className="text-stone-400 hover:text-white text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto max-h-[60vh]">
+              {/* 팀원 목록 */}
+              <h4 className="text-stone-400 text-sm mb-2">팀원</h4>
+              <div className="space-y-2">
+                {selectedTeam.members.map(code => {
+                  const student = students.get(code);
+                  const isRepresentative = selectedTeam.representativeCode === code;
+                  return (
+                    <div
+                      key={code}
+                      className={`flex items-center justify-between px-3 py-2 rounded-lg ${
+                        student?.isOnline
+                          ? 'bg-green-900/30 ring-1 ring-green-500/50'
+                          : student?.hasReflected === false
+                            ? 'bg-red-900/30'
+                            : 'bg-stone-700/30'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${
+                          student?.isOnline ? 'bg-green-400 animate-pulse' : 'bg-stone-600'
+                        }`}></span>
+                        {isRepresentative && <span className="text-yellow-400">👑</span>}
+                        <span className={`${
+                          student?.hasReflected === false ? 'text-red-400' :
+                          student?.isOnline ? 'text-green-300' : 'text-stone-400'
+                        }`}>
+                          {student?.name || code}
+                        </span>
+                      </div>
+                      {gameData?.status === 'waiting' && !selectedTeam.isEliminated && (
+                        <button
+                          onClick={() => setRepresentative(selectedTeam.id, code)}
+                          className={`text-xs px-3 py-1 rounded ${
+                            isRepresentative
+                              ? 'bg-yellow-600 text-white'
+                              : 'bg-stone-600 text-stone-300 hover:bg-stone-500'
+                          }`}
+                        >
+                          {isRepresentative ? '대표' : '지정'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 대기 중일 때 재화 조정 */}
+              {gameData?.status === 'waiting' && !selectedTeam.isEliminated && (
+                <div className="mt-4 pt-4 border-t border-stone-700">
+                  <h4 className="text-stone-400 text-sm mb-2">재화 조정</h4>
+                  <div className="flex justify-center gap-2">
+                    <button
+                      onClick={() => adjustTeamResources(selectedTeam.id, -10)}
+                      className="px-4 py-2 bg-red-600/50 text-red-200 rounded-lg hover:bg-red-600"
+                    >
+                      -10
+                    </button>
+                    <button
+                      onClick={() => adjustTeamResources(selectedTeam.id, -5)}
+                      className="px-4 py-2 bg-red-600/50 text-red-200 rounded-lg hover:bg-red-600"
+                    >
+                      -5
+                    </button>
+                    <button
+                      onClick={() => adjustTeamResources(selectedTeam.id, 5)}
+                      className="px-4 py-2 bg-green-600/50 text-green-200 rounded-lg hover:bg-green-600"
+                    >
+                      +5
+                    </button>
+                    <button
+                      onClick={() => adjustTeamResources(selectedTeam.id, 10)}
+                      className="px-4 py-2 bg-green-600/50 text-green-200 rounded-lg hover:bg-green-600"
+                    >
+                      +10
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 전투 결과 모달 */}
+      {showBattleModal && allBattleResults[selectedBattleIndex] && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setShowBattleModal(false)}
+        >
+          <div
+            className="bg-stone-800 rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-stone-700 flex items-center justify-between">
+              <h3 className="font-bold text-white text-lg">⚔️ 전투 {selectedBattleIndex + 1} 결과</h3>
+              <button
+                onClick={() => setShowBattleModal(false)}
+                className="text-stone-400 hover:text-white text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto max-h-[60vh]">
+              {allBattleResults[selectedBattleIndex].length === 0 ? (
+                <p className="text-center text-stone-400">이 라운드에는 전투가 없었습니다.</p>
+              ) : (
+                <div className="space-y-4">
+                  {allBattleResults[selectedBattleIndex].map((battle, idx) => (
+                    <div
+                      key={idx}
+                      className={`rounded-xl p-4 ${
+                        battle.result === 'attackWin'
+                          ? 'bg-red-900/30 border border-red-600/50'
+                          : battle.result === 'defenseWin'
+                            ? 'bg-blue-900/30 border border-blue-600/50'
+                            : 'bg-stone-700/30 border border-stone-600/50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-center flex-1">
+                          <span className="text-2xl block">{battle.attackerEmoji}</span>
+                          <span className="text-white font-bold text-sm">{battle.attackerName}</span>
+                          <span className="text-red-400 block text-xs">⚔️ {battle.attackBet}</span>
+                        </div>
+                        <div className="px-3">
+                          <span className="text-2xl">⚔️</span>
+                        </div>
+                        <div className="text-center flex-1">
+                          <span className="text-2xl block">{battle.defenderEmoji}</span>
+                          <span className="text-white font-bold text-sm">{battle.defenderName}</span>
+                          <span className="text-blue-400 block text-xs">🛡️ {battle.defenseBet}</span>
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${
+                          battle.result === 'attackWin'
+                            ? 'bg-red-600 text-white'
+                            : battle.result === 'defenseWin'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-stone-600 text-white'
+                        }`}>
+                          {battle.result === 'attackWin' && '공격 승리!'}
+                          {battle.result === 'defenseWin' && '방어 승리!'}
+                          {battle.result === 'tie' && '동점!'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between mt-3 text-sm">
+                        <span className={battle.attackerChange >= 0 ? 'text-green-400' : 'text-red-400'}>
+                          {battle.attackerName}: {battle.attackerChange >= 0 ? '+' : ''}{battle.attackerChange}
+                        </span>
+                        <span className={battle.defenderChange >= 0 ? 'text-green-400' : 'text-red-400'}>
+                          {battle.defenderName}: {battle.defenderChange >= 0 ? '+' : ''}{battle.defenderChange}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

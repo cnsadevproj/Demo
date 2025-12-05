@@ -202,7 +202,6 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     teacherId: string;
     classId: string;
     status: 'waiting' | 'betting' | 'targeting' | 'battle' | 'result' | 'finished';
-    lossMode: 'basic' | 'zeroSum' | 'soft';
     round: number;
     className?: string;
   }

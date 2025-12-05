@@ -877,13 +877,11 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [rpsEntryFee, setRpsEntryFee] = useState(0); // 가위바위보 참가비
 
   // 쿠키 배틀 상태
-  type CookieBattleLossMode = 'basic' | 'zeroSum' | 'soft';
   interface CookieBattleGame {
     id: string;
     teacherId: string;
     classId: string;
     status: 'waiting' | 'betting' | 'result' | 'finished';
-    lossMode: CookieBattleLossMode;
     round: number;
     className?: string;
     createdAt: any;
@@ -891,7 +889,6 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
   const [cookieBattleGame, setCookieBattleGame] = useState<CookieBattleGame | null>(null);
   const [isCreatingCookieBattle, setIsCreatingCookieBattle] = useState(false);
-  const [selectedCookieBattleLossMode, setSelectedCookieBattleLossMode] = useState<CookieBattleLossMode>('basic');
   type CookieBattleResourceMode = 'memberCount' | 'ownedCookie' | 'earnedCookie';
   const [selectedCookieBattleResourceMode, setSelectedCookieBattleResourceMode] = useState<CookieBattleResourceMode>('memberCount');
 
@@ -1136,13 +1133,13 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
         classId: selectedClass,
         gameType: 'cookieBattle',
         status: 'waiting' as const,
-        lossMode: selectedCookieBattleLossMode,
         resourceMode: selectedCookieBattleResourceMode,
         round: 0,
         createdAt: serverTimestamp(),
         className: currentClassName,
         accumulationStartDate,
-        battleLog: []
+        battleLog: [],
+        battleResults: []
       };
 
       await setDoc(doc(db, 'games', gameId), gameData);
@@ -4513,50 +4510,10 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     )}
                   </div>
 
-                  {/* 게임 모드 선택 (게임 없을 때만) */}
+                  {/* 초기 자원 모드 선택 (게임 없을 때만) */}
                   {!cookieBattleGame && (
                     <div className="mt-4 p-3 bg-white/50 rounded-lg">
-                      <p className="text-xs font-medium text-red-700 mb-2">🎯 손실 모드 선택</p>
-                      <div className="grid grid-cols-3 gap-2">
-                        <button
-                          onClick={() => setSelectedCookieBattleLossMode('basic')}
-                          className={`p-2 rounded-lg border-2 transition-all ${
-                            selectedCookieBattleLossMode === 'basic'
-                              ? 'border-red-500 bg-red-100'
-                              : 'border-gray-200 bg-white hover:border-red-300'
-                          }`}
-                        >
-                          <span className="text-lg">⚔️</span>
-                          <p className="text-xs font-bold">기본</p>
-                          <p className="text-[10px] text-gray-500">패배 시 30%</p>
-                        </button>
-                        <button
-                          onClick={() => setSelectedCookieBattleLossMode('zeroSum')}
-                          className={`p-2 rounded-lg border-2 transition-all ${
-                            selectedCookieBattleLossMode === 'zeroSum'
-                              ? 'border-red-500 bg-red-100'
-                              : 'border-gray-200 bg-white hover:border-red-300'
-                          }`}
-                        >
-                          <span className="text-lg">💀</span>
-                          <p className="text-xs font-bold">제로섬</p>
-                          <p className="text-[10px] text-gray-500">패배 시 100%</p>
-                        </button>
-                        <button
-                          onClick={() => setSelectedCookieBattleLossMode('soft')}
-                          className={`p-2 rounded-lg border-2 transition-all ${
-                            selectedCookieBattleLossMode === 'soft'
-                              ? 'border-red-500 bg-red-100'
-                              : 'border-gray-200 bg-white hover:border-red-300'
-                          }`}
-                        >
-                          <span className="text-lg">🌸</span>
-                          <p className="text-xs font-bold">소프트</p>
-                          <p className="text-[10px] text-gray-500">패배 시 20%</p>
-                        </button>
-                      </div>
-
-                      <p className="text-xs font-medium text-red-700 mb-2 mt-3">💰 초기 자원 모드</p>
+                      <p className="text-xs font-medium text-red-700 mb-2">💰 초기 자원 모드</p>
                       <div className="grid grid-cols-3 gap-2">
                         <button
                           onClick={() => setSelectedCookieBattleResourceMode('memberCount')}
@@ -4618,13 +4575,6 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                              cookieBattleGame.status === 'betting' ? '🎯 배팅중' :
                              cookieBattleGame.status === 'result' ? '⚔️ 결과 발표' :
                              '🏁 종료'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-sm text-gray-600">모드: </span>
-                          <span className="font-bold text-red-700">
-                            {cookieBattleGame.lossMode === 'basic' ? '⚔️ 기본' :
-                             cookieBattleGame.lossMode === 'zeroSum' ? '💀 제로섬' : '🌸 소프트'}
                           </span>
                         </div>
                         <div>
