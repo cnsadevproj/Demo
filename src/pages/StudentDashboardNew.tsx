@@ -792,14 +792,11 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   };
 
   // 프로필 사진 업데이트 핸들러
-  const handlePhotoUpdated = (url: string) => {
-    if (currentStudent) {
-      setCurrentStudent({
-        ...currentStudent,
-        profilePhotoUrl: url || undefined
-      });
-    }
-    loadData();
+  const handlePhotoUpdated = async (url: string) => {
+    // Firestore 복제 지연을 위해 잠시 대기
+    await new Promise(resolve => setTimeout(resolve, 500));
+    // Firestore에서 최신 데이터를 다시 로드하여 상태 업데이트
+    await loadData();
   };
 
   // 쿠키 상점 로드 (전체 클래스 공유)
