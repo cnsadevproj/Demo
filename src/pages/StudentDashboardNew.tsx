@@ -84,6 +84,9 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [selectedClassmateGrass, setSelectedClassmateGrass] = useState<Array<{ date: string; cookieChange: number; count: number }>>([]);
   const [isLoadingClassmateGrass, setIsLoadingClassmateGrass] = useState(false);
 
+  // 워드클라우드 모달
+  const [showWordCloudModal, setShowWordCloudModal] = useState(false);
+
   // 상점
   const [shopItems, setShopItems] = useState<ShopItem[]>([]);
   const [isLoadingShop, setIsLoadingShop] = useState(false);
@@ -2687,8 +2690,14 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                         }}
                       >
                         <div className={`text-3xl mb-1 ${getAnimationClass(classmate.profile.animationCode || 'none')}`}>
-                          {/* 뱃지가 설정되어 있으면 뱃지, 없으면 이모지 표시 */}
-                          {classmate.profile.profileBadgeKey && classmate.badges?.[classmate.profile.profileBadgeKey]?.hasBadge ? (
+                          {/* 프로필 사진이 있으면 사진, 뱃지가 설정되어 있으면 뱃지, 없으면 이모지 표시 */}
+                          {classmate.profilePhotoUrl && classmate.profile.profilePhotoActive ? (
+                            <img
+                              src={classmate.profilePhotoUrl}
+                              alt={classmate.name}
+                              className="w-12 h-12 mx-auto rounded-full object-cover border-2 border-white shadow-md"
+                            />
+                          ) : classmate.profile.profileBadgeKey && classmate.badges?.[classmate.profile.profileBadgeKey]?.hasBadge ? (
                             <img
                               src={classmate.badges[classmate.profile.profileBadgeKey].imgUrl}
                               alt={classmate.badges[classmate.profile.profileBadgeKey].title}
@@ -2736,7 +2745,15 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                           <span className="font-bold text-lg w-6">
                             {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}`}
                           </span>
-                          <span className="text-xl">{getEmojiFromCode(s.profile.emojiCode) || '👤'}</span>
+                          {s.profilePhotoUrl && s.profile.profilePhotoActive ? (
+                            <img
+                              src={s.profilePhotoUrl}
+                              alt={s.name}
+                              className="w-8 h-8 rounded-full object-cover border-2 border-gray-300"
+                            />
+                          ) : (
+                            <span className="text-xl">{getEmojiFromCode(s.profile.emojiCode) || '👤'}</span>
+                          )}
                           <span className={`font-medium ${s.code === currentStudent?.code ? 'text-amber-600' : ''}`}>
                             {s.name}
                             {s.code === currentStudent?.code && ' (나)'}
@@ -3214,21 +3231,25 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
             </div>
 
             {/* 워드클라우드 */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <span className="text-2xl">☁️</span>
-                  <span>워드클라우드</span>
-                </CardTitle>
-                <CardDescription>키워드를 입력하고 실시간 결과를 확인하세요</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <StudentWordCloud
-                  teacherId={studentTeacherId}
-                  classId={student.classId}
-                  studentCode={student.code}
-                  studentName={currentStudent?.name || student.name}
-                />
+            <Card
+              className="cursor-pointer hover:shadow-lg transition-all bg-gradient-to-r from-blue-50 to-cyan-50 border-2 border-blue-200"
+              onClick={() => setShowWordCloudModal(true)}
+            >
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-2xl flex items-center justify-center text-3xl shadow-lg">
+                      ☁️
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-blue-800 text-lg">워드클라우드</h3>
+                      <p className="text-sm text-blue-600">키워드를 입력하고 실시간 결과를 확인</p>
+                    </div>
+                  </div>
+                  <div className="px-4 py-2 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors">
+                    시작하기 →
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
@@ -3272,8 +3293,16 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                       ),
                     }}
                   >
-                    {/* 뱃지가 설정되어 있으면 뱃지, 없으면 이모지 표시 */}
-                    {selectedClassmate.profile.profileBadgeKey && selectedClassmate.badges?.[selectedClassmate.profile.profileBadgeKey]?.hasBadge ? (
+                    {/* 프로필 사진이 있으면 사진, 뱃지가 설정되어 있으면 뱃지, 없으면 이모지 표시 */}
+                    {selectedClassmate.profilePhotoUrl && selectedClassmate.profile.profilePhotoActive ? (
+                      <div className="mb-3">
+                        <img
+                          src={selectedClassmate.profilePhotoUrl}
+                          alt={selectedClassmate.name}
+                          className="w-24 h-24 mx-auto rounded-full object-cover border-4 border-white shadow-lg"
+                        />
+                      </div>
+                    ) : selectedClassmate.profile.profileBadgeKey && selectedClassmate.badges?.[selectedClassmate.profile.profileBadgeKey]?.hasBadge ? (
                       <div className={`mb-3 ${getAnimationClass(selectedClassmate.profile.animationCode || 'none')}`}>
                         <img
                           src={selectedClassmate.badges[selectedClassmate.profile.profileBadgeKey].imgUrl}
@@ -3834,6 +3863,44 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 >
                   닫기
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 워드클라우드 모달 */}
+        {showWordCloudModal && (
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setShowWordCloudModal(false)}
+          >
+            <div
+              className="bg-white rounded-3xl shadow-2xl border-4 border-blue-300 max-h-[90vh] overflow-y-auto"
+              style={{ width: '800px', maxWidth: '95vw' }}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            >
+              {/* 헤더 */}
+              <div className="bg-gradient-to-r from-blue-400 to-cyan-400 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">☁️</span>
+                  <h2 className="text-xl font-bold text-white">워드클라우드</h2>
+                </div>
+                <button
+                  onClick={() => setShowWordCloudModal(false)}
+                  className="text-white/80 hover:text-white text-2xl p-1 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* 내용 */}
+              <div className="p-6">
+                <StudentWordCloud
+                  teacherId={studentTeacherId}
+                  classId={student.classId}
+                  studentCode={student.code}
+                  studentName={currentStudent?.name || student.name}
+                />
               </div>
             </div>
           </div>

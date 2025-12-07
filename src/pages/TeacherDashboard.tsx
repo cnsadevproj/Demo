@@ -627,6 +627,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [profileStudentGrass, setProfileStudentGrass] = useState<Array<{ date: string; cookieChange: number; count: number }>>([]);
   const [isLoadingProfileGrass, setIsLoadingProfileGrass] = useState(false);
 
+  // 워드클라우드 모달
+  const [showWordCloudModal, setShowWordCloudModal] = useState(false);
+
   // 캔디 부여
   const [cookieAmount, setCookieAmount] = useState('');
   const [isAddingCookie, setIsAddingCookie] = useState(false);
@@ -2760,7 +2763,25 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                                   </td>
                                 )}
                                 <td className="py-2 px-2">{student.number}</td>
-                                <td className="py-2 px-2 font-medium">{student.name}</td>
+                                <td className="py-2 px-2">
+                                  <div className="flex items-center gap-2">
+                                    {student.profilePhotoUrl && student.profile.profilePhotoActive ? (
+                                      <img
+                                        src={student.profilePhotoUrl}
+                                        alt={student.name}
+                                        className="w-8 h-8 rounded-full object-cover border-2 border-gray-200"
+                                      />
+                                    ) : (
+                                      <span className="text-lg">
+                                        {(() => {
+                                          const item = ALL_SHOP_ITEMS.find(i => i.code === student.profile.emojiCode);
+                                          return item?.value || '😊';
+                                        })()}
+                                      </span>
+                                    )}
+                                    <span className="font-medium">{student.name}</span>
+                                  </div>
+                                </td>
                                 <td className="py-2 px-2">
                                   <div className="flex justify-center gap-1">
                                     {student.badges && (Object.entries(student.badges) as [string, Badge][])
@@ -3882,14 +3903,22 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                               <div key={code} className="p-4 bg-gray-50 rounded-xl">
                                 <div className="flex items-center justify-between mb-3">
                                   <div className="flex items-center gap-3">
-                                    <span className={`text-2xl ${getAnimationClass(student?.profile.animationCode || 'none')}`}>
-                                      {student?.profile.emojiCode ? (
-                                        (() => {
-                                          const item = ALL_SHOP_ITEMS.find(i => i.code === student.profile.emojiCode);
-                                          return item?.value || '😊';
-                                        })()
-                                      ) : '😊'}
-                                    </span>
+                                    {student?.profilePhotoUrl && student?.profile.profilePhotoActive ? (
+                                      <img
+                                        src={student.profilePhotoUrl}
+                                        alt={student.name}
+                                        className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-md"
+                                      />
+                                    ) : (
+                                      <span className={`text-2xl ${getAnimationClass(student?.profile.animationCode || 'none')}`}>
+                                        {student?.profile.emojiCode ? (
+                                          (() => {
+                                            const item = ALL_SHOP_ITEMS.find(i => i.code === student.profile.emojiCode);
+                                            return item?.value || '😊';
+                                          })()
+                                        ) : '😊'}
+                                      </span>
+                                    )}
                                     <div>
                                       <p className="font-bold">{student?.name || code}</p>
                                       <p className="text-xs text-gray-500">#{student?.number}</p>
@@ -4826,27 +4855,31 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             </Card>
 
             {/* 워드클라우드 */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <span className="text-2xl">☁️</span>
-                  <span>워드클라우드</span>
-                </CardTitle>
-                <CardDescription>
-                  학생들의 키워드를 실시간으로 수집하고 시각화하세요
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {selectedClass ? (
-                  <TeacherWordCloud
-                    teacherId={user?.uid || ''}
-                    classId={selectedClass}
-                  />
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    학급을 먼저 선택해주세요
+            <Card
+              className="cursor-pointer hover:shadow-lg transition-all bg-gradient-to-r from-blue-50 to-cyan-50 border-2 border-blue-200"
+              onClick={() => selectedClass && setShowWordCloudModal(true)}
+            >
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-2xl flex items-center justify-center text-3xl shadow-lg">
+                      ☁️
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-blue-800 text-lg">워드클라우드</h3>
+                      <p className="text-sm text-blue-600">학생들의 키워드를 실시간으로 수집하고 시각화</p>
+                    </div>
                   </div>
-                )}
+                  {selectedClass ? (
+                    <div className="px-4 py-2 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors">
+                      시작하기 →
+                    </div>
+                  ) : (
+                    <div className="px-4 py-2 bg-gray-300 text-gray-500 rounded-lg font-medium cursor-not-allowed">
+                      학급 선택 필요
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
@@ -4886,7 +4919,13 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         }}
                       >
                         <div className={`text-3xl mb-1 ${getAnimationClass(student.profile.animationCode || 'none')}`}>
-                          {student.profile.profileBadgeKey && student.badges?.[student.profile.profileBadgeKey]?.hasBadge ? (
+                          {student.profilePhotoUrl && student.profile.profilePhotoActive ? (
+                            <img
+                              src={student.profilePhotoUrl}
+                              alt={student.name}
+                              className="w-12 h-12 mx-auto rounded-full object-cover border-2 border-white shadow-md"
+                            />
+                          ) : student.profile.profileBadgeKey && student.badges?.[student.profile.profileBadgeKey]?.hasBadge ? (
                             <img
                               src={student.badges[student.profile.profileBadgeKey].imgUrl}
                               alt={student.badges[student.profile.profileBadgeKey].title}
@@ -5058,9 +5097,17 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           >
             {/* 헤더 - 학생 정보 */}
             <div className="p-4 border-b flex items-center gap-3">
-              <div className="text-3xl">
-                {selectedStudent.profile?.emojiCode === 'emoji_00' ? '😊' : '🌟'}
-              </div>
+              {selectedStudent.profilePhotoUrl && selectedStudent.profile.profilePhotoActive ? (
+                <img
+                  src={selectedStudent.profilePhotoUrl}
+                  alt={selectedStudent.name}
+                  className="w-12 h-12 rounded-full object-cover border-2 border-gray-300 shadow-md"
+                />
+              ) : (
+                <div className="text-3xl">
+                  {selectedStudent.profile?.emojiCode === 'emoji_00' ? '😊' : '🌟'}
+                </div>
+              )}
               <div className="flex-1">
                 <h3 className="font-bold text-gray-800 text-lg">{selectedStudent.name}</h3>
                 <p className="text-sm text-gray-500">{selectedStudent.number}번 · {selectedStudent.code}</p>
@@ -5202,9 +5249,19 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         ...fillStyle,
                       }}
                     >
-                      <div className={`text-5xl mb-3 ${getAnimationClass(profile?.animationCode || 'none')}`}>
-                        {emoji}
-                      </div>
+                      {selectedStudent.profilePhotoUrl && selectedStudent.profile.profilePhotoActive ? (
+                        <div className="mb-3">
+                          <img
+                            src={selectedStudent.profilePhotoUrl}
+                            alt={selectedStudent.name}
+                            className="w-20 h-20 mx-auto rounded-full object-cover border-4 border-white shadow-lg"
+                          />
+                        </div>
+                      ) : (
+                        <div className={`text-5xl mb-3 ${getAnimationClass(profile?.animationCode || 'none')}`}>
+                          {emoji}
+                        </div>
+                      )}
                       {profile?.title && (
                         <div className="mb-2">
                           <span className={`inline-block text-sm px-3 py-1 rounded-full ${titleColorClass}`}>
@@ -5332,8 +5389,16 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     ),
                   }}
                 >
-                  {/* 뱃지가 설정되어 있으면 뱃지, 없으면 이모지 표시 */}
-                  {selectedProfileStudent.profile.profileBadgeKey && selectedProfileStudent.badges?.[selectedProfileStudent.profile.profileBadgeKey]?.hasBadge ? (
+                  {/* 프로필 사진이 있으면 사진, 뱃지가 설정되어 있으면 뱃지, 없으면 이모지 표시 */}
+                  {selectedProfileStudent.profilePhotoUrl && selectedProfileStudent.profile.profilePhotoActive ? (
+                    <div className="mb-3">
+                      <img
+                        src={selectedProfileStudent.profilePhotoUrl}
+                        alt={selectedProfileStudent.name}
+                        className="w-24 h-24 mx-auto rounded-full object-cover border-4 border-white shadow-lg"
+                      />
+                    </div>
+                  ) : selectedProfileStudent.profile.profileBadgeKey && selectedProfileStudent.badges?.[selectedProfileStudent.profile.profileBadgeKey]?.hasBadge ? (
                     <div className={`mb-3 ${getAnimationClass(selectedProfileStudent.profile.animationCode || 'none')}`}>
                       <img
                         src={selectedProfileStudent.badges[selectedProfileStudent.profile.profileBadgeKey].imgUrl}
@@ -5907,6 +5972,48 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               >
                 닫기
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 워드클라우드 모달 */}
+      {showWordCloudModal && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setShowWordCloudModal(false)}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl border-4 border-blue-300 max-h-[90vh] overflow-y-auto"
+            style={{ width: '800px', maxWidth: '95vw' }}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          >
+            {/* 헤더 */}
+            <div className="bg-gradient-to-r from-blue-400 to-cyan-400 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">☁️</span>
+                <h2 className="text-xl font-bold text-white">워드클라우드</h2>
+              </div>
+              <button
+                onClick={() => setShowWordCloudModal(false)}
+                className="text-white/80 hover:text-white text-2xl p-1 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 내용 */}
+            <div className="p-6">
+              {selectedClass ? (
+                <TeacherWordCloud
+                  teacherId={user?.uid || ''}
+                  classId={selectedClass}
+                />
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  학급을 먼저 선택해주세요
+                </div>
+              )}
             </div>
           </div>
         </div>

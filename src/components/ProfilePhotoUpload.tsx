@@ -161,6 +161,32 @@ export function ProfilePhotoUpload({
     setIsDragging(false);
   };
 
+  // 터치 드래그 (모바일)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!selectedFile) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    setIsDragging(true);
+    setDragStart({
+      x: touch.clientX - position.x,
+      y: touch.clientY - position.y
+    });
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging || !selectedFile) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    setPosition({
+      x: touch.clientX - dragStart.x,
+      y: touch.clientY - dragStart.y
+    });
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
   // 최종 이미지 생성 및 업로드
   const handleUpload = async () => {
     if (!selectedFile || !sourceImageRef.current || !outputCanvasRef.current) return;
@@ -252,6 +278,9 @@ export function ProfilePhotoUpload({
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
               style={{
                 width: `${PREVIEW_SIZE}px`,
                 height: `${PREVIEW_SIZE}px`,
