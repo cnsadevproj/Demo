@@ -173,12 +173,9 @@ export function StudentWordCloud({
         }
 
         const data = wordMap.get(wordLower)!;
-
-        // 같은 학생이 같은 단어를 여러 번 제출해도 1번만 카운트
-        if (!data.students.has(response.studentCode)) {
-          data.students.add(response.studentCode);
-          data.count++;
-        }
+        // 같은 단어가 제출될 때마다 카운트 증가 (더 커지게)
+        data.students.add(response.studentCode);
+        data.count++;
       }
     }
 

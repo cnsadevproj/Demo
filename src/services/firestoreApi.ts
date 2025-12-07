@@ -1884,12 +1884,7 @@ export async function submitWordToCloud(
     const response = responseSnap.data() as WordCloudResponse;
     words = response.words || [];
 
-    // 중복 단어 확인
-    if (words.some(w => w.word.toLowerCase() === trimmedWord.toLowerCase())) {
-      return { success: false, error: '이미 제출한 단어입니다.' };
-    }
-
-    // 제출 횟수 제한 확인
+    // 제출 횟수 제한 확인 (같은 단어 여러번 제출 허용)
     if (session.maxSubmissions !== null && words.length >= session.maxSubmissions) {
       return { success: false, error: `최대 ${session.maxSubmissions}개까지 제출할 수 있습니다.` };
     }
@@ -1943,11 +1938,6 @@ export async function updateWordInCloud(
 
   const response = responseSnap.data() as WordCloudResponse;
   const words = response.words || [];
-
-  // 중복 단어 확인 (자기 자신 제외)
-  if (words.some(w => w.id !== wordId && w.word.toLowerCase() === trimmedWord.toLowerCase())) {
-    return { success: false, error: '이미 제출한 단어입니다.' };
-  }
 
   const wordIndex = words.findIndex(w => w.id === wordId);
 
@@ -2051,12 +2041,9 @@ export async function getWordCloudData(
       }
 
       const data = wordMap.get(wordLower)!;
-
-      // 같은 학생이 같은 단어를 여러 번 제출해도 1번만 카운트
-      if (!data.students.has(response.studentCode)) {
-        data.students.add(response.studentCode);
-        data.count++;
-      }
+      // 같은 단어가 제출될 때마다 카운트 증가 (더 커지게)
+      data.students.add(response.studentCode);
+      data.count++;
     }
   }
 

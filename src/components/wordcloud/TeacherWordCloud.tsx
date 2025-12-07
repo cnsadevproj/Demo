@@ -1,12 +1,12 @@
 // src/components/wordcloud/TeacherWordCloud.tsx
-// 선생님용 워드클라우드 컴포넌트
+// 선생님용 워드클라우드 컴포넌트 - SVG 스파이럴 레이아웃, 테마, PNG 저장, 전체화면 지원
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { Plus, Pencil, X, Loader2, Trash2, Power, PowerOff } from 'lucide-react';
+import { Plus, Pencil, X, Loader2, Trash2, Power, PowerOff, Download, Maximize, Moon, Sun, Palette } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   createWordCloudSession,
@@ -27,6 +27,18 @@ interface TeacherWordCloudProps {
   classId: string;
 }
 
+// 색상 테마 정의
+const COLOR_THEMES: Record<string, string[]> = {
+  purple: ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#c471f5', '#fa71cd'],
+  pink: ['#f093fb', '#f5576c', '#ff6b95', '#ff8c94', '#ffa8a8', '#e056fd'],
+  blue: ['#667eea', '#764ba2', '#6a11cb', '#2575fc', '#00c6fb', '#005bea'],
+  green: ['#11998e', '#38ef7d', '#56ab2f', '#a8e063', '#00b09b', '#96c93d'],
+  sunset: ['#fa709a', '#fee140', '#f093fb', '#f5576c', '#ff9a9e', '#fecfef'],
+  orange: ['#f2994a', '#f2c94c', '#fa709a', '#ee9ca7', '#ffdde1', '#ff9a9e'],
+  pastel: ['#a8d8ea', '#aa96da', '#fcbad3', '#ffffd2', '#b4f8c8', '#fbe7c6'],
+  mono: ['#2c3e50', '#3d566e', '#5d6d7e', '#85929e', '#aab7b8', '#bdc3c7'],
+};
+
 export function TeacherWordCloud({ teacherId, classId }: TeacherWordCloudProps) {
   const [sessions, setSessions] = useState<WordCloudSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<WordCloudSession | null>(null);
@@ -45,6 +57,17 @@ export function TeacherWordCloud({ teacherId, classId }: TeacherWordCloudProps) 
     wordId: string;
     value: string;
   } | null>(null);
+
+  // 커스터마이징 옵션
+  const [darkMode, setDarkMode] = useState(false);
+  const [colorTheme, setColorTheme] = useState<string>('purple');
+  const [fontScale, setFontScale] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showThemePicker, setShowThemePicker] = useState(false);
+
+  // SVG 참조
+  const svgContainerRef = useRef<HTMLDivElement>(null);
+  const wordCloudRef = useRef<HTMLDivElement>(null);
 
   // 세션 목록 로드
   useEffect(() => {
@@ -66,6 +89,16 @@ export function TeacherWordCloud({ teacherId, classId }: TeacherWordCloudProps) 
 
     return () => unsubscribe();
   }, [selectedSession, teacherId, classId]);
+
+  // 전체화면 변경 감지
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   const loadSessions = async () => {
     setLoading(true);
@@ -196,11 +229,9 @@ export function TeacherWordCloud({ teacherId, classId }: TeacherWordCloudProps) 
         }
 
         const data = wordMap.get(wordLower)!;
-
-        if (!data.students.has(response.studentCode)) {
-          data.students.add(response.studentCode);
-          data.count++;
-        }
+        // 같은 단어가 제출될 때마다 카운트 증가 (더 커지게)
+        data.students.add(response.studentCode);
+        data.count++;
       }
     }
 
@@ -216,25 +247,242 @@ export function TeacherWordCloud({ teacherId, classId }: TeacherWordCloudProps) 
   const wordCloudData = getWordCloudData();
   const maxCount = wordCloudData.length > 0 ? wordCloudData[0].count : 1;
 
+  // 폰트 크기 계산
   const getFontSize = (count: number) => {
-    const minSize = 16;
-    const maxSize = 48;
+    const minSize = 14 * fontScale;
+    const maxSize = 56 * fontScale;
     const ratio = count / maxCount;
-    return minSize + (maxSize - minSize) * ratio;
+    return minSize + (maxSize - minSize) * Math.pow(ratio, 0.7);
   };
 
-  const getColor = (count: number) => {
-    const ratio = count / maxCount;
-    if (ratio > 0.7) return 'text-purple-600';
-    if (ratio > 0.4) return 'text-blue-600';
-    if (ratio > 0.2) return 'text-green-600';
-    return 'text-gray-600';
+  // 테마에 따른 색상 선택
+  const getColor = (index: number) => {
+    const colors = COLOR_THEMES[colorTheme] || COLOR_THEMES.purple;
+    return colors[index % colors.length];
+  };
+
+  // 전체화면 토글
+  const toggleFullscreen = useCallback(() => {
+    if (!wordCloudRef.current) return;
+
+    if (!document.fullscreenElement) {
+      wordCloudRef.current.requestFullscreen().catch((err) => {
+        console.error('Fullscreen error:', err);
+        toast.error('전체화면 전환에 실패했습니다.');
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  }, []);
+
+  // PNG로 저장
+  const saveAsPNG = useCallback(() => {
+    const svgContainer = svgContainerRef.current;
+    if (!svgContainer) return;
+
+    const svg = svgContainer.querySelector('svg');
+    if (!svg) {
+      toast.error('저장할 워드클라우드가 없습니다.');
+      return;
+    }
+
+    // SVG를 Canvas로 변환
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const scale = 2; // 고해상도
+    const rect = svgContainer.getBoundingClientRect();
+    canvas.width = rect.width * scale;
+    canvas.height = rect.height * scale;
+    ctx.scale(scale, scale);
+
+    // 배경 그리기
+    ctx.fillStyle = darkMode ? '#1a202c' : '#ffffff';
+    ctx.fillRect(0, 0, rect.width, rect.height);
+
+    // SVG를 이미지로 변환
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, rect.width, rect.height);
+      URL.revokeObjectURL(url);
+
+      // 다운로드
+      const link = document.createElement('a');
+      link.download = `wordcloud_${selectedSession?.title || 'export'}_${new Date().toISOString().split('T')[0]}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+
+      toast.success('이미지가 저장되었습니다.');
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      toast.error('이미지 저장에 실패했습니다.');
+    };
+    img.src = url;
+  }, [darkMode, selectedSession]);
+
+  // SVG 스파이럴 레이아웃 렌더링
+  const renderWordCloudSVG = () => {
+    if (wordCloudData.length === 0) {
+      return (
+        <div className="text-center py-12 text-gray-500">
+          아직 제출된 단어가 없습니다.
+        </div>
+      );
+    }
+
+    const width = 600;
+    const height = 400;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    // 단어 위치 계산 (스파이럴 레이아웃)
+    const placedWords: Array<{ x: number; y: number; width: number; height: number }> = [];
+
+    const checkCollision = (x: number, y: number, w: number, h: number) => {
+      const padding = 5;
+      for (const placed of placedWords) {
+        if (
+          x < placed.x + placed.width + padding &&
+          x + w + padding > placed.x &&
+          y < placed.y + placed.height + padding &&
+          y + h + padding > placed.y
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const findPosition = (wordWidth: number, wordHeight: number) => {
+      let angle = 0;
+      let radius = 0;
+      const maxAttempts = 500;
+      const spiralStep = 5;
+      const angleStep = 0.5;
+
+      for (let i = 0; i < maxAttempts; i++) {
+        const x = centerX + radius * Math.cos(angle) - wordWidth / 2;
+        const y = centerY + radius * Math.sin(angle) - wordHeight / 2;
+
+        if (
+          x >= 0 &&
+          x + wordWidth <= width &&
+          y >= 0 &&
+          y + wordHeight <= height &&
+          !checkCollision(x, y, wordWidth, wordHeight)
+        ) {
+          return { x, y };
+        }
+
+        angle += angleStep;
+        radius += spiralStep / (2 * Math.PI);
+      }
+
+      // 위치를 찾지 못하면 랜덤 위치
+      return {
+        x: Math.random() * (width - wordWidth),
+        y: Math.random() * (height - wordHeight),
+      };
+    };
+
+    const wordElements = wordCloudData.map((item, index) => {
+      const fontSize = getFontSize(item.count);
+      // 대략적인 텍스트 크기 계산
+      const textWidth = item.word.length * fontSize * 0.6;
+      const textHeight = fontSize * 1.2;
+
+      const position = findPosition(textWidth, textHeight);
+      placedWords.push({
+        x: position.x,
+        y: position.y,
+        width: textWidth,
+        height: textHeight,
+      });
+
+      return (
+        <text
+          key={index}
+          x={position.x + textWidth / 2}
+          y={position.y + textHeight / 2}
+          fill={getColor(index)}
+          fontSize={fontSize}
+          fontWeight="bold"
+          textAnchor="middle"
+          dominantBaseline="middle"
+          style={{
+            transition: 'all 0.3s ease',
+            cursor: 'default',
+          }}
+          className="hover:opacity-80"
+        >
+          <title>{`${item.count}회 (${item.students.length}명)`}</title>
+          {item.word}
+        </text>
+      );
+    });
+
+    return (
+      <svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="xMidYMid meet"
+        style={{ minHeight: '300px' }}
+      >
+        {wordElements}
+      </svg>
+    );
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  // 전체화면 모드 렌더링
+  if (isFullscreen) {
+    return (
+      <div
+        ref={wordCloudRef}
+        className={`w-full h-full flex flex-col ${darkMode ? 'bg-gray-900' : 'bg-white'}`}
+      >
+        {/* 전체화면 헤더 */}
+        <div className={`flex items-center justify-between px-6 py-4 ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+          <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+            {selectedSession?.title}
+          </h2>
+          <div className="flex items-center gap-4">
+            <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+              {allResponses.length}명 참여
+            </span>
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700 text-yellow-400' : 'bg-gray-200 text-gray-700'}`}
+            >
+              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={toggleFullscreen}
+              className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* 워드클라우드 */}
+        <div ref={svgContainerRef} className="flex-1 p-8">
+          {renderWordCloudSVG()}
+        </div>
       </div>
     );
   }
@@ -350,37 +598,112 @@ export function TeacherWordCloud({ teacherId, classId }: TeacherWordCloudProps) 
         {selectedSession ? (
           <>
             {/* 워드클라우드 시각화 */}
-            <Card>
+            <Card ref={wordCloudRef}>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center justify-between">
-                  <span>{selectedSession.title}</span>
-                  <Badge variant={selectedSession.status === 'active' ? 'default' : 'secondary'}>
-                    {selectedSession.status === 'active' ? '진행 중' : '종료됨'}
-                  </Badge>
-                </CardTitle>
-                <p className="text-sm text-gray-500">총 {allResponses.length}명 참여</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <span>{selectedSession.title}</span>
+                      <Badge variant={selectedSession.status === 'active' ? 'default' : 'secondary'}>
+                        {selectedSession.status === 'active' ? '진행 중' : '종료됨'}
+                      </Badge>
+                    </CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">총 {allResponses.length}명 참여</p>
+                  </div>
+
+                  {/* 도구 버튼 */}
+                  <div className="flex items-center gap-2">
+                    {/* 테마 선택 */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowThemePicker(!showThemePicker)}
+                        className="p-2 hover:bg-gray-100 rounded-lg"
+                        title="테마 변경"
+                      >
+                        <Palette className="w-5 h-5 text-gray-600" />
+                      </button>
+                      {showThemePicker && (
+                        <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border p-3 z-10">
+                          <p className="text-xs text-gray-500 mb-2">색상 테마</p>
+                          <div className="grid grid-cols-4 gap-2">
+                            {Object.keys(COLOR_THEMES).map((theme) => (
+                              <button
+                                key={theme}
+                                onClick={() => {
+                                  setColorTheme(theme);
+                                  setShowThemePicker(false);
+                                }}
+                                className={`w-8 h-8 rounded-full border-2 ${
+                                  colorTheme === theme ? 'border-gray-800' : 'border-transparent'
+                                }`}
+                                style={{
+                                  background: `linear-gradient(135deg, ${COLOR_THEMES[theme][0]}, ${COLOR_THEMES[theme][1]})`,
+                                }}
+                                title={theme}
+                              />
+                            ))}
+                          </div>
+                          <div className="mt-3 pt-3 border-t">
+                            <p className="text-xs text-gray-500 mb-2">글자 크기</p>
+                            <input
+                              type="range"
+                              min="0.5"
+                              max="2"
+                              step="0.1"
+                              value={fontScale}
+                              onChange={(e) => setFontScale(parseFloat(e.target.value))}
+                              className="w-full"
+                            />
+                            <div className="flex justify-between text-xs text-gray-400">
+                              <span>작게</span>
+                              <span>{Math.round(fontScale * 100)}%</span>
+                              <span>크게</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 다크모드 토글 */}
+                    <button
+                      onClick={() => setDarkMode(!darkMode)}
+                      className="p-2 hover:bg-gray-100 rounded-lg"
+                      title={darkMode ? '라이트 모드' : '다크 모드'}
+                    >
+                      {darkMode ? (
+                        <Sun className="w-5 h-5 text-yellow-500" />
+                      ) : (
+                        <Moon className="w-5 h-5 text-gray-600" />
+                      )}
+                    </button>
+
+                    {/* PNG 저장 */}
+                    <button
+                      onClick={saveAsPNG}
+                      className="p-2 hover:bg-gray-100 rounded-lg"
+                      title="PNG로 저장"
+                    >
+                      <Download className="w-5 h-5 text-gray-600" />
+                    </button>
+
+                    {/* 전체화면 */}
+                    <button
+                      onClick={toggleFullscreen}
+                      className="p-2 hover:bg-gray-100 rounded-lg"
+                      title="전체화면"
+                    >
+                      <Maximize className="w-5 h-5 text-gray-600" />
+                    </button>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
-                {wordCloudData.length > 0 ? (
-                  <div className="flex flex-wrap gap-4 justify-center items-center min-h-[200px] p-6">
-                    {wordCloudData.map((item, index) => (
-                      <div
-                        key={index}
-                        className={`font-bold transition-transform hover:scale-110 cursor-default ${getColor(
-                          item.count
-                        )}`}
-                        style={{ fontSize: `${getFontSize(item.count)}px` }}
-                        title={`${item.count}명이 선택`}
-                      >
-                        {item.word}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-12 text-gray-500">
-                    아직 제출된 단어가 없습니다.
-                  </div>
-                )}
+                <div
+                  ref={svgContainerRef}
+                  className={`rounded-lg p-4 min-h-[300px] ${darkMode ? 'bg-gray-900' : 'bg-gray-50'}`}
+                >
+                  {renderWordCloudSVG()}
+                </div>
               </CardContent>
             </Card>
 
