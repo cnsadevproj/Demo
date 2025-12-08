@@ -172,6 +172,40 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     autoRefreshAllClasses();
   }, [user, teacher, classes, hasAutoRefreshed]);
 
+  // localStorage 학급그룹을 Firestore로 동기화 (기존 그룹 마이그레이션)
+  const [hasGroupSynced, setHasGroupSynced] = useState(false);
+  useEffect(() => {
+    const syncClassGroupsToFirestore = async () => {
+      if (!user || hasGroupSynced || classGroups.length === 0) return;
+
+      setHasGroupSynced(true);
+      console.log('🔄 학급그룹 Firestore 동기화 시작...');
+
+      try {
+        // 기존 Firestore 그룹 확인
+        const existingGroups = await getClassGroups(user.uid);
+        const existingIds = new Set(existingGroups.map(g => g.id));
+
+        // localStorage에만 있는 그룹을 Firestore에 저장
+        let syncCount = 0;
+        for (const group of classGroups) {
+          if (!existingIds.has(group.id)) {
+            await saveClassGroup(user.uid, group.id, group.name, group.classIds);
+            syncCount++;
+          }
+        }
+
+        if (syncCount > 0) {
+          console.log(`✅ ${syncCount}개 학급그룹 Firestore 동기화 완료`);
+        }
+      } catch (error) {
+        console.error('Failed to sync class groups:', error);
+      }
+    };
+
+    syncClassGroupsToFirestore();
+  }, [user, classGroups, hasGroupSynced]);
+
   // 학생 목록 로드
   const loadStudents = async () => {
     if (!user || !selectedClass) return;
