@@ -731,9 +731,13 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     if (item.category === 'custom') {
       setIsPurchasing(true);
       try {
-        await purchaseStreakFreeze(studentTeacherId, currentStudent.classId, currentStudent.code, item.price, item.maxCount || 0);
-        await loadData();
-        toast.success(`${item.name}을(를) 구매했습니다! 🎉`);
+        const result = await purchaseStreakFreeze(studentTeacherId, currentStudent.code, item.price, item.maxCount || 0);
+        if (result.success) {
+          await loadData();
+          toast.success(`${item.name}을(를) 구매했습니다! 🎉`);
+        } else {
+          toast.error(result.message || '구매에 실패했습니다.');
+        }
       } catch (error: any) {
         toast.error(error.message || '구매에 실패했습니다.');
       }
@@ -787,29 +791,24 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
     setIsPurchasing(false);
   };
 
-  // 스트릭 프리즈 활성화/비활성화
-  const handleToggleStreakFreeze = async (activate: boolean) => {
+  // 스트릭 프리즈 활성화 개수 설정
+  const handleSetActiveStreakFreezes = async (newActive: number) => {
     if (!studentTeacherId || !currentStudent) return;
 
     const owned = currentStudent.streakFreezes || 0;
-    const active = currentStudent.activeStreakFreezes || 0;
 
-    if (activate && active >= owned) {
-      toast.error('모든 스트릭 프리즈가 이미 활성화되어 있습니다!');
-      return;
-    }
-
-    if (!activate && active === 0) {
-      toast.error('활성화된 스트릭 프리즈가 없습니다!');
+    if (newActive < 0 || newActive > owned) {
       return;
     }
 
     setIsPurchasing(true);
     try {
-      const newActive = activate ? active + 1 : active - 1;
-      await updateActiveStreakFreezes(studentTeacherId, currentStudent.classId, currentStudent.code, newActive);
-      await loadData();
-      toast.success(activate ? '스트릭 프리즈를 활성화했습니다! ❄️' : '스트릭 프리즈를 비활성화했습니다.');
+      const result = await updateActiveStreakFreezes(studentTeacherId, currentStudent.code, newActive);
+      if (result.success) {
+        await loadData();
+      } else {
+        toast.error(result.message || '스트릭 프리즈 업데이트에 실패했습니다.');
+      }
     } catch (error: any) {
       toast.error(error.message || '스트릭 프리즈 업데이트에 실패했습니다.');
     }
@@ -2676,7 +2675,9 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     ❄️ 스트릭 프리즈
-                    <span className="text-xs text-gray-400 ml-2">(하루 건너뛰면 자동 사용)</span>
+                    <span className="text-xs text-gray-400 ml-2">
+                      (보유 {currentStudent.streakFreezes || 0}개 / 활성화 {currentStudent.activeStreakFreezes || 0}개)
+                    </span>
                   </label>
                   {(currentStudent.streakFreezes || 0) === 0 ? (
                     <div className="p-4 bg-gray-100 rounded-lg text-center text-gray-500">
@@ -2685,52 +2686,39 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                       <p className="text-xs text-gray-400">상점에서 구매해보세요!</p>
                     </div>
                   ) : (
-                    <div className="p-4 bg-blue-50 rounded-lg">
-                      <div className="mb-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-blue-900">보유:</span>
-                          <span className="text-sm text-blue-700">{currentStudent.streakFreezes || 0}개</span>
-                        </div>
-                        <div className="flex gap-1">
-                          {Array.from({ length: currentStudent.streakFreezes || 0 }).map((_, i) => (
-                            <div key={i} className="w-6 h-6 bg-blue-200 border border-blue-400 flex items-center justify-center text-xs">
-                              🔲
-                            </div>
-                          ))}
-                        </div>
+                    <div>
+                      <div className="flex flex-wrap gap-2">
+                        {Array.from({ length: currentStudent.streakFreezes || 0 }).map((_, i) => {
+                          const isActive = i < (currentStudent.activeStreakFreezes || 0);
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => handleSetActiveStreakFreezes(isActive ? i : i + 1)}
+                              disabled={isPurchasing}
+                              className={`relative w-16 h-16 rounded-lg transition-all shadow-md hover:shadow-lg flex flex-col items-center justify-center ${
+                                isActive
+                                  ? 'bg-gradient-to-br from-blue-400 to-blue-600 ring-2 ring-blue-500 scale-105'
+                                  : 'bg-white border-2 border-gray-300 hover:border-blue-400 hover:scale-105'
+                              } ${isPurchasing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                            >
+                              <span className="text-2xl">{isActive ? '❄️' : '⬜'}</span>
+                              <span className={`text-[10px] mt-1 font-medium ${isActive ? 'text-white' : 'text-gray-400'}`}>
+                                {i + 1}
+                              </span>
+                              {isActive && (
+                                <span className="absolute -top-1 -right-1 text-green-500 text-xs bg-white rounded-full w-5 h-5 flex items-center justify-center shadow">
+                                  ✓
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
-                      <div className="mb-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-green-900">활성화:</span>
-                          <span className="text-sm text-green-700">{currentStudent.activeStreakFreezes || 0}개</span>
-                        </div>
-                        <div className="flex gap-1">
-                          {Array.from({ length: currentStudent.activeStreakFreezes || 0 }).map((_, i) => (
-                            <div key={i} className="w-6 h-6 bg-green-200 border border-green-500 flex items-center justify-center text-xs">
-                              ✅
-                            </div>
-                          ))}
-                        </div>
+                      <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                        <p className="text-xs text-blue-700 text-center">
+                          💡 클릭하여 활성화/비활성화 • 하루를 건너뛰면 활성화된 프리즈가 자동으로 사용됩니다
+                        </p>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleToggleStreakFreeze(true)}
-                          disabled={isPurchasing || (currentStudent.activeStreakFreezes || 0) >= (currentStudent.streakFreezes || 0)}
-                          className="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          활성화 +1
-                        </button>
-                        <button
-                          onClick={() => handleToggleStreakFreeze(false)}
-                          disabled={isPurchasing || (currentStudent.activeStreakFreezes || 0) === 0}
-                          className="flex-1 px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          비활성화 -1
-                        </button>
-                      </div>
-                      <p className="text-xs text-blue-600 mt-2 text-center">
-                        하루를 건너뛰면 활성화된 프리즈가 자동으로 사용됩니다
-                      </p>
                     </div>
                   )}
                 </div>

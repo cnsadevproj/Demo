@@ -820,14 +820,21 @@ export async function addShopItem(
   const itemCode = item.code || doc(itemsRef).id;
   const itemRef = doc(itemsRef, itemCode);
 
-  await setDoc(itemRef, {
+  const itemData: any = {
     code: itemCode,
     name: item.name,
     price: item.price,
     category: item.category,
     description: item.description,
     value: item.value
-  });
+  };
+
+  // maxCount가 있으면 추가 (스트릭 프리즈용)
+  if (item.maxCount !== undefined) {
+    itemData.maxCount = item.maxCount;
+  }
+
+  await setDoc(itemRef, itemData);
 
   return itemCode;
 }
