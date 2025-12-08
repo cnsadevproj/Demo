@@ -95,6 +95,12 @@ service cloud.firestore {
         allow read: if true;
         allow write: if true;
       }
+
+      // 학급 그룹 (소원 공유용 - 학생도 읽기 가능)
+      match /classGroups/{groupId} {
+        allow read: if true;
+        allow write: if request.auth != null && request.auth.uid == teacherId;
+      }
     }
 
     // 게임 데이터
