@@ -131,6 +131,7 @@ export interface ShopItem {
   price: number;
   value: string;
   description: string;
+  maxCount?: number; // 스트릭 프리즈 전용: 최대 보유 개수
 }
 
 // 쿠키 상점 아이템 (실물 교환)
