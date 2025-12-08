@@ -523,7 +523,8 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   };
 
   // 잔디 색상
-  const getGrassColor = (cookieChange: number) => {
+  const getGrassColor = (cookieChange: number, usedStreakFreeze?: boolean) => {
+    if (usedStreakFreeze) return 'bg-sky-400'; // 스트릭 프리즈 사용 (하늘색)
     if (cookieChange === 0) return 'bg-gray-200';
     if (cookieChange === 1) return 'bg-green-300';
     if (cookieChange === 2) return 'bg-green-500';
@@ -540,7 +541,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     setIsLoadingProfileGrass(true);
     try {
       const grass = await getGrassData(user.uid, selectedClass, student.code);
-      setProfileStudentGrass(grass.map(g => ({ date: g.date, cookieChange: g.cookieChange, count: g.count || 1 })));
+      setProfileStudentGrass(grass.map(g => ({ date: g.date, cookieChange: g.cookieChange, count: g.count || 1, usedStreakFreeze: g.usedStreakFreeze })));
     } catch (error) {
       console.error('Failed to load profile student grass:', error);
     }
@@ -715,7 +716,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // 잔디 데이터
-  const [grassData, setGrassData] = useState<Array<{ date: string; studentCode: string; cookieChange: number; count: number }>>([]);
+  const [grassData, setGrassData] = useState<Array<{ date: string; studentCode: string; cookieChange: number; count: number; usedStreakFreeze?: boolean }>>([]);
   const [isLoadingGrass, setIsLoadingGrass] = useState(false);
   const [isResettingGrass, setIsResettingGrass] = useState(false);
   const [isUploadingPastGrass, setIsUploadingPastGrass] = useState(false);
@@ -728,7 +729,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
   // 프로필 확인 모달
   const [selectedProfileStudent, setSelectedProfileStudent] = useState<Student | null>(null);
-  const [profileStudentGrass, setProfileStudentGrass] = useState<Array<{ date: string; cookieChange: number; count: number }>>([]);
+  const [profileStudentGrass, setProfileStudentGrass] = useState<Array<{ date: string; cookieChange: number; count: number; usedStreakFreeze?: boolean }>>([]);
   const [isLoadingProfileGrass, setIsLoadingProfileGrass] = useState(false);
 
   // 워드클라우드 모달
@@ -754,6 +755,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemCategory, setNewItemCategory] = useState('emoji');
   const [newItemDescription, setNewItemDescription] = useState('');
+  const [newItemMaxCount, setNewItemMaxCount] = useState(''); // 스트릭 프리즈 최대 보유 개수
   const [shopCategoryFilter, setShopCategoryFilter] = useState<string>('all');
 
   // 상점 모드 (캔디/쿠키)
@@ -2002,7 +2004,8 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   };
 
   // 잔디 색상 (3단계: 1개, 2개, 3개 이상)
-  const getStudentGrassColor = (cookieChange: number) => {
+  const getStudentGrassColor = (cookieChange: number, usedStreakFreeze?: boolean) => {
+    if (usedStreakFreeze) return 'bg-sky-400'; // 스트릭 프리즈 사용 (하늘색)
     if (cookieChange === 0) return 'bg-gray-200'; // 없음
     if (cookieChange === 1) return 'bg-green-300'; // 1개
     if (cookieChange === 2) return 'bg-green-500'; // 2개
@@ -2109,14 +2112,15 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
   // 잔디 데이터를 날짜별로 그룹화
   const getGrassByDate = () => {
-    const grouped: Record<string, Record<string, { change: number; count: number }>> = {};
-    grassData.forEach((item: { date: string; studentCode: string; cookieChange: number; count: number }) => {
+    const grouped: Record<string, Record<string, { change: number; count: number; usedStreakFreeze?: boolean }>> = {};
+    grassData.forEach((item: { date: string; studentCode: string; cookieChange: number; count: number; usedStreakFreeze?: boolean }) => {
       if (!grouped[item.date]) {
         grouped[item.date] = {};
       }
       grouped[item.date][item.studentCode] = {
         change: item.cookieChange,
-        count: item.count
+        count: item.count,
+        usedStreakFreeze: item.usedStreakFreeze
       };
     });
     return grouped;
@@ -2165,11 +2169,13 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
         price: parseInt(newItemPrice),
         category: newItemCategory,
         description: newItemDescription,
-        value: newItemDescription || newItemName
+        value: newItemDescription || newItemName,
+        ...(newItemMaxCount && { maxCount: parseInt(newItemMaxCount) })
       });
       setNewItemName('');
       setNewItemPrice('');
       setNewItemDescription('');
+      setNewItemMaxCount('');
       await loadShopItems();
       toast.success('상품이 추가되었습니다!');
     } catch (error) {
@@ -3357,15 +3363,15 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                                     {student.number}. {student.name}
                                   </td>
                                   {getLast14Days().map(date => {
-                                    const data = grassByDate[date]?.[student.code] || { change: 0, count: 0 };
+                                    const data = grassByDate[date]?.[student.code] || { change: 0, count: 0, usedStreakFreeze: false };
                                     totalChange += data.change;
                                     return (
                                       <td key={date} className="text-center py-2 px-1">
                                         <div
-                                          className={`w-6 h-6 mx-auto rounded ${getGrassColor(data.change)}`}
-                                          title={`${date}: +${data.change} (${data.count}회)`}
+                                          className={`w-6 h-6 mx-auto rounded ${getGrassColor(data.change, data.usedStreakFreeze)}`}
+                                          title={`${date}: ${data.usedStreakFreeze ? '❄️ 스트릭 프리즈' : `+${data.change} (${data.count}회)`}`}
                                         >
-                                          {data.change > 0 && (
+                                          {data.change > 0 && !data.usedStreakFreeze && (
                                             <span className="text-xs text-white font-bold leading-6">
                                               {data.change}
                                             </span>
@@ -3462,39 +3468,50 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* 아이템 추가 */}
-                  <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
-                    <Input
-                      placeholder="상품명 (예: 😎 쿨한)"
-                      value={newItemName}
-                      onChange={(e) => setNewItemName(e.target.value)}
-                    />
-                    <Input
-                      type="number"
-                      placeholder="가격"
-                      value={newItemPrice}
-                      onChange={(e) => setNewItemPrice(e.target.value)}
-                    />
-                    <select
-                      value={newItemCategory}
-                      onChange={(e) => setNewItemCategory(e.target.value)}
-                      className="px-3 py-2 border rounded-md text-sm"
-                    >
-                      <option value="emoji">이모지</option>
-                      <option value="nameEffect">이름효과</option>
-                      <option value="titleColor">칭호색상</option>
-                      <option value="animation">애니메이션</option>
-                      <option value="custom">커스텀</option>
-                    </select>
-                    <Input
-                      placeholder="값 (예: 😎)"
-                      value={newItemDescription}
-                      onChange={(e) => setNewItemDescription(e.target.value)}
-                    />
-                    <Button onClick={handleAddShopItem} className="bg-green-500 hover:bg-green-600 col-span-2 md:col-span-2">
-                      + 추가
-                    </Button>
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+                      <Input
+                        placeholder="상품명 (예: 😎 쿨한)"
+                        value={newItemName}
+                        onChange={(e) => setNewItemName(e.target.value)}
+                      />
+                      <Input
+                        type="number"
+                        placeholder="가격"
+                        value={newItemPrice}
+                        onChange={(e) => setNewItemPrice(e.target.value)}
+                      />
+                      <select
+                        value={newItemCategory}
+                        onChange={(e) => setNewItemCategory(e.target.value)}
+                        className="px-3 py-2 border rounded-md text-sm"
+                      >
+                        <option value="emoji">이모지</option>
+                        <option value="nameEffect">이름효과</option>
+                        <option value="titleColor">칭호색상</option>
+                        <option value="animation">애니메이션</option>
+                        <option value="custom">커스텀</option>
+                      </select>
+                      <Input
+                        placeholder="값 (예: 😎)"
+                        value={newItemDescription}
+                        onChange={(e) => setNewItemDescription(e.target.value)}
+                      />
+                      <Button onClick={handleAddShopItem} className="bg-green-500 hover:bg-green-600 col-span-2 md:col-span-2">
+                        + 추가
+                      </Button>
+                    </div>
+                    {newItemCategory === 'custom' && (
+                      <Input
+                        type="number"
+                        placeholder="최대 보유 개수 (스트릭 프리즈용, 예: 3)"
+                        value={newItemMaxCount}
+                        onChange={(e) => setNewItemMaxCount(e.target.value)}
+                        className="w-full"
+                      />
+                    )}
                   </div>
-                  <p className="text-xs text-gray-400">카테고리별 값: 이모지(😎), 이름효과(gradient-fire), 칭호색상(0~9), 애니메이션(pulse)</p>
+                  <p className="text-xs text-gray-400">카테고리별 값: 이모지(😎), 이름효과(gradient-fire), 칭호색상(0~9), 애니메이션(pulse), 커스텀(streakFreeze)</p>
 
                   {/* 기본 상품 일괄 등록 */}
                   <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
@@ -6111,11 +6128,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
                             const grassRecord = profileStudentGrass.find((g) => g.date === dateStr);
                             const cookieChange = grassRecord?.cookieChange || 0;
+                            const usedStreakFreeze = grassRecord?.usedStreakFreeze || false;
                             return (
                               <div
                                 key={dayIndex}
-                                className={`w-3 h-3 rounded-sm ${getGrassColor(cookieChange)}`}
-                                title={`${dateStr}: +${cookieChange}쿠키`}
+                                className={`w-3 h-3 rounded-sm ${getGrassColor(cookieChange, usedStreakFreeze)}`}
+                                title={`${dateStr}: ${usedStreakFreeze ? '❄️ 스트릭 프리즈' : `+${cookieChange}쿠키`}`}
                               />
                             );
                           })}
