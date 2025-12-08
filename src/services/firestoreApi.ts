@@ -2099,3 +2099,40 @@ export function subscribeToWordCloudResponses(
     callback(responses);
   });
 }
+
+// 학생의 현재 잔디 스트릭 계산 (최근부터 역순으로 연속 일수)
+export async function calculateStudentStreak(
+  teacherId: string,
+  classId: string,
+  studentCode: string
+): Promise<number> {
+  try {
+    // 모든 잔디 데이터 가져오기
+    const grassData = await getGrassData(teacherId, classId, studentCode);
+
+    if (grassData.length === 0) {
+      return 0;
+    }
+
+    // 날짜별로 정리 (최신순)
+    const sortedData = grassData
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    // 최근 날짜부터 역순으로 연속 일수 계산
+    let streak = 0;
+    for (const data of sortedData) {
+      // 쿠키 변화량이 1개 이상이면 잔디가 채워진 것으로 간주
+      if (data.cookieChange >= 1) {
+        streak++;
+      } else {
+        // 쿠키가 0개인 날이면 중단
+        break;
+      }
+    }
+
+    return streak;
+  } catch (error) {
+    console.error('Failed to calculate streak:', error);
+    return 0;
+  }
+}

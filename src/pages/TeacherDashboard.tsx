@@ -4053,7 +4053,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         </button>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600">참가비:</span>
+                        <span className="text-sm text-gray-600">참가 조건:</span>
                         <input
                           type="number"
                           min="0"
@@ -4062,7 +4062,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                           className="w-20 px-2 py-1 text-sm border border-gray-300 rounded-lg text-center"
                           placeholder="0"
                         />
-                        <span className="text-sm text-gray-500">🍭</span>
+                        <span className="text-sm text-gray-500">일 스트릭🌱</span>
                       </div>
                       <Button
                         onClick={createBaseballGame}
@@ -4266,7 +4266,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600">참가비:</span>
+                        <span className="text-sm text-gray-600">참가 조건:</span>
                         <input
                           type="number"
                           min="0"
@@ -4275,7 +4275,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                           className="w-20 px-2 py-1 text-sm border border-gray-300 rounded-lg text-center"
                           placeholder="0"
                         />
-                        <span className="text-sm text-gray-500">🍭</span>
+                        <span className="text-sm text-gray-500">일 스트릭🌱</span>
                       </div>
                       <Button
                         onClick={createMinorityGame}
@@ -4350,7 +4350,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         <p>· 최고 기록 경쟁!</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600">참가비:</span>
+                        <span className="text-sm text-gray-600">참가 조건:</span>
                         <input
                           type="number"
                           min="0"
@@ -4359,7 +4359,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                           className="w-20 px-2 py-1 text-sm border border-gray-300 rounded-lg text-center"
                           placeholder="0"
                         />
-                        <span className="text-sm text-gray-500">🍭</span>
+                        <span className="text-sm text-gray-500">일 스트릭🌱</span>
                       </div>
                       <div className="flex gap-2">
                         <Button
@@ -4476,7 +4476,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600">참가비:</span>
+                        <span className="text-sm text-gray-600">참가 조건:</span>
                         <input
                           type="number"
                           min="0"
@@ -4485,7 +4485,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                           className="w-20 px-2 py-1 text-sm border border-gray-300 rounded-lg text-center"
                           placeholder="0"
                         />
-                        <span className="text-sm text-gray-500">🍭</span>
+                        <span className="text-sm text-gray-500">일 스트릭🌱</span>
                       </div>
                       <Button
                         onClick={createRpsGame}

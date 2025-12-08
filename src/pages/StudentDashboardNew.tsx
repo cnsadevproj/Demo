@@ -23,6 +23,7 @@ import {
   getTeams,
   getClassStudents,
   checkTodayWish,
+  calculateStudentStreak,
   Student,
   Wish,
   ShopItem,
@@ -245,25 +246,19 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const joinBaseballGame = async () => {
     if (!activeBaseballGame || !student || !currentStudent || !studentTeacherId) return;
 
-    const entryFee = activeBaseballGame.entryFee || 0;
-    const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
+    const requiredStreak = activeBaseballGame.entryFee || 0;
 
-    // 참가비 확인
-    if (entryFee > 0 && currentJelly < entryFee) {
-      toast.error(`참가비가 부족합니다. (필요: ${entryFee}🍭, 보유: ${currentJelly}🍭)`);
-      return;
+    // 스트릭 확인
+    if (requiredStreak > 0) {
+      const currentStreak = await calculateStudentStreak(studentTeacherId, student.classId, student.code);
+      if (currentStreak < requiredStreak) {
+        toast.error(`스트릭이 부족합니다. (필요: ${requiredStreak}일 연속, 현재: ${currentStreak}일)`);
+        return;
+      }
     }
 
     setIsJoiningGame(true);
     try {
-      // 참가비 차감
-      if (entryFee > 0) {
-        const studentRef = doc(db, 'teachers', studentTeacherId, 'students', student.code);
-        await updateDoc(studentRef, {
-          jelly: currentJelly - entryFee
-        });
-      }
-
       // 플레이어로 등록
       const playerRef = doc(db, 'games', activeBaseballGame.id, 'players', student.code);
       await setDoc(playerRef, {
@@ -272,14 +267,14 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
         solvedAt: null,
         rank: null,
         attempts: 0,
-        entryFeePaid: entryFee // 지불한 참가비 기록
+        entryFeePaid: 0 // 더 이상 참가비 없음
       });
 
       // 새 탭으로 게임 열기
       const gameUrl = `${window.location.origin}?game=baseball&gameId=${activeBaseballGame.id}&studentCode=${student.code}&studentName=${encodeURIComponent(currentStudent.name)}`;
       window.open(gameUrl, '_blank');
 
-      toast.success(entryFee > 0 ? `${entryFee}🍭 참가비를 지불하고 게임에 참가했습니다!` : '게임에 참가했습니다! 새 창을 확인하세요.');
+      toast.success('게임에 참가했습니다! 새 창을 확인하세요.');
     } catch (error) {
       console.error('Failed to join game:', error);
       toast.error('게임 참가에 실패했습니다.');
@@ -319,25 +314,19 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const joinMinorityGame = async () => {
     if (!activeMinorityGame || !student || !currentStudent || !studentTeacherId) return;
 
-    const entryFee = activeMinorityGame.entryFee || 0;
-    const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
+    const requiredStreak = activeMinorityGame.entryFee || 0;
 
-    // 참가비 확인
-    if (entryFee > 0 && currentJelly < entryFee) {
-      toast.error(`참가비가 부족합니다. (필요: ${entryFee}🍭, 보유: ${currentJelly}🍭)`);
-      return;
+    // 스트릭 확인
+    if (requiredStreak > 0) {
+      const currentStreak = await calculateStudentStreak(studentTeacherId, student.classId, student.code);
+      if (currentStreak < requiredStreak) {
+        toast.error(`스트릭이 부족합니다. (필요: ${requiredStreak}일 연속, 현재: ${currentStreak}일)`);
+        return;
+      }
     }
 
     setIsJoiningMinorityGame(true);
     try {
-      // 참가비 차감
-      if (entryFee > 0) {
-        const studentRef = doc(db, 'teachers', studentTeacherId, 'students', student.code);
-        await updateDoc(studentRef, {
-          jelly: currentJelly - entryFee
-        });
-      }
-
       // 플레이어로 등록
       const playerRef = doc(db, 'games', activeMinorityGame.id, 'players', student.code);
       await setDoc(playerRef, {
@@ -392,25 +381,19 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const joinBulletDodgeGame = async () => {
     if (!activeBulletDodgeGame || !student || !currentStudent || !studentTeacherId) return;
 
-    const entryFee = activeBulletDodgeGame.entryFee || 0;
-    const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
+    const requiredStreak = activeBulletDodgeGame.entryFee || 0;
 
-    // 참가비 확인
-    if (entryFee > 0 && currentJelly < entryFee) {
-      toast.error(`참가비가 부족합니다. (필요: ${entryFee}🍭, 보유: ${currentJelly}🍭)`);
-      return;
+    // 스트릭 확인
+    if (requiredStreak > 0) {
+      const currentStreak = await calculateStudentStreak(studentTeacherId, student.classId, student.code);
+      if (currentStreak < requiredStreak) {
+        toast.error(`스트릭이 부족합니다. (필요: ${requiredStreak}일 연속, 현재: ${currentStreak}일)`);
+        return;
+      }
     }
 
     setIsJoiningBulletDodge(true);
     try {
-      // 참가비 차감
-      if (entryFee > 0) {
-        const studentRef = doc(db, 'teachers', studentTeacherId, 'students', student.code);
-        await updateDoc(studentRef, {
-          jelly: currentJelly - entryFee
-        });
-      }
-
       // 플레이어로 등록
       const playerRef = doc(db, 'games', activeBulletDodgeGame.id, 'players', student.code);
       await setDoc(playerRef, {
@@ -464,28 +447,22 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const joinRpsGame = async () => {
     if (!activeRpsGame || !student || !currentStudent || !studentTeacherId) return;
 
-    const entryFee = activeRpsGame.entryFee || 0;
+    const requiredStreak = activeRpsGame.entryFee || 0;
     const currentJelly = currentStudent.jelly ?? currentStudent.cookie ?? 0;
 
-    // 참가비 확인
-    if (entryFee > 0 && currentJelly < entryFee) {
-      toast.error(`참가비가 부족합니다. (필요: ${entryFee}🍭, 보유: ${currentJelly}🍭)`);
-      return;
+    // 스트릭 확인
+    if (requiredStreak > 0) {
+      const currentStreak = await calculateStudentStreak(studentTeacherId, student.classId, student.code);
+      if (currentStreak < requiredStreak) {
+        toast.error(`스트릭이 부족합니다. (필요: ${requiredStreak}일 연속, 현재: ${currentStreak}일)`);
+        return;
+      }
     }
 
     setIsJoiningRps(true);
     try {
-      // 참가비 차감
-      if (entryFee > 0) {
-        const studentRef = doc(db, 'teachers', studentTeacherId, 'students', student.code);
-        await updateDoc(studentRef, {
-          jelly: currentJelly - entryFee
-        });
-      }
-
-      // 플레이어로 등록 (참가비 차감 후 캔디 잔액 포함)
+      // 플레이어로 등록
       const playerRef = doc(db, 'games', activeRpsGame.id, 'players', student.code);
-      const myCandy = currentJelly - entryFee; // 참가비 차감 후 잔액
       await setDoc(playerRef, {
         name: currentStudent.name,
         choice: null,
@@ -493,7 +470,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
         candyBet: 0,
         result: null,
         candyWon: 0,
-        myCandy: myCandy // 현재 캔디 잔액
+        myCandy: currentJelly // 현재 캔디 잔액
       }, { merge: true });
 
       // 새 탭으로 게임 열기
