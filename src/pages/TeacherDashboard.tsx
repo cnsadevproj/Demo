@@ -5177,14 +5177,14 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                             const teacherGameUrl = `${window.location.origin}?game=word-chain-teacher&gameId=${wordChainGame.id}`;
                             window.open(teacherGameUrl, '_blank', 'width=800,height=900');
                           }}
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
                         >
                           🎮 관리 창 열기
                         </Button>
                         <Button
                           onClick={deleteWordChainGame}
                           variant="outline"
-                          className="text-red-600 border-red-300 hover:bg-red-50"
+                          className="border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
                         >
                           삭제
                         </Button>
