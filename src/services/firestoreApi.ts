@@ -2100,7 +2100,7 @@ export function subscribeToWordCloudResponses(
   });
 }
 
-// 학생의 현재 잔디 스트릭 계산 (최근부터 역순으로 연속 일수)
+// 학생의 현재 잔디 스트릭 계산 (어제까지의 연속 평일 일수)
 export async function calculateStudentStreak(
   teacherId: string,
   classId: string,
@@ -2114,18 +2114,47 @@ export async function calculateStudentStreak(
       return 0;
     }
 
-    // 날짜별로 정리 (최신순)
-    const sortedData = grassData
-      .sort((a, b) => b.date.localeCompare(a.date));
+    // 날짜별 맵 생성 (빠른 조회를 위해)
+    const grassMap = new Map<string, number>();
+    grassData.forEach(data => {
+      grassMap.set(data.date, data.cookieChange);
+    });
 
-    // 최근 날짜부터 역순으로 연속 일수 계산
+    // 오늘 제외, 어제부터 시작
+    const today = new Date();
+    let checkDate = new Date(today);
+    checkDate.setDate(checkDate.getDate() - 1); // 어제
+
+    // 어제가 주말이면 금요일로 조정
+    const yesterdayDayOfWeek = checkDate.getDay();
+    if (yesterdayDayOfWeek === 0) { // 일요일 -> 금요일 (-2일)
+      checkDate.setDate(checkDate.getDate() - 2);
+    } else if (yesterdayDayOfWeek === 6) { // 토요일 -> 금요일 (-1일)
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
     let streak = 0;
-    for (const data of sortedData) {
-      // 쿠키 변화량이 1개 이상이면 잔디가 채워진 것으로 간주
-      if (data.cookieChange >= 1) {
+
+    // 최대 365일까지만 확인 (무한루프 방지)
+    for (let i = 0; i < 365; i++) {
+      const dayOfWeek = checkDate.getDay();
+
+      // 주말은 건너뛰기 (이미 금요일로 반영되어 있음)
+      if (dayOfWeek === 0 || dayOfWeek === 6) {
+        checkDate.setDate(checkDate.getDate() - 1);
+        continue;
+      }
+
+      // 평일인 경우 잔디 확인
+      const dateStr = getKoreanDateString(checkDate);
+      const cookieChange = grassMap.get(dateStr) || 0;
+
+      if (cookieChange >= 1) {
+        // 쿠키가 1개 이상이면 스트릭 증가
         streak++;
+        checkDate.setDate(checkDate.getDate() - 1);
       } else {
-        // 쿠키가 0개인 날이면 중단
+        // 쿠키가 0이거나 데이터가 없으면 스트릭 중단
         break;
       }
     }
