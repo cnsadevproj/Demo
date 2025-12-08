@@ -529,12 +529,17 @@ export async function getWishes(
   const wishesRef = collection(db, 'teachers', teacherId, 'wishes');
   const q = query(
     wishesRef,
-    where('classId', '==', classId),
-    orderBy('createdAt', 'desc')
+    where('classId', '==', classId)
   );
   const snapshot = await getDocs(q);
 
-  return snapshot.docs.map(doc => doc.data()) as Wish[];
+  // JavaScript에서 정렬 (Firestore 인덱스 없이 동작)
+  const wishes = snapshot.docs.map(doc => doc.data()) as Wish[];
+  return wishes.sort((a, b) => {
+    const timeA = a.createdAt?.toMillis?.() || new Date(a.createdAt as any).getTime();
+    const timeB = b.createdAt?.toMillis?.() || new Date(b.createdAt as any).getTime();
+    return timeB - timeA;
+  });
 }
 
 // 소원 classId 마이그레이션 (기존 소원에 classId 할당)
