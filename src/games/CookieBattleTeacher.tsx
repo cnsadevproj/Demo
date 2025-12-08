@@ -139,6 +139,12 @@ export function CookieBattleTeacher() {
   const [candyAmount, setCandyAmount] = useState('');
   const [isAddingCandy, setIsAddingCandy] = useState(false);
 
+  // 팀 상세 모달
+  const [selectedTeamForModal, setSelectedTeamForModal] = useState<TeamData | null>(null);
+
+  // 결과 모달 (전투 후)
+  const [showResultModal, setShowResultModal] = useState(false);
+
   // 게임 데이터 구독
   useEffect(() => {
     if (!gameId) return;
@@ -698,24 +704,39 @@ export function CookieBattleTeacher() {
               const x = Math.cos(angle) * radius;
               const y = Math.sin(angle) * radius;
 
+              // 이 팀을 공격 대상으로 선택한 팀이 있는지 확인
+              const isBeingTargeted = teams.some(t => !t.isEliminated && t.targetTeamId === team.id);
+              // 배팅 완료 여부 (공격 또는 수비 배팅이 있는 경우)
+              const hasBetting = team.attackBet > 0 || team.defenseBet > 0;
+
+              // 쿠키 증감 계산 (결과 상태일 때)
+              const cookieChange = gameData.status === 'result'
+                ? team.resources - team.initialResources
+                : 0;
+
               return (
                 <div
                   key={team.id}
-                  className={`absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-500 ${
+                  className={`absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-500 cursor-pointer hover:scale-105 ${
                     team.isEliminated ? 'opacity-40 grayscale' : ''
                   }`}
                   style={{
                     left: `calc(50% + ${x}px)`,
                     top: `calc(50% + ${y}px)`,
                   }}
+                  onClick={() => setSelectedTeamForModal(team)}
                 >
                   {/* 성 카드 */}
                   <div className={`bg-gradient-to-b from-stone-700 to-stone-800 rounded-xl p-4 border-2 min-w-[140px] ${
                     team.isEliminated
                       ? 'border-stone-600'
-                      : team.isReady
-                        ? 'border-green-500'
-                        : 'border-amber-500'
+                      : isBeingTargeted
+                        ? 'border-blue-500 ring-2 ring-blue-500/50'
+                        : hasBetting
+                          ? 'border-green-500 ring-2 ring-green-500/50'
+                          : team.isReady
+                            ? 'border-green-500'
+                            : 'border-amber-500'
                   } shadow-lg`}>
                     <div className="text-center">
                       <div className="text-4xl mb-1">{team.emoji}</div>
@@ -725,6 +746,14 @@ export function CookieBattleTeacher() {
                       }`}>
                         🍪 {team.resources}
                       </p>
+                      {/* 쿠키 증감 표시 (결과 상태) */}
+                      {gameData.status === 'result' && !team.isEliminated && (
+                        <p className={`text-sm font-bold ${
+                          cookieChange > 0 ? 'text-green-400' : cookieChange < 0 ? 'text-red-400' : 'text-stone-500'
+                        }`}>
+                          {cookieChange > 0 ? `+${cookieChange}` : cookieChange === 0 ? '±0' : cookieChange}
+                        </p>
+                      )}
                       {team.isEliminated && (
                         <p className="text-xs text-red-400 mt-1">💀 탈락</p>
                       )}
@@ -739,13 +768,13 @@ export function CookieBattleTeacher() {
                     {gameData.status === 'waiting' && !team.isEliminated && (
                       <div className="flex justify-center gap-1 mt-2">
                         <button
-                          onClick={() => adjustTeamResources(team.id, -10)}
+                          onClick={(e) => { e.stopPropagation(); adjustTeamResources(team.id, -10); }}
                           className="px-2 py-1 bg-red-600/50 text-red-200 rounded text-xs hover:bg-red-600"
                         >
                           -10
                         </button>
                         <button
-                          onClick={() => adjustTeamResources(team.id, 10)}
+                          onClick={(e) => { e.stopPropagation(); adjustTeamResources(team.id, 10); }}
                           className="px-2 py-1 bg-green-600/50 text-green-200 rounded text-xs hover:bg-green-600"
                         >
                           +10
@@ -773,71 +802,6 @@ export function CookieBattleTeacher() {
           </div>
         </div>
 
-        {/* 팀 상세 목록 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {teams.map(team => (
-            <div
-              key={team.id}
-              className={`bg-stone-800/80 rounded-xl p-4 border ${
-                team.isEliminated ? 'border-stone-700 opacity-60' : 'border-amber-600/30'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{team.emoji}</span>
-                  <span className="font-bold text-white">{team.name}</span>
-                </div>
-                <span className="text-amber-400 font-bold">🍪 {team.resources}</span>
-              </div>
-
-              {/* 팀원 목록 */}
-              <div className="space-y-1">
-                {team.members.map(code => {
-                  const student = students.get(code);
-                  const isRepresentative = team.representativeCode === code;
-                  return (
-                    <div
-                      key={code}
-                      className={`flex items-center justify-between px-2 py-1 rounded ${
-                        student?.isOnline
-                          ? 'bg-green-900/30 ring-1 ring-green-500/50'
-                          : student?.hasReflected === false
-                            ? 'bg-red-900/30'
-                            : 'bg-stone-700/30'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        {/* 온라인 상태 표시 */}
-                        <span className={`w-2 h-2 rounded-full ${
-                          student?.isOnline ? 'bg-green-400 animate-pulse' : 'bg-stone-600'
-                        }`}></span>
-                        {isRepresentative && <span className="text-yellow-400">👑</span>}
-                        <span className={`text-sm ${
-                          student?.hasReflected === false ? 'text-red-400' :
-                          student?.isOnline ? 'text-green-300' : 'text-stone-400'
-                        }`}>
-                          {student?.name || code}
-                        </span>
-                      </div>
-                      {gameData.status === 'waiting' && !team.isEliminated && (
-                        <button
-                          onClick={() => setRepresentative(team.id, code)}
-                          className={`text-xs px-2 py-0.5 rounded ${
-                            isRepresentative
-                              ? 'bg-yellow-600 text-white'
-                              : 'bg-stone-600 text-stone-300 hover:bg-stone-500'
-                          }`}
-                        >
-                          {isRepresentative ? '대표' : '지정'}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
 
         {/* 전투 로그 */}
         {battleLog.length > 0 && (
@@ -1095,6 +1059,120 @@ export function CookieBattleTeacher() {
                   {isAddingCandy ? '...' : '적용'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 팀 상세 모달 */}
+      {selectedTeamForModal && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedTeamForModal(null)}
+        >
+          <div
+            className="bg-stone-800 rounded-2xl shadow-xl max-w-md w-full max-h-[80dvh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 모달 헤더 */}
+            <div className="p-4 border-b border-stone-700 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">{selectedTeamForModal.emoji}</span>
+                <div>
+                  <h3 className="font-bold text-white text-lg">{selectedTeamForModal.name}</h3>
+                  <p className="text-amber-400 font-bold">🍪 {selectedTeamForModal.resources}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedTeamForModal(null)}
+                className="text-stone-400 hover:text-white text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* 모달 내용 (스크롤 가능) */}
+            <div className="p-4 overflow-y-auto flex-1">
+              {/* 팀원 목록 */}
+              <div className="mb-4">
+                <h4 className="font-bold text-amber-400 mb-2 text-sm">👥 팀원</h4>
+                <div className="space-y-1">
+                  {selectedTeamForModal.members.map(code => {
+                    const student = students.get(code);
+                    const isRepresentative = selectedTeamForModal.representativeCode === code;
+                    return (
+                      <div
+                        key={code}
+                        className={`flex items-center justify-between px-3 py-2 rounded-lg ${
+                          student?.isOnline
+                            ? 'bg-green-900/30 ring-1 ring-green-500/50'
+                            : student?.hasReflected === false
+                              ? 'bg-red-900/30'
+                              : 'bg-stone-700/30'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${
+                            student?.isOnline ? 'bg-green-400 animate-pulse' : 'bg-stone-600'
+                          }`}></span>
+                          {isRepresentative && <span className="text-yellow-400">👑</span>}
+                          <span className={`text-sm ${
+                            student?.hasReflected === false ? 'text-red-400' :
+                            student?.isOnline ? 'text-green-300' : 'text-stone-400'
+                          }`}>
+                            {student?.name || code}
+                          </span>
+                        </div>
+                        {gameData?.status === 'waiting' && !selectedTeamForModal.isEliminated && (
+                          <button
+                            onClick={() => setRepresentative(selectedTeamForModal.id, code)}
+                            className={`text-xs px-2 py-1 rounded ${
+                              isRepresentative
+                                ? 'bg-yellow-600 text-white'
+                                : 'bg-stone-600 text-stone-300 hover:bg-stone-500'
+                            }`}
+                          >
+                            {isRepresentative ? '대표' : '지정'}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 팀 관련 전투 기록 */}
+              {battleLog.length > 0 && (
+                <div>
+                  <h4 className="font-bold text-amber-400 mb-2 text-sm">📜 팀 전투 기록</h4>
+                  <div className="bg-stone-900/50 rounded-lg p-3 max-h-40 overflow-y-auto space-y-1 text-xs">
+                    {battleLog
+                      .filter(log => log.includes(selectedTeamForModal.name) || log.includes(selectedTeamForModal.emoji))
+                      .reverse()
+                      .slice(0, 20)
+                      .map((log, i) => (
+                        <p key={i} className={`${
+                          log.startsWith('=') ? 'text-amber-400 font-bold' : 'text-stone-300'
+                        }`}>
+                          {log}
+                        </p>
+                      ))}
+                    {battleLog.filter(log => log.includes(selectedTeamForModal.name) || log.includes(selectedTeamForModal.emoji)).length === 0 && (
+                      <p className="text-stone-500 text-center py-2">전투 기록이 없습니다</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 모달 하단 버튼 */}
+            <div className="p-4 border-t border-stone-700 flex-shrink-0">
+              <button
+                onClick={() => setSelectedTeamForModal(null)}
+                className="w-full py-2 bg-stone-600 text-white font-bold rounded-lg hover:bg-stone-500 transition-colors"
+              >
+                닫기
+              </button>
             </div>
           </div>
         </div>

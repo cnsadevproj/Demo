@@ -11,7 +11,16 @@ const STORAGE_KEYS = {
   PROFILES: 'dahandin_student_profiles',
   WISHES: 'dahandin_wishes',
   ATTENDANCE: 'dahandin_attendance',
+  CLASS_GROUPS: 'dahandin_class_groups',
 };
+
+// 학급 그룹 타입 (같은 그룹끼리 소원 공유)
+interface ClassGroup {
+  id: string;
+  name: string;
+  classIds: string[];
+  createdAt: string;
+}
 
 interface StudentContextType {
   // 프로필 관리
@@ -27,7 +36,15 @@ interface StudentContextType {
   grantWish: (wishId: string, message: string) => void;
   deleteWish: (wishId: string) => void;
   getClassWishes: (classId: string) => Wish[];
+  getGroupedClassWishes: (classId: string) => Wish[];
   getTodayWish: (classId: string, studentCode: string) => Wish | null;
+
+  // 학급 그룹 관리
+  classGroups: ClassGroup[];
+  addClassGroup: (name: string, classIds: string[]) => ClassGroup;
+  updateClassGroup: (groupId: string, classIds: string[]) => void;
+  deleteClassGroup: (groupId: string) => void;
+  getGroupForClass: (classId: string) => ClassGroup | null;
 
   // 출석 관리
   attendance: AttendanceRecord[];
@@ -61,6 +78,12 @@ export function StudentProvider({ children }: { children: React.ReactNode }) {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // 학급 그룹 상태
+  const [classGroups, setClassGroups] = useState<ClassGroup[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.CLASS_GROUPS);
+    return saved ? JSON.parse(saved) : [];
+  });
+
   // 로컬 스토리지 동기화
   useEffect(() => {
     const profilesObj = Object.fromEntries(profiles);
@@ -74,6 +97,10 @@ export function StudentProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(attendance));
   }, [attendance]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.CLASS_GROUPS, JSON.stringify(classGroups));
+  }, [classGroups]);
 
   // 프로필 가져오기
   const getProfile = useCallback((studentCode: string): StudentProfile => {
@@ -174,6 +201,48 @@ export function StudentProvider({ children }: { children: React.ReactNode }) {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [wishes]);
 
+  // 그룹에 속한 학급인지 확인하고 해당 그룹 반환
+  const getGroupForClass = useCallback((classId: string): ClassGroup | null => {
+    return classGroups.find(group => group.classIds.includes(classId)) || null;
+  }, [classGroups]);
+
+  // 그룹된 학급들의 소원 목록 (같은 그룹이면 소원 공유)
+  const getGroupedClassWishes = useCallback((classId: string): Wish[] => {
+    const group = getGroupForClass(classId);
+    if (group) {
+      // 그룹에 속한 모든 학급의 소원 반환
+      return wishes
+        .filter(w => group.classIds.includes(w.classId))
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+    // 그룹이 없으면 해당 학급 소원만 반환
+    return getClassWishes(classId);
+  }, [wishes, getGroupForClass, getClassWishes]);
+
+  // 학급 그룹 추가
+  const addClassGroup = useCallback((name: string, classIds: string[]): ClassGroup => {
+    const newGroup: ClassGroup = {
+      id: `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name,
+      classIds,
+      createdAt: new Date().toISOString(),
+    };
+    setClassGroups(prev => [...prev, newGroup]);
+    return newGroup;
+  }, []);
+
+  // 학급 그룹 수정
+  const updateClassGroup = useCallback((groupId: string, classIds: string[]) => {
+    setClassGroups(prev => prev.map(group =>
+      group.id === groupId ? { ...group, classIds } : group
+    ));
+  }, []);
+
+  // 학급 그룹 삭제
+  const deleteClassGroup = useCallback((groupId: string) => {
+    setClassGroups(prev => prev.filter(group => group.id !== groupId));
+  }, []);
+
   // 오늘 내 소원
   const getTodayWish = useCallback((classId: string, studentCode: string): Wish | null => {
     const today = getToday();
@@ -259,7 +328,13 @@ export function StudentProvider({ children }: { children: React.ReactNode }) {
     grantWish,
     deleteWish,
     getClassWishes,
+    getGroupedClassWishes,
     getTodayWish,
+    classGroups,
+    addClassGroup,
+    updateClassGroup,
+    deleteClassGroup,
+    getGroupForClass,
     attendance,
     checkAttendance,
     isAttendedToday,

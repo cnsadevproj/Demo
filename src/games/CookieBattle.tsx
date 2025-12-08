@@ -617,18 +617,20 @@ export function CookieBattle() {
         {/* 사용법 모달 */}
         {showHelpModal && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-stone-800 rounded-2xl max-w-md w-full max-h-[80vh] overflow-y-auto border border-amber-600/30">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold text-amber-400">📖 게임 방법</h2>
-                  <button
-                    onClick={() => setShowHelpModal(false)}
-                    className="text-stone-400 hover:text-white text-2xl"
-                  >
-                    ✕
-                  </button>
-                </div>
+            <div className="bg-stone-800 rounded-2xl max-w-md w-full max-h-[80dvh] overflow-hidden flex flex-col border border-amber-600/30">
+              {/* 헤더 */}
+              <div className="p-4 border-b border-stone-700 flex items-center justify-between flex-shrink-0">
+                <h2 className="text-xl font-bold text-amber-400">📖 게임 방법</h2>
+                <button
+                  onClick={() => setShowHelpModal(false)}
+                  className="text-stone-400 hover:text-white text-2xl"
+                >
+                  ✕
+                </button>
+              </div>
 
+              {/* 스크롤 가능한 내용 */}
+              <div className="p-4 overflow-y-auto flex-1">
                 <div className="space-y-4 text-stone-300">
                   <div className="bg-stone-700/50 rounded-xl p-4">
                     <h3 className="font-bold text-amber-400 mb-2">🎯 게임 목표</h3>
@@ -680,10 +682,13 @@ export function CookieBattle() {
                     </p>
                   </div>
                 </div>
+              </div>
 
+              {/* 하단 버튼 */}
+              <div className="p-4 border-t border-stone-700 flex-shrink-0">
                 <button
                   onClick={() => setShowHelpModal(false)}
-                  className="w-full mt-6 py-3 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-colors"
+                  className="w-full py-3 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-colors"
                 >
                   확인
                 </button>

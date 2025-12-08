@@ -28,11 +28,12 @@ export function WishingStone({ onBack }: WishingStoneProps) {
     unlikeWish,
     grantWish,
     deleteWish,
-    getClassWishes,
+    getGroupedClassWishes,
     getTodayWish,
     checkAttendance,
     isAttendedToday,
     getAttendanceStats,
+    getGroupForClass,
   } = useStudent();
 
   const { studentCode: authStudentCode, studentClassName, role, selectedClass } = useAuth();
@@ -51,10 +52,11 @@ export function WishingStone({ onBack }: WishingStoneProps) {
   const [grantMessage, setGrantMessage] = useState('');
 
   // 데이터
-  const classWishes = getClassWishes(classId);
+  const classWishes = getGroupedClassWishes(classId);
   const todayWish = getTodayWish(classId, studentCode);
   const attended = isAttendedToday(classId, studentCode);
   const stats = getAttendanceStats(classId, studentCode, 30);
+  const group = getGroupForClass(classId);
 
   // 소원 작성
   const handleSubmitWish = () => {
