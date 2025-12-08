@@ -307,7 +307,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
         {/* 푸터 */}
         <p className="text-center text-amber-700 text-sm mt-6">
-          © 2024 다했니? - 학습루틴 게임화 시스템
+          © 2025 다했니? - 학습루틴 게임화 시스템 by CNSA 신도경T
         </p>
       </div>
     </div>
