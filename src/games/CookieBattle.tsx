@@ -660,7 +660,7 @@ export function CookieBattle() {
         {/* 사용법 모달 (페이지형) */}
         {showHelpModal && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-stone-800 rounded-2xl max-w-md w-full max-h-[85vh] overflow-hidden border border-amber-600/30">
+            <div className="bg-stone-800 rounded-2xl max-w-md w-full max-h-[85dvh] overflow-hidden border border-amber-600/30">
               {/* 헤더 */}
               <div className="p-4 border-b border-stone-700 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-amber-400">📖 게임 방법</h2>
@@ -686,7 +686,7 @@ export function CookieBattle() {
               </div>
 
               {/* 컨텐츠 */}
-              <div className="p-6 overflow-y-auto max-h-[50vh]">
+              <div className="p-6 overflow-y-auto max-h-[50dvh]">
                 {/* 페이지 1: 게임 소개 */}
                 {helpPage === 0 && (
                   <div className="space-y-4 text-stone-300">
@@ -896,7 +896,7 @@ export function CookieBattle() {
             onClick={() => setShowBattleModal(false)}
           >
             <div
-              className="bg-stone-800 rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden"
+              className="bg-stone-800 rounded-2xl shadow-xl max-w-lg w-full max-h-[80dvh] overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-4 border-b border-stone-700 flex items-center justify-between">
@@ -909,7 +909,7 @@ export function CookieBattle() {
                 </button>
               </div>
 
-              <div className="p-4 overflow-y-auto max-h-[60vh]">
+              <div className="p-4 overflow-y-auto max-h-[60dvh]">
                 {/* 내 팀 관련 전투만 표시 */}
                 {(() => {
                   const relevantBattles = myTeamBattles.filter(

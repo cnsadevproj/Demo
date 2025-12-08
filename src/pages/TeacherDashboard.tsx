@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useStudent } from '../contexts/StudentContext';
 import { Button } from '../components/ui/button';
 import { FeedbackModal, FeedbackButton } from '../components/FeedbackModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -84,7 +85,8 @@ interface TeacherDashboardProps {
 
 export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const { user, teacher, classes, selectedClass, selectClass, refreshClasses, updateTeacherEmail } = useAuth();
-  
+  const { classGroups, addClassGroup, updateClassGroup, deleteClassGroup, getGroupForClass } = useStudent();
+
   // 상태
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
@@ -103,6 +105,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [hideMode, setHideMode] = useState(false);
   const [viewHiddenMode, setViewHiddenMode] = useState(false);
   const [selectedForHide, setSelectedForHide] = useState<string[]>([]);
+
+  // 학급 묶기 (소원 공유)
+  const [groupMode, setGroupMode] = useState(false);
+  const [selectedForGroup, setSelectedForGroup] = useState<string[]>([]);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [groupName, setGroupName] = useState('');
 
   // 프로필 수정
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -572,6 +580,41 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     setSelectedForHide([]);
     setViewHiddenMode(false);
     toast.success(`${selectedForHide.length}개 학급 숨김을 해제했습니다.`);
+  };
+
+  // 그룹 모드 학급 토글
+  const handleToggleGroupClass = (classId: string) => {
+    setSelectedForGroup(prev =>
+      prev.includes(classId)
+        ? prev.filter(id => id !== classId)
+        : [...prev, classId]
+    );
+  };
+
+  // 학급 그룹 생성
+  const handleCreateGroup = () => {
+    if (selectedForGroup.length < 2) {
+      toast.error('2개 이상의 학급을 선택해주세요.');
+      return;
+    }
+    if (!groupName.trim()) {
+      toast.error('그룹 이름을 입력해주세요.');
+      return;
+    }
+    addClassGroup(groupName, selectedForGroup);
+    toast.success(`"${groupName}" 그룹이 생성되었습니다.`);
+    setSelectedForGroup([]);
+    setGroupMode(false);
+    setShowGroupModal(false);
+    setGroupName('');
+  };
+
+  // 학급 그룹 삭제
+  const handleDeleteGroup = (groupId: string, groupName: string) => {
+    if (window.confirm(`"${groupName}" 그룹을 삭제하시겠습니까?`)) {
+      deleteClassGroup(groupId);
+      toast.success('그룹이 삭제되었습니다.');
+    }
   };
 
   // 쿠키 새로고침
@@ -2507,8 +2550,8 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       {hiddenClasses.length > 0 && ` (${hiddenClasses.length}개 숨김)`}
                     </CardDescription>
                   </div>
-                  <div className="flex gap-2">
-                    {!viewHiddenMode && (
+                  <div className="flex gap-2 flex-wrap">
+                    {!viewHiddenMode && !groupMode && (
                       <Button
                         variant={hideMode ? "default" : "outline"}
                         size="sm"
@@ -2524,7 +2567,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         {hideMode ? (selectedForHide.length > 0 ? `🙈 ${selectedForHide.length}개 숨기기` : '✕ 취소') : '🙈 가리기'}
                       </Button>
                     )}
-                    {hiddenClasses.length > 0 && !hideMode && (
+                    {hiddenClasses.length > 0 && !hideMode && !groupMode && (
                       <Button
                         variant={viewHiddenMode ? "default" : "outline"}
                         size="sm"
@@ -2538,6 +2581,22 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         }}
                       >
                         {viewHiddenMode ? (selectedForHide.length > 0 ? `👁️ ${selectedForHide.length}개 보이기` : '✕ 취소') : '👁️ 숨긴 학급'}
+                      </Button>
+                    )}
+                    {!hideMode && !viewHiddenMode && (
+                      <Button
+                        variant={groupMode ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => {
+                          if (groupMode && selectedForGroup.length >= 2) {
+                            setShowGroupModal(true);
+                          } else {
+                            setGroupMode(!groupMode);
+                            setSelectedForGroup([]);
+                          }
+                        }}
+                      >
+                        {groupMode ? (selectedForGroup.length >= 2 ? `🔗 ${selectedForGroup.length}개 묶기` : '✕ 취소') : '🔗 묶기'}
                       </Button>
                     )}
                   </div>
@@ -2583,50 +2642,122 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       : '모든 학급이 숨겨져 있습니다. "숨긴 학급" 버튼을 눌러 확인하세요.'}
                   </p>
                 ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {classes.filter(c => !hiddenClasses.includes(c.id)).map((cls) => (
-                      hideMode ? (
-                        <label
-                          key={cls.id}
-                          className={`p-4 rounded-lg border-2 text-left transition-all cursor-pointer ${
-                            selectedForHide.includes(cls.id)
-                              ? 'border-orange-500 bg-orange-50'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <div className="flex items-start gap-2">
-                            <input
-                              type="checkbox"
-                              checked={selectedForHide.includes(cls.id)}
-                              onChange={() => handleToggleHideClass(cls.id)}
-                              className="mt-1"
-                            />
-                            <div>
-                              <div className="font-bold">{cls.name}</div>
-                              <div className="text-sm text-gray-500">
-                                {cls.studentCount || 0}명
+                  <>
+                    {/* 기존 그룹 목록 */}
+                    {classGroups.length > 0 && !hideMode && !groupMode && (
+                      <div className="mb-4">
+                        <p className="text-sm text-gray-500 mb-2">🔗 소원 공유 그룹</p>
+                        <div className="flex flex-wrap gap-2">
+                          {classGroups.map(group => (
+                            <div
+                              key={group.id}
+                              className="flex items-center gap-2 px-3 py-1 bg-purple-100 rounded-full text-sm"
+                            >
+                              <span className="font-medium text-purple-700">{group.name}</span>
+                              <span className="text-purple-500">
+                                ({group.classIds.map(id => classes.find(c => c.id === id)?.name || id).join(', ')})
+                              </span>
+                              <button
+                                onClick={() => handleDeleteGroup(group.id, group.name)}
+                                className="text-purple-400 hover:text-purple-600"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {groupMode && (
+                      <p className="text-sm text-purple-600 mb-3">
+                        🔗 묶을 학급을 2개 이상 선택하세요. (소원의 돌에서 소원을 공유합니다)
+                      </p>
+                    )}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {classes.filter(c => !hiddenClasses.includes(c.id)).map((cls) => {
+                        const classGroup = getGroupForClass(cls.id);
+                        return hideMode ? (
+                          <label
+                            key={cls.id}
+                            className={`p-4 rounded-lg border-2 text-left transition-all cursor-pointer ${
+                              selectedForHide.includes(cls.id)
+                                ? 'border-orange-500 bg-orange-50'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedForHide.includes(cls.id)}
+                                onChange={() => handleToggleHideClass(cls.id)}
+                                className="mt-1"
+                              />
+                              <div>
+                                <div className="font-bold">{cls.name}</div>
+                                <div className="text-sm text-gray-500">
+                                  {cls.studentCount || 0}명
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </label>
-                      ) : (
-                        <button
-                          key={cls.id}
-                          onClick={() => selectClass(cls.id)}
-                          className={`p-4 rounded-lg border-2 text-left transition-all ${
-                            selectedClass === cls.id
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <div className="font-bold">{cls.name}</div>
-                          <div className="text-sm text-gray-500">
-                            {cls.studentCount || 0}명
-                          </div>
-                        </button>
-                      )
-                    ))}
-                  </div>
+                          </label>
+                        ) : groupMode ? (
+                          <label
+                            key={cls.id}
+                            className={`p-4 rounded-lg border-2 text-left transition-all cursor-pointer ${
+                              selectedForGroup.includes(cls.id)
+                                ? 'border-purple-500 bg-purple-50'
+                                : classGroup
+                                  ? 'border-purple-200 bg-purple-50/50 opacity-60 cursor-not-allowed'
+                                  : 'border-gray-200 hover:border-purple-300'
+                            }`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedForGroup.includes(cls.id)}
+                                onChange={() => !classGroup && handleToggleGroupClass(cls.id)}
+                                disabled={!!classGroup}
+                                className="mt-1"
+                              />
+                              <div>
+                                <div className="font-bold">{cls.name}</div>
+                                <div className="text-sm text-gray-500">
+                                  {cls.studentCount || 0}명
+                                </div>
+                                {classGroup && (
+                                  <div className="text-xs text-purple-500 mt-1">
+                                    🔗 {classGroup.name}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </label>
+                        ) : (
+                          <button
+                            key={cls.id}
+                            onClick={() => selectClass(cls.id)}
+                            className={`p-4 rounded-lg border-2 text-left transition-all ${
+                              selectedClass === cls.id
+                                ? 'border-blue-500 bg-blue-50'
+                                : classGroup
+                                  ? 'border-purple-200 hover:border-purple-300'
+                                  : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <div className="font-bold">{cls.name}</div>
+                            <div className="text-sm text-gray-500">
+                              {cls.studentCount || 0}명
+                            </div>
+                            {classGroup && (
+                              <div className="text-xs text-purple-500 mt-1">
+                                🔗 {classGroup.name}
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -6014,6 +6145,54 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   학급을 먼저 선택해주세요
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 학급 그룹 이름 모달 */}
+      {showGroupModal && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setShowGroupModal(false);
+            setGroupName('');
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6"
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold mb-4">🔗 그룹 이름 지정</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              선택한 {selectedForGroup.length}개 학급의 소원을 공유합니다.
+            </p>
+            <div className="mb-4">
+              <Input
+                placeholder="그룹 이름 (예: 5학년)"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleCreateGroup}
+                className="flex-1 bg-purple-500 hover:bg-purple-600"
+                disabled={!groupName.trim()}
+              >
+                그룹 만들기
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowGroupModal(false);
+                  setGroupName('');
+                }}
+                variant="outline"
+                className="flex-1"
+              >
+                취소
+              </Button>
             </div>
           </div>
         </div>

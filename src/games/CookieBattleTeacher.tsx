@@ -707,12 +707,18 @@ export function CookieBattleTeacher() {
                   }}
                 >
                   {/* 성 카드 */}
-                  <div className={`bg-gradient-to-b from-stone-700 to-stone-800 rounded-xl p-4 border-2 min-w-[140px] ${
+                  <div
+                    onClick={() => setSelectedTeam(team)}
+                    className={`bg-gradient-to-b from-stone-700 to-stone-800 rounded-xl p-4 border-2 min-w-[140px] cursor-pointer hover:scale-105 transition-all ${
                     team.isEliminated
                       ? 'border-stone-600'
-                      : team.isReady
-                        ? 'border-green-500'
-                        : 'border-amber-500'
+                      : team.targetTeamId
+                        ? 'border-blue-500 ring-2 ring-blue-500/50'
+                        : (team.attackBet > 0 || team.defenseBet > 0)
+                          ? 'border-green-500 ring-2 ring-green-500/50'
+                          : team.isReady
+                            ? 'border-green-500'
+                            : 'border-amber-500'
                   } shadow-lg`}>
                     <div className="text-center">
                       <div className="text-4xl mb-1">{team.emoji}</div>
@@ -751,17 +757,39 @@ export function CookieBattleTeacher() {
                     )}
                   </div>
 
-                  {/* 배팅 정보 (결과 단계에서만 보임) */}
-                  {gameData.status === 'result' && !team.isEliminated && (team.attackBet > 0 || team.defenseBet > 0) && (
-                    <div className="absolute -bottom-12 left-1/2 transform -translate-x-1/2 bg-black/80 rounded-lg px-3 py-1 text-xs whitespace-nowrap">
-                      <span className="text-red-400">⚔️{team.attackBet}</span>
-                      <span className="text-stone-500 mx-1">/</span>
-                      <span className="text-blue-400">🛡️{team.defenseBet}</span>
-                      {team.targetTeamId && (
-                        <span className="text-amber-400 ml-2">
-                          → {teams.find(t => t.id === team.targetTeamId)?.emoji} {teams.find(t => t.id === team.targetTeamId)?.name}
-                        </span>
+                  {/* 배팅 정보 및 쿠키 증감 (결과 단계에서만 보임) */}
+                  {gameData.status === 'result' && !team.isEliminated && (
+                    <div className="absolute -bottom-16 left-1/2 transform -translate-x-1/2 bg-black/80 rounded-lg px-3 py-1 text-xs whitespace-nowrap">
+                      {(team.attackBet > 0 || team.defenseBet > 0) && (
+                        <div className="mb-1">
+                          <span className="text-red-400">⚔️{team.attackBet}</span>
+                          <span className="text-stone-500 mx-1">/</span>
+                          <span className="text-blue-400">🛡️{team.defenseBet}</span>
+                          {team.targetTeamId && (
+                            <span className="text-amber-400 ml-2">
+                              → {teams.find(t => t.id === team.targetTeamId)?.emoji}
+                            </span>
+                          )}
+                        </div>
                       )}
+                      {/* 쿠키 증감 표시 */}
+                      {(() => {
+                        const roundKey = `round_${gameData.round}`;
+                        const roundBattles = allBattleResults[roundKey] || [];
+                        let totalChange = 0;
+                        roundBattles.forEach(b => {
+                          if (b.attackerTeamId === team.id) totalChange += b.attackerChange;
+                          if (b.defenderTeamId === team.id) totalChange += b.defenderChange;
+                        });
+                        if (totalChange !== 0) {
+                          return (
+                            <div className={`font-bold ${totalChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              🍪 {totalChange >= 0 ? '+' : ''}{totalChange}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   )}
 
@@ -784,49 +812,6 @@ export function CookieBattleTeacher() {
               );
             })}
           </div>
-        </div>
-
-        {/* 팀 버튼 목록 (4열 그리드) */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-6">
-          {teams.map(team => {
-            const onlineCount = team.members.filter(code => students.get(code)?.isOnline).length;
-            return (
-              <button
-                key={team.id}
-                onClick={() => {
-                  if (gameData.status === 'result') {
-                    setTeamBattleTarget(team);
-                    setShowTeamBattleModal(true);
-                  } else {
-                    setSelectedTeam(team);
-                  }
-                }}
-                className={`bg-stone-800/80 rounded-xl p-3 border transition-all hover:scale-105 ${
-                  team.isEliminated
-                    ? 'border-stone-700 opacity-60'
-                    : team.isReady
-                      ? 'border-green-500'
-                      : 'border-amber-600/30 hover:border-amber-500'
-                }`}
-              >
-                <div className="text-center">
-                  <span className="text-3xl block mb-1">{team.emoji}</span>
-                  <span className="font-bold text-white text-sm block">{team.name}</span>
-                  <span className="text-amber-400 font-bold block mt-1">🍪 {team.resources}</span>
-                  <div className="flex items-center justify-center gap-1 mt-1 text-xs">
-                    <span className={`w-2 h-2 rounded-full ${onlineCount > 0 ? 'bg-green-400' : 'bg-stone-600'}`}></span>
-                    <span className="text-stone-400">{onlineCount}/{team.members.length}</span>
-                    {team.representativeCode && (
-                      <span className="text-yellow-400 ml-1">👑</span>
-                    )}
-                  </div>
-                  {team.isEliminated && (
-                    <span className="text-red-400 text-xs">💀 탈락</span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
         </div>
 
         {/* 전투 로그 */}
@@ -1213,6 +1198,30 @@ export function CookieBattleTeacher() {
                     >
                       +10
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 팀별 배틀 로그 */}
+              {battleLog.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-stone-700">
+                  <h4 className="text-stone-400 text-sm mb-2">📜 {selectedTeam.name} 전투 기록</h4>
+                  <div className="max-h-32 overflow-y-auto space-y-1 text-xs bg-stone-900/50 rounded-lg p-2">
+                    {battleLog
+                      .filter(log => log.includes(selectedTeam.name) || log.startsWith('='))
+                      .slice()
+                      .reverse()
+                      .slice(0, 20)
+                      .map((log, i) => (
+                        <p key={i} className={`${
+                          log.startsWith('=') ? 'text-amber-400 font-bold mt-1' : 'text-stone-300'
+                        }`}>
+                          {log}
+                        </p>
+                      ))}
+                    {battleLog.filter(log => log.includes(selectedTeam.name)).length === 0 && (
+                      <p className="text-stone-500 text-center py-2">아직 전투 기록이 없습니다.</p>
+                    )}
                   </div>
                 </div>
               )}
