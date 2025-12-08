@@ -5172,22 +5172,21 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       </div>
 
                       <div className="flex gap-2">
-                        <Button
+                        <button
                           onClick={() => {
                             const teacherGameUrl = `${window.location.origin}?game=word-chain-teacher&gameId=${wordChainGame.id}`;
                             window.open(teacherGameUrl, '_blank', 'width=800,height=900');
                           }}
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                          className="flex-1 px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
                         >
                           🎮 관리 창 열기
-                        </Button>
-                        <Button
+                        </button>
+                        <button
                           onClick={deleteWordChainGame}
-                          variant="outline"
-                          className="border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                          className="px-4 py-2 rounded-md text-sm font-medium border border-red-300 bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
                         >
                           삭제
-                        </Button>
+                        </button>
                       </div>
                       <p className="text-xs text-center text-gray-500">
                         게임 관리는 새 창에서 진행됩니다
