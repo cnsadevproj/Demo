@@ -10,7 +10,7 @@ import { db } from '../services/firebase';
 import { collection, onSnapshot, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import {
   getStudent,
-  getWishes,
+  getWishesByGroup,
   addWish,
   likeWish,
   unlikeWish,
@@ -23,6 +23,7 @@ import {
   getTeams,
   getClassStudents,
   checkTodayWish,
+  migrateWishesClassId,
   Student,
   Wish,
   ShopItem,
@@ -588,8 +589,9 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
         setSelectedAnimation(updatedStudent.profile.animationCode || 'none');
       }
 
-      // 소원 목록
-      const wishesData = await getWishes(studentTeacherId, student.classId);
+      // 소원 마이그레이션 (기존 소원에 classId 추가) 및 목록 로드 (학급그룹 기준)
+      await migrateWishesClassId(studentTeacherId);
+      const wishesData = await getWishesByGroup(studentTeacherId, student.classId);
       setWishes(wishesData);
 
       // 오늘 소원 작성 여부 확인
@@ -650,8 +652,9 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
       const suggestions = await getStudentItemSuggestions(studentTeacherId, student.code);
       setMyItemSuggestions(suggestions);
 
-      // 소원 목록
-      const wishesData = await getWishes(studentTeacherId, student.classId);
+      // 소원 마이그레이션 및 목록 로드 (학급그룹 기준)
+      await migrateWishesClassId(studentTeacherId);
+      const wishesData = await getWishesByGroup(studentTeacherId, student.classId);
       setWishes(wishesData);
 
       toast.success('모든 데이터를 동기화했습니다! 🔄');

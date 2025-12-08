@@ -107,6 +107,14 @@ export interface Team {
   createdAt?: Timestamp; // 팀 결성일
 }
 
+// 학급 그룹 정보 (소원 공유용)
+export interface ClassGroup {
+  id: string;
+  name: string;
+  classIds: string[];
+  createdAt: Timestamp;
+}
+
 // 소원 정보
 export interface Wish {
   id: string;
@@ -795,6 +803,81 @@ export async function updateTeamCookie(
   const teamRef = doc(db, 'teachers', teacherId, 'classes', classId, 'teams', teamId);
   await updateDoc(teamRef, {
     teamCookie: increment(cookieChange)
+  });
+}
+
+// ========================================
+// 학급 그룹 API (소원 공유용)
+// ========================================
+
+// 학급 그룹 저장
+export async function saveClassGroup(
+  teacherId: string,
+  groupId: string,
+  name: string,
+  classIds: string[]
+): Promise<void> {
+  const groupRef = doc(db, 'teachers', teacherId, 'classGroups', groupId);
+  await setDoc(groupRef, {
+    id: groupId,
+    name,
+    classIds,
+    createdAt: serverTimestamp()
+  });
+}
+
+// 학급 그룹 목록 조회
+export async function getClassGroups(
+  teacherId: string
+): Promise<ClassGroup[]> {
+  const groupsRef = collection(db, 'teachers', teacherId, 'classGroups');
+  const snapshot = await getDocs(groupsRef);
+  return snapshot.docs.map(doc => doc.data()) as ClassGroup[];
+}
+
+// 학급 그룹 삭제
+export async function deleteClassGroupFromFirestore(
+  teacherId: string,
+  groupId: string
+): Promise<void> {
+  const groupRef = doc(db, 'teachers', teacherId, 'classGroups', groupId);
+  await deleteDoc(groupRef);
+}
+
+// 특정 학급이 속한 그룹 찾기
+export async function getGroupForClassFromFirestore(
+  teacherId: string,
+  classId: string
+): Promise<ClassGroup | null> {
+  const groups = await getClassGroups(teacherId);
+  return groups.find(group => group.classIds.includes(classId)) || null;
+}
+
+// 소원 목록 조회 (학급그룹 기준 - 그룹이 있으면 그룹 내 모든 학급, 없으면 본인 학급만)
+export async function getWishesByGroup(
+  teacherId: string,
+  classId: string
+): Promise<Wish[]> {
+  // 먼저 학급이 속한 그룹 확인
+  const group = await getGroupForClassFromFirestore(teacherId, classId);
+
+  const wishesRef = collection(db, 'teachers', teacherId, 'wishes');
+  const snapshot = await getDocs(wishesRef);
+  const allWishes = snapshot.docs.map(doc => doc.data()) as Wish[];
+
+  // 그룹이 있으면 그룹 내 모든 학급의 소원 반환
+  // 그룹이 없으면 해당 학급의 소원만 반환
+  const targetClassIds = group ? group.classIds : [classId];
+
+  const filteredWishes = allWishes.filter(wish =>
+    targetClassIds.includes((wish as any).classId)
+  );
+
+  // 최신순 정렬
+  return filteredWishes.sort((a, b) => {
+    const timeA = a.createdAt?.toMillis?.() || new Date(a.createdAt as any).getTime();
+    const timeB = b.createdAt?.toMillis?.() || new Date(b.createdAt as any).getTime();
+    return timeB - timeA;
   });
 }
 

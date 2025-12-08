@@ -70,7 +70,10 @@ import {
   ItemSuggestion,
   getItemSuggestions,
   updateItemSuggestionStatus,
-  deleteItemSuggestion
+  deleteItemSuggestion,
+  saveClassGroup,
+  getClassGroups,
+  deleteClassGroupFromFirestore
 } from '../services/firestoreApi';
 import { parseXlsxFile, downloadCsvTemplate, exportStudentsToCsv, parsePastGrassXlsx, PastGrassData } from '../utils/csv';
 import { getKoreanDateString, getLastWeekdays, getLastWeekdaysWithData } from '../utils/dateUtils';
@@ -592,8 +595,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     );
   };
 
-  // 학급 그룹 생성
-  const handleCreateGroup = () => {
+  // 학급 그룹 생성 (localStorage + Firestore)
+  const handleCreateGroup = async () => {
+    if (!user) return;
     if (selectedForGroup.length < 2) {
       toast.error('2개 이상의 학급을 선택해주세요.');
       return;
@@ -602,19 +606,41 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       toast.error('그룹 이름을 입력해주세요.');
       return;
     }
-    addClassGroup(groupName, selectedForGroup);
-    toast.success(`"${groupName}" 그룹이 생성되었습니다.`);
-    setSelectedForGroup([]);
-    setGroupMode(false);
-    setShowGroupModal(false);
-    setGroupName('');
+
+    try {
+      // localStorage에 저장 (기존 로직)
+      const newGroup = addClassGroup(groupName, selectedForGroup);
+
+      // Firestore에도 저장 (학생이 접근할 수 있도록)
+      await saveClassGroup(user.uid, newGroup.id, groupName, selectedForGroup);
+
+      toast.success(`"${groupName}" 그룹이 생성되었습니다.`);
+      setSelectedForGroup([]);
+      setGroupMode(false);
+      setShowGroupModal(false);
+      setGroupName('');
+    } catch (error) {
+      console.error('Failed to save class group:', error);
+      toast.error('그룹 저장에 실패했습니다.');
+    }
   };
 
-  // 학급 그룹 삭제
-  const handleDeleteGroup = (groupId: string, groupName: string) => {
-    if (window.confirm(`"${groupName}" 그룹을 삭제하시겠습니까?`)) {
-      deleteClassGroup(groupId);
-      toast.success('그룹이 삭제되었습니다.');
+  // 학급 그룹 삭제 (localStorage + Firestore)
+  const handleDeleteGroup = async (groupId: string, groupNameToDelete: string) => {
+    if (!user) return;
+    if (window.confirm(`"${groupNameToDelete}" 그룹을 삭제하시겠습니까?`)) {
+      try {
+        // localStorage에서 삭제 (기존 로직)
+        deleteClassGroup(groupId);
+
+        // Firestore에서도 삭제
+        await deleteClassGroupFromFirestore(user.uid, groupId);
+
+        toast.success('그룹이 삭제되었습니다.');
+      } catch (error) {
+        console.error('Failed to delete class group:', error);
+        toast.error('그룹 삭제에 실패했습니다.');
+      }
     }
   };
 
@@ -1339,7 +1365,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       const gameId = `wordchain_${user.uid}_${Date.now()}`;
       const currentClassName = classes?.find(c => c.id === selectedClass)?.name || '';
 
-      const gameData = {
+      const gameData: Record<string, unknown> = {
         teacherId: user.uid,
         classId: selectedClass,
         status: 'waiting' as const,
@@ -1353,11 +1379,15 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
         minLength: wordChainMinLength,
         maxLength: wordChainMaxLength,
         banKillerWords: wordChainBanKiller,
-        maxRounds: wordChainGameMode === 'score' ? wordChainMaxRounds : undefined,
         currentRound: 1,
         createdAt: serverTimestamp(),
         className: currentClassName,
       };
+
+      // 점수모드일 때만 maxRounds 추가 (Firebase는 undefined 허용 안함)
+      if (wordChainGameMode === 'score') {
+        gameData.maxRounds = wordChainMaxRounds;
+      }
 
       await setDoc(doc(db, 'games', gameId), gameData);
 
