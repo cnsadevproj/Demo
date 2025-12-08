@@ -356,7 +356,7 @@ export function WordChainTeacher() {
   // 유효하지 않은 접근
   if (!gameId) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-emerald-100 to-teal-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-green-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl p-8 shadow-xl text-center max-w-md">
           <div className="text-6xl mb-4">⚠️</div>
           <h1 className="text-2xl font-bold text-gray-800">잘못된 접근</h1>
@@ -368,7 +368,7 @@ export function WordChainTeacher() {
   // 로딩 중
   if (!gameData) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-emerald-100 to-teal-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-green-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl p-8 shadow-xl text-center">
           <div className="text-6xl mb-4 animate-bounce">🔤</div>
           <h1 className="text-xl font-bold text-gray-800">게임 로딩 중...</h1>
@@ -384,11 +384,11 @@ export function WordChainTeacher() {
   const validStartChars = getDueumVariants(currentChar);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-600 to-teal-800 p-4">
+    <div className="min-h-screen p-4" style={{ background: 'linear-gradient(to bottom, #16a34a, #166534)' }}>
       <div className="max-w-2xl mx-auto">
         {/* 헤더 */}
         <div className="bg-white rounded-2xl p-6 shadow-lg mb-4 text-center">
-          <h1 className="text-3xl font-bold text-emerald-800 mb-2">🔤 끝말잇기</h1>
+          <h1 className="text-3xl font-bold text-green-900 mb-2">🔤 끝말잇기</h1>
           <p className="text-gray-600">{gameData.className || '게임'}</p>
           <div className="mt-2 flex justify-center gap-2 flex-wrap">
             <span
@@ -430,7 +430,7 @@ export function WordChainTeacher() {
                   }`
                 : '🏁 종료'}
             </span>
-            <span className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-full font-bold">
+            <span className="px-4 py-2 bg-green-100 text-green-600 rounded-full font-bold">
               {gameData.gameMode === 'survival'
                 ? `👥 생존: ${alivePlayers.length}명`
                 : `👥 참가: ${players.length}명`}
@@ -443,21 +443,21 @@ export function WordChainTeacher() {
           <div className="bg-white rounded-2xl p-6 shadow-lg mb-4">
             <div className="text-center mb-4">
               <p className="text-sm text-gray-500 mb-1">현재 단어</p>
-              <p className="text-5xl font-bold text-emerald-600 mb-2">{gameData.currentWord}</p>
+              <p className="text-5xl font-bold text-green-600 mb-2">{gameData.currentWord}</p>
               <p className="text-lg text-gray-600">
                 다음 글자:{' '}
-                <span className="font-bold text-emerald-700">
+                <span className="font-bold text-green-600">
                   {validStartChars.length > 1 ? validStartChars.join(' / ') : currentChar}
                 </span>
               </p>
             </div>
 
             {/* 현재 턴 */}
-            <div className="bg-emerald-50 rounded-xl p-4 text-center">
+            <div className="bg-green-50 rounded-xl p-4 text-center">
               <div className="flex items-center justify-center gap-4">
                 <div>
-                  <p className="text-sm text-emerald-600">현재 차례</p>
-                  <p className="text-2xl font-bold text-emerald-800">
+                  <p className="text-sm text-green-600">현재 차례</p>
+                  <p className="text-2xl font-bold text-green-900">
                     🎯 {currentPlayer?.name || '알 수 없음'}
                   </p>
                 </div>
@@ -465,7 +465,7 @@ export function WordChainTeacher() {
                   className={`text-4xl font-bold ${
                     timeLeft !== null && timeLeft <= 5
                       ? 'text-red-500 animate-pulse'
-                      : 'text-emerald-600'
+                      : 'text-green-600'
                   }`}
                 >
                   {timeLeft !== null ? `${timeLeft}초` : '--'}
@@ -489,7 +489,7 @@ export function WordChainTeacher() {
                     <span className="text-lg font-medium">{item.word}</span>
                     <span className="text-xs text-gray-400">by {item.playerName}</span>
                   </div>
-                  <span className="text-sm text-emerald-600 font-bold">+{item.score}점</span>
+                  <span className="text-sm text-green-600 font-bold">+{item.score}점</span>
                 </div>
               ))}
               <div ref={historyEndRef} />
@@ -510,9 +510,9 @@ export function WordChainTeacher() {
                 <div
                   key={player.code}
                   onClick={() => openStudentModal(player)}
-                  className={`flex items-center justify-between p-3 rounded-xl cursor-pointer hover:ring-2 hover:ring-emerald-400 transition-all ${
+                  className={`flex items-center justify-between p-3 rounded-xl cursor-pointer hover:ring-2 hover:ring-green-400 transition-all ${
                     isCurrentTurn
-                      ? 'bg-emerald-100 ring-2 ring-emerald-500'
+                      ? 'bg-green-100 ring-2 ring-green-500'
                       : gameData.gameMode === 'survival' && !player.isAlive
                       ? 'bg-gray-100'
                       : 'bg-gray-50'
@@ -545,10 +545,10 @@ export function WordChainTeacher() {
                     >
                       {player.name}
                     </span>
-                    {isCurrentTurn && <span className="text-emerald-600 animate-pulse">🎯</span>}
+                    {isCurrentTurn && <span className="text-green-600 animate-pulse">🎯</span>}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-emerald-600 font-bold">⭐{player.score}점</span>
+                    <span className="text-green-600 font-bold">⭐{player.score}점</span>
                     {player.lastWord && (
                       <span className="text-xs text-gray-400">({player.lastWord})</span>
                     )}
@@ -652,7 +652,7 @@ export function WordChainTeacher() {
                     {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
                   </span>
                   <span className="font-bold text-lg">{player.name}</span>
-                  <span className="ml-2 text-emerald-600 font-bold">⭐{player.score}점</span>
+                  <span className="ml-2 text-green-600 font-bold">⭐{player.score}점</span>
                 </div>
               ))}
             </div>
@@ -683,11 +683,11 @@ export function WordChainTeacher() {
               </button>
             </div>
 
-            <div className="p-4 bg-emerald-50 text-center">
-              <p className="text-emerald-600 font-bold text-3xl">
+            <div className="p-4 bg-green-50 text-center">
+              <p className="text-green-600 font-bold text-3xl">
                 {studentData ? studentData.jelly ?? studentData.cookie ?? 0 : '...'}
               </p>
-              <p className="text-sm text-emerald-700">🍭 캔디</p>
+              <p className="text-sm text-green-600">🍭 캔디</p>
             </div>
 
             <div className="p-4">
@@ -728,12 +728,12 @@ export function WordChainTeacher() {
                   value={candyAmount}
                   onChange={(e) => setCandyAmount(e.target.value)}
                   placeholder="직접 입력"
-                  className="flex-1 px-3 py-2 border-2 border-gray-200 rounded-lg text-center focus:border-emerald-400 focus:outline-none"
+                  className="flex-1 px-3 py-2 border-2 border-gray-200 rounded-lg text-center focus:border-green-400 focus:outline-none"
                 />
                 <button
                   onClick={() => handleAddCandy()}
                   disabled={isAddingCandy || !candyAmount}
-                  className="px-4 py-2 rounded-lg bg-emerald-500 text-white font-bold hover:bg-emerald-600 disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-green-500 text-white font-bold hover:bg-green-600 disabled:opacity-50"
                 >
                   {isAddingCandy ? '...' : '적용'}
                 </button>
@@ -744,9 +744,9 @@ export function WordChainTeacher() {
             <div className="p-4 border-t">
               <p className="text-sm font-medium text-gray-700 mb-2">게임 정보</p>
               <div className="grid grid-cols-2 gap-2 text-center">
-                <div className="bg-emerald-50 rounded-lg p-2">
-                  <p className="text-xs text-emerald-600">점수</p>
-                  <p className="font-bold text-emerald-700">⭐{selectedPlayer.score}</p>
+                <div className="bg-green-50 rounded-lg p-2">
+                  <p className="text-xs text-green-600">점수</p>
+                  <p className="font-bold text-green-600">⭐{selectedPlayer.score}</p>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-2">
                   <p className="text-xs text-gray-600">마지막 단어</p>

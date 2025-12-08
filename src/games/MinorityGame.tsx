@@ -305,7 +305,7 @@ export function MinorityGame() {
 
     return (
       <div className={`min-h-screen flex items-center justify-center p-4 ${
-        iWon ? 'bg-gradient-to-b from-green-100 to-emerald-100' : 'bg-gradient-to-b from-red-100 to-pink-100'
+        iWon ? 'bg-gradient-to-b from-green-100 to-green-200' : 'bg-gradient-to-b from-red-100 to-pink-100'
       }`}>
         <div className="bg-white rounded-2xl p-8 shadow-xl text-center max-w-md w-full">
           <div className="text-6xl mb-4">{iWon ? '✅' : '❌'}</div>

@@ -4753,7 +4753,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 </div>
 
                 {/* 가위바위보 */}
-                <div className="p-4 rounded-xl bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300">
+                <div className="p-4 rounded-xl bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-300">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-4">
                       <span className="text-3xl">✊✋✌️</span>
@@ -5026,13 +5026,13 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 </div>
 
                 {/* 끝말잇기 */}
-                <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-300">
+                <div className="p-4 rounded-xl bg-gradient-to-r from-green-50 to-teal-50 border-2 border-green-300">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-4">
                       <span className="text-3xl">🔤</span>
                       <div>
-                        <h3 className="font-bold text-emerald-800">끝말잇기</h3>
-                        <p className="text-xs text-emerald-600">단어로 승부하라!</p>
+                        <h3 className="font-bold text-green-800">끝말잇기</h3>
+                        <p className="text-xs text-green-600">단어로 승부하라!</p>
                         <span className="inline-block mt-1 bg-purple-100 text-purple-600 px-2 py-0.5 rounded text-xs">실시간 · 턴제</span>
                       </div>
                     </div>
@@ -5046,7 +5046,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   ) : !wordChainGame ? (
                     <div className="space-y-3">
                       <div className="bg-white p-3 rounded-lg text-sm text-gray-600">
-                        <p className="font-medium text-emerald-700 mb-1">📋 게임 규칙</p>
+                        <p className="font-medium text-green-700 mb-1">📋 게임 규칙</p>
                         <p>· 앞 단어의 끝 글자로 시작하는 단어 입력</p>
                         <p>· 국립국어원 사전에 있는 단어만 인정</p>
                         <p>· 제한 시간 내에 입력해야 함</p>
@@ -5143,7 +5143,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       <Button
                         onClick={createWordChainGame}
                         disabled={isCreatingWordChain}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700"
+                        className="w-full bg-green-600 hover:bg-green-700"
                       >
                         {isCreatingWordChain ? '생성 중...' : '🔤 게임 방 만들기'}
                       </Button>
@@ -5177,7 +5177,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                             const teacherGameUrl = `${window.location.origin}?game=word-chain-teacher&gameId=${wordChainGame.id}`;
                             window.open(teacherGameUrl, '_blank', 'width=800,height=900');
                           }}
-                          className="flex-1 px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                          className="flex-1 px-4 py-2 rounded-md text-sm font-medium bg-green-600 hover:bg-green-700 text-white transition-colors"
                         >
                           🎮 관리 창 열기
                         </button>
@@ -6147,7 +6147,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             onClick={(e) => e.stopPropagation()}
           >
             {/* 헤더 */}
-            <div className="bg-gradient-to-r from-green-400 to-emerald-400 px-4 py-3 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-green-400 to-green-500 px-4 py-3 flex items-center justify-between">
               <span className="text-white font-bold">👥 팀 관리</span>
               <button
                 onClick={() => {

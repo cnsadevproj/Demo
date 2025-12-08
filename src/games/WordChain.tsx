@@ -315,7 +315,7 @@ export function WordChain() {
   // 유효하지 않은 접근
   if (!gameId || !studentCode || !studentName) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-emerald-100 to-teal-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-green-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl p-8 shadow-xl text-center max-w-md">
           <div className="text-6xl mb-4">⚠️</div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">잘못된 접근</h1>
@@ -328,7 +328,7 @@ export function WordChain() {
   // 로딩 중
   if (!gameData) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-emerald-100 to-teal-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-green-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl p-8 shadow-xl text-center">
           <div className="text-6xl mb-4 animate-bounce">🔤</div>
           <h1 className="text-xl font-bold text-gray-800">게임 로딩 중...</h1>
@@ -346,7 +346,7 @@ export function WordChain() {
           <h1 className="text-3xl font-bold text-gray-800 mb-2">탈락!</h1>
           <p className="text-gray-600 mb-4">{eliminatedMessage || '아쉽게도 탈락했어요'}</p>
           <div className="bg-gray-50 rounded-xl p-4">
-            <p className="text-gray-700">획득 점수: <span className="font-bold text-emerald-600">{playerData.score}점</span></p>
+            <p className="text-gray-700">획득 점수: <span className="font-bold text-green-600">{playerData.score}점</span></p>
           </div>
           {closeCountdown !== null && (
             <p className="text-sm text-amber-600 mt-4">
@@ -367,10 +367,10 @@ export function WordChain() {
   // 대기 중
   if (gameData.status === 'waiting') {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-emerald-100 to-teal-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-green-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl p-8 shadow-xl text-center max-w-md">
           <div className="text-6xl mb-4 animate-pulse">🔤</div>
-          <h1 className="text-2xl font-bold text-emerald-800 mb-2">끝말잇기</h1>
+          <h1 className="text-2xl font-bold text-green-900 mb-2">끝말잇기</h1>
           <div className="flex justify-center gap-2 mb-2">
             <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
               gameData.gameMode === 'score'
@@ -388,9 +388,9 @@ export function WordChain() {
             </span>
           </div>
           <p className="text-gray-600 mb-4">{studentName}님, 게임 시작을 기다리는 중...</p>
-          <div className="bg-emerald-50 rounded-xl p-4 text-sm">
-            <p className="text-emerald-700 font-medium mb-2">게임 규칙</p>
-            <ul className="text-emerald-600 text-left space-y-1">
+          <div className="bg-green-50 rounded-xl p-4 text-sm">
+            <p className="text-green-600 font-medium mb-2">게임 규칙</p>
+            <ul className="text-green-600 text-left space-y-1">
               <li>• 제한시간: {gameData.timeLimit}초</li>
               <li>• 글자 수: {gameData.minLength}~{gameData.maxLength}글자</li>
               {gameData.banKillerWords && <li>• 한방 단어 금지</li>}
@@ -400,9 +400,9 @@ export function WordChain() {
             </ul>
           </div>
           <div className="mt-6 flex items-center justify-center gap-2">
-            <div className="w-3 h-3 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-            <div className="w-3 h-3 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-            <div className="w-3 h-3 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+            <div className="w-3 h-3 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+            <div className="w-3 h-3 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+            <div className="w-3 h-3 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
           </div>
         </div>
       </div>
@@ -443,7 +443,7 @@ export function WordChain() {
   const validStartChars = getDueumVariants(currentChar);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-100 to-teal-100 p-4">
+    <div className="min-h-screen bg-green-100 p-4">
       <div className="max-w-lg mx-auto">
         {/* 헤더 */}
         <div className="bg-white rounded-2xl p-4 shadow-lg mb-4">
@@ -453,7 +453,7 @@ export function WordChain() {
                 ? `${gameData.currentRound || 1}/${gameData.maxRounds || '∞'} 라운드`
                 : '생존모드'}
             </span>
-            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-bold">
+            <span className="px-3 py-1 bg-green-100 text-green-600 rounded-full text-sm font-bold">
               ⭐ {playerData?.score || 0}점
             </span>
           </div>
@@ -467,9 +467,9 @@ export function WordChain() {
         {/* 현재 단어 */}
         <div className="bg-white rounded-2xl p-6 shadow-lg mb-4 text-center">
           <p className="text-sm text-gray-500 mb-2">현재 단어</p>
-          <p className="text-4xl font-bold text-emerald-600 mb-2">{gameData.currentWord}</p>
+          <p className="text-4xl font-bold text-green-600 mb-2">{gameData.currentWord}</p>
           <p className="text-lg text-gray-600">
-            다음 글자: <span className="font-bold text-emerald-700">
+            다음 글자: <span className="font-bold text-green-600">
               {validStartChars.length > 1
                 ? validStartChars.join(' 또는 ')
                 : currentChar}
@@ -483,9 +483,9 @@ export function WordChain() {
             {/* 타이머 */}
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-bold text-emerald-700">⏱️ 내 차례!</span>
+                <span className="font-bold text-green-600">⏱️ 내 차례!</span>
                 <span className={`text-2xl font-bold ${
-                  timeLeft !== null && timeLeft <= 5 ? 'text-red-500 animate-pulse' : 'text-emerald-600'
+                  timeLeft !== null && timeLeft <= 5 ? 'text-red-500 animate-pulse' : 'text-green-600'
                 }`}>
                   {timeLeft}초
                 </span>
@@ -493,7 +493,7 @@ export function WordChain() {
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div
                   className={`h-3 rounded-full transition-all ${
-                    timeLeft !== null && timeLeft <= 5 ? 'bg-red-500' : 'bg-emerald-500'
+                    timeLeft !== null && timeLeft <= 5 ? 'bg-red-500' : 'bg-green-500'
                   }`}
                   style={{
                     width: `${((timeLeft || 0) / gameData.timeLimit) * 100}%`
@@ -511,14 +511,14 @@ export function WordChain() {
                 onChange={(e) => setInputWord(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
                 placeholder={`'${validStartChars[0]}'(으)로 시작하는 단어...`}
-                className="flex-1 px-4 py-3 border-2 border-emerald-300 rounded-xl focus:border-emerald-500 focus:outline-none text-lg"
+                className="flex-1 px-4 py-3 border-2 border-green-300 rounded-xl focus:border-green-500 focus:outline-none text-lg"
                 disabled={isSubmitting}
                 autoFocus
               />
               <button
                 onClick={handleSubmit}
                 disabled={isSubmitting || !inputWord.trim()}
-                className="px-6 py-3 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? '...' : '제출'}
               </button>
@@ -535,16 +535,16 @@ export function WordChain() {
           <div className="bg-white rounded-2xl p-6 shadow-lg mb-4 text-center">
             <div className="text-4xl mb-2">⏳</div>
             <p className="text-gray-600">
-              <span className="font-bold text-emerald-600">
+              <span className="font-bold text-green-600">
                 {gameData.turnOrder[gameData.currentTurnIndex] === studentCode
                   ? '내'
                   : `${wordHistory.find(w => w.playerCode === gameData.turnOrder[gameData.currentTurnIndex])?.playerName || '다른 학생'}`}
               </span>의 차례입니다
             </p>
             <div className="mt-4 flex items-center justify-center gap-2">
-              <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-              <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-              <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
             </div>
           </div>
         )}
@@ -561,7 +561,7 @@ export function WordChain() {
                   key={index}
                   className={`flex items-center justify-between p-2 rounded-lg ${
                     item.playerCode === studentCode
-                      ? 'bg-emerald-50 border border-emerald-200'
+                      ? 'bg-green-50 border border-green-200'
                       : 'bg-gray-50'
                   }`}
                 >
@@ -569,7 +569,7 @@ export function WordChain() {
                     <span className="text-lg font-medium">{item.word}</span>
                     <span className="text-xs text-gray-400">by {item.playerName}</span>
                   </div>
-                  <span className="text-sm text-emerald-600 font-bold">+{item.score}점</span>
+                  <span className="text-sm text-green-600 font-bold">+{item.score}점</span>
                 </div>
               ))
             )}
@@ -590,9 +590,9 @@ export function WordChain() {
                   key={code}
                   className={`px-3 py-1 rounded-full text-sm ${
                     isCurrentTurn
-                      ? 'bg-emerald-500 text-white font-bold animate-pulse'
+                      ? 'bg-green-500 text-white font-bold animate-pulse'
                       : isMe
-                      ? 'bg-emerald-100 text-emerald-700'
+                      ? 'bg-green-100 text-green-600'
                       : 'bg-gray-100 text-gray-600'
                   }`}
                 >
