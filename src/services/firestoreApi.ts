@@ -541,22 +541,20 @@ export async function migrateWishesClassId(
   const wishesRef = collection(db, 'teachers', teacherId, 'wishes');
   const wishesSnapshot = await getDocs(wishesRef);
 
-  // 2. 모든 학급과 학생 정보 가져오기 (studentCode -> classId 맵 생성)
-  const classroomsRef = collection(db, 'teachers', teacherId, 'classrooms');
-  const classroomsSnapshot = await getDocs(classroomsRef);
+  // 2. 모든 학생 정보 가져오기 (studentCode -> classId 맵 생성)
+  // 학생은 teachers/{teacherId}/students에 저장되어 있고 classId 필드를 가짐
+  const studentsRef = collection(db, 'teachers', teacherId, 'students');
+  const studentsSnapshot = await getDocs(studentsRef);
 
   const studentToClassMap = new Map<string, string>();
 
-  for (const classDoc of classroomsSnapshot.docs) {
-    const classId = classDoc.id;
-    const studentsRef = collection(db, 'teachers', teacherId, 'classrooms', classId, 'students');
-    const studentsSnapshot = await getDocs(studentsRef);
-
-    studentsSnapshot.docs.forEach(studentDoc => {
-      const studentCode = studentDoc.data().code || studentDoc.id;
-      studentToClassMap.set(studentCode, classId);
-    });
-  }
+  studentsSnapshot.docs.forEach(studentDoc => {
+    const data = studentDoc.data();
+    const studentCode = data.code || studentDoc.id;
+    if (data.classId) {
+      studentToClassMap.set(studentCode, data.classId);
+    }
+  });
 
   // 3. classId가 없는 소원에 할당
   let migratedCount = 0;

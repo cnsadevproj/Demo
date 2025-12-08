@@ -2416,12 +2416,20 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     setIsLoadingWishes(true);
     try {
       // 24시간 지난 선정 소원 자동 삭제
-      await cleanupExpiredGrantedWishes(user.uid);
+      try {
+        await cleanupExpiredGrantedWishes(user.uid);
+      } catch (e) {
+        console.warn('Failed to cleanup expired wishes:', e);
+      }
 
-      // 기존 소원에 classId 마이그레이션 (학생 코드 기반)
-      const migrationResult = await migrateWishesClassId(user.uid);
-      if (migrationResult.migrated > 0) {
-        toast.success(`${migrationResult.migrated}개 소원에 학급 정보가 할당되었습니다.`);
+      // 기존 소원에 classId 마이그레이션 (학생 코드 기반) - 실패해도 계속 진행
+      try {
+        const migrationResult = await migrateWishesClassId(user.uid);
+        if (migrationResult.migrated > 0) {
+          toast.success(`${migrationResult.migrated}개 소원에 학급 정보가 할당되었습니다.`);
+        }
+      } catch (e) {
+        console.warn('Failed to migrate wishes classId:', e);
       }
 
       // 소원 목록 조회
