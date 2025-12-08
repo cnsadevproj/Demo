@@ -942,6 +942,32 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   type CookieBattleResourceMode = 'memberCount' | 'ownedCookie' | 'earnedCookie';
   const [selectedCookieBattleResourceMode, setSelectedCookieBattleResourceMode] = useState<CookieBattleResourceMode>('memberCount');
 
+  // 끝말잇기 상태
+  interface WordChainGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    status: 'waiting' | 'playing' | 'finished';
+    gameMode: 'survival' | 'score';
+    battleType: 'individual' | 'team';
+    currentWord: string;
+    currentRound: number;
+    className?: string;
+    createdAt: any;
+  }
+
+  const [wordChainGame, setWordChainGame] = useState<WordChainGame | null>(null);
+  const [isCreatingWordChain, setIsCreatingWordChain] = useState(false);
+  type WordChainGameMode = 'survival' | 'score';
+  type WordChainBattleType = 'individual' | 'team';
+  const [wordChainGameMode, setWordChainGameMode] = useState<WordChainGameMode>('survival');
+  const [wordChainBattleType, setWordChainBattleType] = useState<WordChainBattleType>('individual');
+  const [wordChainTimeLimit, setWordChainTimeLimit] = useState(15);
+  const [wordChainMinLength, setWordChainMinLength] = useState(2);
+  const [wordChainMaxLength, setWordChainMaxLength] = useState(10);
+  const [wordChainBanKiller, setWordChainBanKiller] = useState(true);
+  const [wordChainMaxRounds, setWordChainMaxRounds] = useState(10);
+
   // 총알피하기 게임 생성
   const createBulletDodgeGame = async () => {
     if (!user || !selectedClass) {
@@ -1301,6 +1327,106 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     return () => unsubscribe();
   }, [user, selectedClass]);
 
+  // 끝말잇기 게임 생성
+  const createWordChainGame = async () => {
+    if (!user || !selectedClass) {
+      toast.error('학급을 먼저 선택해주세요.');
+      return;
+    }
+
+    setIsCreatingWordChain(true);
+    try {
+      const gameId = `wordchain_${user.uid}_${Date.now()}`;
+      const currentClassName = classes?.find(c => c.id === selectedClass)?.name || '';
+
+      const gameData = {
+        teacherId: user.uid,
+        classId: selectedClass,
+        status: 'waiting' as const,
+        gameMode: wordChainGameMode,
+        battleType: wordChainBattleType,
+        currentWord: '',
+        currentTurnIndex: 0,
+        turnOrder: [] as string[],
+        usedWords: [] as string[],
+        timeLimit: wordChainTimeLimit,
+        minLength: wordChainMinLength,
+        maxLength: wordChainMaxLength,
+        banKillerWords: wordChainBanKiller,
+        maxRounds: wordChainGameMode === 'score' ? wordChainMaxRounds : undefined,
+        currentRound: 1,
+        createdAt: serverTimestamp(),
+        className: currentClassName,
+      };
+
+      await setDoc(doc(db, 'games', gameId), gameData);
+
+      // 교사용 게임 관리 창 열기
+      const teacherGameUrl = `${window.location.origin}?game=word-chain-teacher&gameId=${gameId}`;
+      window.open(teacherGameUrl, '_blank', 'width=800,height=900');
+
+      toast.success('끝말잇기 게임이 생성되었습니다!');
+    } catch (error) {
+      console.error('Failed to create word chain game:', error);
+      toast.error('게임 생성에 실패했습니다.');
+    }
+    setIsCreatingWordChain(false);
+  };
+
+  // 끝말잇기 삭제
+  const deleteWordChainGame = async () => {
+    if (!wordChainGame) return;
+
+    if (!confirm('정말 게임을 삭제하시겠습니까?')) return;
+
+    try {
+      // 플레이어 데이터 삭제
+      const playersRef = collection(db, 'games', wordChainGame.id, 'players');
+      const playersSnap = await getDocs(playersRef);
+      for (const playerDoc of playersSnap.docs) {
+        await deleteDoc(playerDoc.ref);
+      }
+
+      // 히스토리 삭제
+      await deleteDoc(doc(db, 'games', wordChainGame.id, 'history', 'words'));
+
+      // 게임 삭제
+      await deleteDoc(doc(db, 'games', wordChainGame.id));
+      setWordChainGame(null);
+      toast.success('게임이 삭제되었습니다.');
+    } catch (error) {
+      console.error('Failed to delete game:', error);
+      toast.error('게임 삭제에 실패했습니다.');
+    }
+  };
+
+  // 끝말잇기 구독
+  useEffect(() => {
+    if (!user || !selectedClass) {
+      setWordChainGame(null);
+      return;
+    }
+
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: WordChainGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.teacherId === user.uid &&
+            data.classId === selectedClass &&
+            data.status !== 'finished' &&
+            docSnap.id.startsWith('wordchain_')) {
+          activeGame = { id: docSnap.id, ...data } as WordChainGame;
+        }
+      });
+
+      setWordChainGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [user, selectedClass]);
+
   // 모든 클래스의 모든 게임 닫기
   const closeAllGames = async () => {
     if (!user) return;
@@ -1349,6 +1475,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       setMinorityGame(null);
       setBulletDodgeGame(null);
       setRpsGame(null);
+      setWordChainGame(null);
     } catch (error) {
       console.error('Failed to close all games:', error);
       toast.error('게임 닫기에 실패했습니다.');
@@ -4835,19 +4962,174 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 </div>
 
                 {/* 끝말잇기 */}
-                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-pink-50 to-rose-50 border border-pink-200">
-                  <div className="flex items-center gap-4">
-                    <span className="text-3xl">💬</span>
-                    <div>
-                      <h3 className="font-bold text-pink-800">끝말잇기</h3>
-                      <p className="text-xs text-pink-600">단어 대결!</p>
-                      <span className="inline-block mt-1 bg-purple-100 text-purple-600 px-2 py-0.5 rounded text-xs">실시간</span>
+                <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-300">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-4">
+                      <span className="text-3xl">🔤</span>
+                      <div>
+                        <h3 className="font-bold text-emerald-800">끝말잇기</h3>
+                        <p className="text-xs text-emerald-600">단어로 승부하라!</p>
+                        <span className="inline-block mt-1 bg-purple-100 text-purple-600 px-2 py-0.5 rounded text-xs">실시간 · 턴제</span>
+                      </div>
                     </div>
+                    <span className="px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold">활성화</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400">준비중</span>
-                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
-                  </div>
+
+                  {!selectedClass ? (
+                    <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-center text-sm">
+                      ⚠️ 학급을 먼저 선택해주세요
+                    </div>
+                  ) : !wordChainGame ? (
+                    <div className="space-y-3">
+                      <div className="bg-white p-3 rounded-lg text-sm text-gray-600">
+                        <p className="font-medium text-emerald-700 mb-1">📋 게임 규칙</p>
+                        <p>· 앞 단어의 끝 글자로 시작하는 단어 입력</p>
+                        <p>· 국립국어원 사전에 있는 단어만 인정</p>
+                        <p>· 제한 시간 내에 입력해야 함</p>
+                      </div>
+
+                      {/* 게임 모드 선택 */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => setWordChainGameMode('survival')}
+                          className={`p-2 rounded-lg border-2 transition-all ${
+                            wordChainGameMode === 'survival'
+                              ? 'border-red-500 bg-red-100'
+                              : 'border-gray-200 bg-white hover:border-red-300'
+                          }`}
+                        >
+                          <span className="text-lg">💀</span>
+                          <p className="text-xs font-bold">생존모드</p>
+                          <p className="text-[10px] text-gray-500">탈락전</p>
+                        </button>
+                        <button
+                          onClick={() => setWordChainGameMode('score')}
+                          className={`p-2 rounded-lg border-2 transition-all ${
+                            wordChainGameMode === 'score'
+                              ? 'border-yellow-500 bg-yellow-100'
+                              : 'border-gray-200 bg-white hover:border-yellow-300'
+                          }`}
+                        >
+                          <span className="text-lg">⭐</span>
+                          <p className="text-xs font-bold">점수모드</p>
+                          <p className="text-[10px] text-gray-500">라운드제</p>
+                        </button>
+                      </div>
+
+                      {/* 설정 */}
+                      <div className="bg-white/50 p-3 rounded-lg space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-600">⏱️ 제한시간</span>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min="5"
+                              max="60"
+                              value={wordChainTimeLimit}
+                              onChange={(e) => setWordChainTimeLimit(Math.min(60, Math.max(5, parseInt(e.target.value) || 15)))}
+                              className="w-14 px-2 py-1 text-sm border border-gray-300 rounded text-center"
+                            />
+                            <span className="text-xs text-gray-500">초</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-600">📏 글자 수</span>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min="2"
+                              max="5"
+                              value={wordChainMinLength}
+                              onChange={(e) => setWordChainMinLength(Math.min(5, Math.max(2, parseInt(e.target.value) || 2)))}
+                              className="w-12 px-2 py-1 text-sm border border-gray-300 rounded text-center"
+                            />
+                            <span className="text-xs">~</span>
+                            <input
+                              type="number"
+                              min="5"
+                              max="20"
+                              value={wordChainMaxLength}
+                              onChange={(e) => setWordChainMaxLength(Math.min(20, Math.max(5, parseInt(e.target.value) || 10)))}
+                              className="w-12 px-2 py-1 text-sm border border-gray-300 rounded text-center"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-600">🚫 한방단어 금지</span>
+                          <Checkbox
+                            checked={wordChainBanKiller}
+                            onCheckedChange={(checked) => setWordChainBanKiller(checked as boolean)}
+                          />
+                        </div>
+                        {wordChainGameMode === 'score' && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-600">🔄 라운드 수</span>
+                            <input
+                              type="number"
+                              min="5"
+                              max="30"
+                              value={wordChainMaxRounds}
+                              onChange={(e) => setWordChainMaxRounds(Math.min(30, Math.max(5, parseInt(e.target.value) || 10)))}
+                              className="w-14 px-2 py-1 text-sm border border-gray-300 rounded text-center"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <Button
+                        onClick={createWordChainGame}
+                        disabled={isCreatingWordChain}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700"
+                      >
+                        {isCreatingWordChain ? '생성 중...' : '🔤 게임 방 만들기'}
+                      </Button>
+                    </div>
+                  ) : (
+                    // 게임 관리 UI
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between bg-white p-3 rounded-lg">
+                        <div>
+                          <span className="text-sm text-gray-600">상태: </span>
+                          <span className={`font-bold ${
+                            wordChainGame.status === 'waiting' ? 'text-amber-600' :
+                            wordChainGame.status === 'playing' ? 'text-green-600' : 'text-gray-600'
+                          }`}>
+                            {wordChainGame.status === 'waiting' ? '⏳ 대기중' :
+                             wordChainGame.status === 'playing' ? '🎮 진행중' : '🏁 종료'}
+                          </span>
+                        </div>
+                        <div className="text-sm">
+                          <span className={`px-2 py-0.5 rounded text-xs ${
+                            wordChainGame.gameMode === 'survival' ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-600'
+                          }`}>
+                            {wordChainGame.gameMode === 'survival' ? '생존' : '점수'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => {
+                            const teacherGameUrl = `${window.location.origin}?game=word-chain-teacher&gameId=${wordChainGame.id}`;
+                            window.open(teacherGameUrl, '_blank', 'width=800,height=900');
+                          }}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                        >
+                          🎮 관리 창 열기
+                        </Button>
+                        <Button
+                          onClick={deleteWordChainGame}
+                          variant="outline"
+                          className="text-red-600 border-red-300 hover:bg-red-50"
+                        >
+                          삭제
+                        </Button>
+                      </div>
+                      <p className="text-xs text-center text-gray-500">
+                        게임 관리는 새 창에서 진행됩니다
+                      </p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

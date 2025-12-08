@@ -520,14 +520,18 @@ export async function updateWishStreak(
   });
 }
 
-// 소원 목록 조회 (모든 클래스룸 공유)
+// 소원 목록 조회 (해당 클래스만)
 export async function getWishes(
   teacherId: string,
   classId: string
 ): Promise<Wish[]> {
-  // 모든 클래스룸에서 소원 공유 - teacher 레벨에서 조회
+  // 해당 클래스의 소원만 조회 (다른 클래스 소원 접근 차단)
   const wishesRef = collection(db, 'teachers', teacherId, 'wishes');
-  const q = query(wishesRef, orderBy('createdAt', 'desc'));
+  const q = query(
+    wishesRef,
+    where('classId', '==', classId),
+    orderBy('createdAt', 'desc')
+  );
   const snapshot = await getDocs(q);
 
   return snapshot.docs.map(doc => doc.data()) as Wish[];
