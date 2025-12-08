@@ -18,7 +18,8 @@ import {
   arrayUnion,
   arrayRemove,
   Timestamp,
-  collectionGroup
+  collectionGroup,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -463,6 +464,7 @@ export async function addWish(
 
   await setDoc(wishRef, {
     id: wishRef.id,
+    classId,
     studentCode,
     studentName,
     content,
@@ -529,6 +531,58 @@ export async function getWishes(
   const snapshot = await getDocs(q);
 
   return snapshot.docs.map(doc => doc.data()) as Wish[];
+}
+
+// 소원 classId 마이그레이션 (기존 소원에 classId 할당)
+export async function migrateWishesClassId(
+  teacherId: string
+): Promise<{ migrated: number; total: number }> {
+  // 1. 모든 소원 가져오기
+  const wishesRef = collection(db, 'teachers', teacherId, 'wishes');
+  const wishesSnapshot = await getDocs(wishesRef);
+
+  // 2. 모든 학급과 학생 정보 가져오기 (studentCode -> classId 맵 생성)
+  const classroomsRef = collection(db, 'teachers', teacherId, 'classrooms');
+  const classroomsSnapshot = await getDocs(classroomsRef);
+
+  const studentToClassMap = new Map<string, string>();
+
+  for (const classDoc of classroomsSnapshot.docs) {
+    const classId = classDoc.id;
+    const studentsRef = collection(db, 'teachers', teacherId, 'classrooms', classId, 'students');
+    const studentsSnapshot = await getDocs(studentsRef);
+
+    studentsSnapshot.docs.forEach(studentDoc => {
+      const studentCode = studentDoc.data().code || studentDoc.id;
+      studentToClassMap.set(studentCode, classId);
+    });
+  }
+
+  // 3. classId가 없는 소원에 할당
+  let migratedCount = 0;
+  const batch = writeBatch(db);
+
+  for (const wishDoc of wishesSnapshot.docs) {
+    const wishData = wishDoc.data();
+
+    // classId가 없거나 빈 문자열인 경우만 업데이트
+    if (!wishData.classId) {
+      const studentCode = wishData.studentCode;
+      const classId = studentToClassMap.get(studentCode);
+
+      if (classId) {
+        const wishRef = doc(db, 'teachers', teacherId, 'wishes', wishDoc.id);
+        batch.update(wishRef, { classId });
+        migratedCount++;
+      }
+    }
+  }
+
+  if (migratedCount > 0) {
+    await batch.commit();
+  }
+
+  return { migrated: migratedCount, total: wishesSnapshot.size };
 }
 
 // 소원 좋아요 (모든 클래스룸 공유)

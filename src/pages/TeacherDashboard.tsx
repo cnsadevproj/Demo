@@ -42,6 +42,7 @@ import {
   grantWish,
   deleteWish,
   cleanupExpiredGrantedWishes,
+  migrateWishesClassId,
   addCookiesToStudent,
   ClassInfo,
   Student,
@@ -2416,7 +2417,14 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     try {
       // 24시간 지난 선정 소원 자동 삭제
       await cleanupExpiredGrantedWishes(user.uid);
-      // 소원은 모든 클래스룸에서 공유되므로 classId는 사용되지 않음
+
+      // 기존 소원에 classId 마이그레이션 (학생 코드 기반)
+      const migrationResult = await migrateWishesClassId(user.uid);
+      if (migrationResult.migrated > 0) {
+        toast.success(`${migrationResult.migrated}개 소원에 학급 정보가 할당되었습니다.`);
+      }
+
+      // 소원 목록 조회
       const wishesData = await getWishes(user.uid, '');
       setWishes(wishesData);
       setWishPage(1); // 페이지 리셋
