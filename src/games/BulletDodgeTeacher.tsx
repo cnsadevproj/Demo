@@ -507,10 +507,10 @@ export function BulletDodgeTeacher() {
           onClick={closeStudentModal}
         >
           <div
-            className="bg-white rounded-2xl shadow-xl max-w-sm w-full"
+            className="bg-white rounded-2xl shadow-xl max-w-sm w-full max-h-[85dvh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-4 border-b flex items-center justify-between">
+            <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
               <div>
                 <h3 className="font-bold text-gray-800 text-lg">{selectedPlayer.name}</h3>
                 <p className="text-sm text-gray-500">{selectedPlayer.code}</p>
