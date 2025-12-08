@@ -4,6 +4,7 @@
 import React from 'react';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { StudentProvider } from './contexts/StudentContext';
 
 // Pages
 import Login from './pages/Login';
@@ -135,8 +136,10 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
-      <Toaster />
+      <StudentProvider>
+        <AppContent />
+        <Toaster />
+      </StudentProvider>
     </AuthProvider>
   );
 }
