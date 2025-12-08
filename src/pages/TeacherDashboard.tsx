@@ -749,6 +749,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [grantingWish, setGrantingWish] = useState<Wish | null>(null);
   const [grantMessage, setGrantMessage] = useState('');
   const [wishPage, setWishPage] = useState(1);
+  const [wishGroupFilter, setWishGroupFilter] = useState<string | null>(null); // null = 전체 보기, string = 그룹 ID
   const WISHES_PER_PAGE = 20;
 
   // 팀 현황 상태
@@ -4852,10 +4853,11 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 <CardDescription>모든 학급에서 공유되는 소원을 확인하고 선정하세요</CardDescription>
               </CardHeader>
               <CardContent>
-                  <div className="flex gap-2 mb-4">
+                  <div className="flex flex-wrap gap-2 mb-4">
                     <Button onClick={loadWishes} disabled={isLoadingWishes} variant="outline">
                       {isLoadingWishes ? '로딩 중...' : '🔄 새로고침'}
                     </Button>
+                    <div className="border-l border-gray-300 mx-1" />
                     <Button
                       variant={wishSortOrder === 'latest' ? 'default' : 'outline'}
                       size="sm"
@@ -4872,6 +4874,32 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     </Button>
                   </div>
 
+                  {/* 그룹 필터 */}
+                  {classGroups.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-4 p-3 bg-purple-50 rounded-lg">
+                      <span className="text-sm text-purple-700 font-medium flex items-center">🔗 그룹별 보기:</span>
+                      <Button
+                        variant={wishGroupFilter === null ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => { setWishGroupFilter(null); setWishPage(1); }}
+                        className={wishGroupFilter === null ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                      >
+                        전체
+                      </Button>
+                      {classGroups.map(group => (
+                        <Button
+                          key={group.id}
+                          variant={wishGroupFilter === group.id ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => { setWishGroupFilter(group.id); setWishPage(1); }}
+                          className={wishGroupFilter === group.id ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                        >
+                          {group.name} ({group.classIds.length}개 학급)
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+
                   {isLoadingWishes ? (
                     <p className="text-center py-8 text-gray-500">로딩 중...</p>
                   ) : wishes.length === 0 ? (
@@ -4880,7 +4908,21 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     <>
                       <div className="space-y-3">
                         {(() => {
-                          const sortedWishes = [...wishes].sort((a, b) => wishSortOrder === 'likes'
+                          // 그룹 필터 적용
+                          const selectedGroup = wishGroupFilter ? classGroups.find(g => g.id === wishGroupFilter) : null;
+                          const filteredWishes = selectedGroup
+                            ? wishes.filter(w => selectedGroup.classIds.includes(w.classId))
+                            : wishes;
+
+                          if (filteredWishes.length === 0) {
+                            return (
+                              <p className="text-center py-8 text-gray-500">
+                                {selectedGroup ? `"${selectedGroup.name}" 그룹에 해당하는 소원이 없습니다.` : '등록된 소원이 없습니다.'}
+                              </p>
+                            );
+                          }
+
+                          const sortedWishes = [...filteredWishes].sort((a, b) => wishSortOrder === 'likes'
                             ? b.likes.length - a.likes.length
                             : (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)
                           );
@@ -4947,29 +4989,37 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         })()}
                       </div>
                       {/* 페이지네이션 */}
-                      {wishes.length > WISHES_PER_PAGE && (
-                        <div className="flex justify-center items-center gap-2 mt-4">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setWishPage(p => Math.max(1, p - 1))}
-                            disabled={wishPage === 1}
-                          >
-                            ◀ 이전
-                          </Button>
-                          <span className="text-sm text-gray-600">
-                            {wishPage} / {Math.ceil(wishes.length / WISHES_PER_PAGE)} 페이지
-                          </span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setWishPage(p => Math.min(Math.ceil(wishes.length / WISHES_PER_PAGE), p + 1))}
-                            disabled={wishPage >= Math.ceil(wishes.length / WISHES_PER_PAGE)}
-                          >
-                            다음 ▶
-                          </Button>
-                        </div>
-                      )}
+                      {(() => {
+                        const selectedGroup = wishGroupFilter ? classGroups.find(g => g.id === wishGroupFilter) : null;
+                        const filteredCount = selectedGroup
+                          ? wishes.filter(w => selectedGroup.classIds.includes(w.classId)).length
+                          : wishes.length;
+                        const totalPages = Math.ceil(filteredCount / WISHES_PER_PAGE);
+                        if (filteredCount <= WISHES_PER_PAGE) return null;
+                        return (
+                          <div className="flex justify-center items-center gap-2 mt-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setWishPage(p => Math.max(1, p - 1))}
+                              disabled={wishPage === 1}
+                            >
+                              ◀ 이전
+                            </Button>
+                            <span className="text-sm text-gray-600">
+                              {wishPage} / {totalPages} 페이지 ({filteredCount}개)
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setWishPage(p => Math.min(totalPages, p + 1))}
+                              disabled={wishPage >= totalPages}
+                            >
+                              다음 ▶
+                            </Button>
+                          </div>
+                        );
+                      })()}
                     </>
                   )}
                 </CardContent>
