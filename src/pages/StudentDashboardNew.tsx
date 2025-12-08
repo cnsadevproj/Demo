@@ -170,6 +170,20 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
   const [activeMinorityGame, setActiveMinorityGame] = useState<MinorityGame | null>(null);
   const [isJoiningMinorityGame, setIsJoiningMinorityGame] = useState(false);
 
+  // 끝말잇기 상태
+  interface WordChainGame {
+    id: string;
+    teacherId: string;
+    classId: string;
+    status: 'waiting' | 'playing' | 'finished';
+    gameMode: 'survival' | 'score';
+    className?: string;
+    createdAt: any;
+  }
+
+  const [activeWordChainGame, setActiveWordChainGame] = useState<WordChainGame | null>(null);
+  const [isJoiningWordChain, setIsJoiningWordChain] = useState(false);
+
   // 총알피하기 상태
   interface BulletDodgeGame {
     id: string;
@@ -359,6 +373,62 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
       toast.error('게임 참가에 실패했습니다.');
     }
     setIsJoiningMinorityGame(false);
+  };
+
+  // 끝말잇기 활성 게임 구독
+  useEffect(() => {
+    if (!studentTeacherId || !student) {
+      setActiveWordChainGame(null);
+      return;
+    }
+
+    const gamesRef = collection(db, 'games');
+    const unsubscribe = onSnapshot(gamesRef, (snapshot) => {
+      let activeGame: WordChainGame | null = null;
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        // 현재 학생의 선생님이 만든 끝말잇기 게임 중 같은 클래스이고 waiting 또는 playing 상태인 것 찾기
+        if (data.teacherId === studentTeacherId &&
+            data.classId === student.classId &&
+            (data.status === 'waiting' || data.status === 'playing') &&
+            docSnap.id.startsWith('wordchain_')) {
+          activeGame = { id: docSnap.id, ...data } as WordChainGame;
+        }
+      });
+
+      setActiveWordChainGame(activeGame);
+    });
+
+    return () => unsubscribe();
+  }, [studentTeacherId, student]);
+
+  // 끝말잇기 참가
+  const joinWordChainGame = async () => {
+    if (!activeWordChainGame || !student || !currentStudent || !studentTeacherId) return;
+
+    setIsJoiningWordChain(true);
+    try {
+      // 플레이어로 등록
+      const playerRef = doc(db, 'games', activeWordChainGame.id, 'players', student.code);
+      await setDoc(playerRef, {
+        name: currentStudent.name,
+        joinedAt: serverTimestamp(),
+        isAlive: true,
+        score: 0,
+        lastWord: null
+      });
+
+      // 새 탭으로 게임 열기
+      const gameUrl = `${window.location.origin}?game=word-chain&gameId=${activeWordChainGame.id}&studentCode=${student.code}&studentName=${encodeURIComponent(currentStudent.name)}`;
+      window.open(gameUrl, '_blank');
+
+      toast.success('끝말잇기에 참가했습니다! 새 창을 확인하세요.');
+    } catch (error) {
+      console.error('Failed to join word chain game:', error);
+      toast.error('게임 참가에 실패했습니다.');
+    }
+    setIsJoiningWordChain(false);
   };
 
   // 총알피하기 활성 게임 구독
@@ -3206,6 +3276,32 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
                     className="px-4 py-2 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition-all"
                   >
                     {isJoiningRps ? '...' : '참가'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 끝말잇기 안내 */}
+            {activeWordChainGame && (
+              <div className="bg-gradient-to-r from-green-100 to-green-200 rounded-2xl p-4 border-2 border-green-300">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl animate-bounce">🔤</span>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-green-900">
+                      끝말잇기 {activeWordChainGame.status === 'playing' ? '진행중!' : '대기중!'}
+                    </h3>
+                    <p className="text-sm text-green-600">
+                      {activeWordChainGame.gameMode === 'survival'
+                        ? '생존모드! 탈락하면 끝! 지금 참가하세요!'
+                        : '점수모드! 단어로 점수를 쌓아요!'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={joinWordChainGame}
+                    disabled={isJoiningWordChain}
+                    className="px-4 py-2 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition-all"
+                  >
+                    {isJoiningWordChain ? '...' : '참가'}
                   </button>
                 </div>
               </div>
