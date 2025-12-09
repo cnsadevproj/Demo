@@ -80,6 +80,7 @@ import { getKoreanDateString, getLastWeekdays, getLastWeekdaysWithData } from '.
 import { TEAM_FLAGS, generateRandomTeamNameWithEmoji } from '../types/game';
 import { ALL_SHOP_ITEMS } from '../types/shop';
 import { TeacherWordCloud } from '../components/wordcloud/TeacherWordCloud';
+import GrassFieldModal from '../components/GrassFieldModal';
 
 interface TeacherDashboardProps {
   onLogout: () => void;
@@ -722,6 +723,11 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [isUploadingPastGrass, setIsUploadingPastGrass] = useState(false);
   const [pastGrassYear, setPastGrassYear] = useState(new Date().getFullYear());
   const [grassOffset, setGrassOffset] = useState(0); // 잔디 네비게이션 오프셋 (10일 단위)
+
+  // 잔디밭 모달
+  const [showGrassFieldModal, setShowGrassFieldModal] = useState(false);
+  const [grassFieldData, setGrassFieldData] = useState<Array<{ classId: string; className: string; grassByDate: Record<string, number> }>>([]);
+  const [isLoadingGrassField, setIsLoadingGrassField] = useState(false);
 
   // 학생 상세 모달
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -2110,6 +2116,46 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     setIsUploadingPastGrass(false);
   };
 
+  // 반별 잔디밭 데이터 로드
+  const loadGrassFieldData = async () => {
+    if (!user || !classes || classes.length === 0) return;
+
+    setIsLoadingGrassField(true);
+    try {
+      const classesGrassData: Array<{ classId: string; className: string; grassByDate: Record<string, number> }> = [];
+
+      // 숨겨지지 않은 모든 반의 잔디 데이터 로드
+      const visibleClasses = classes.filter((c: ClassInfo) => !hiddenClasses.includes(c.id));
+
+      for (const cls of visibleClasses) {
+        const grassDataForClass = await getGrassData(user.uid, cls.id);
+
+        // 날짜별로 전체 잔디 수 집계
+        const grassByDate: Record<string, number> = {};
+        grassDataForClass.forEach(item => {
+          if (!grassByDate[item.date]) {
+            grassByDate[item.date] = 0;
+          }
+          // 잔디 개수 (count) 기준으로 집계
+          grassByDate[item.date] += item.count || 1;
+        });
+
+        classesGrassData.push({
+          classId: cls.id,
+          className: cls.name,
+          grassByDate
+        });
+      }
+
+      setGrassFieldData(classesGrassData);
+      setShowGrassFieldModal(true);
+    } catch (error) {
+      console.error('Failed to load grass field data:', error);
+      toast.error('잔디밭 데이터를 불러오는데 실패했습니다.');
+    }
+    setIsLoadingGrassField(false);
+  };
+
   // 잔디 데이터를 날짜별로 그룹화
   const getGrassByDate = () => {
     const grouped: Record<string, Record<string, { change: number; count: number; usedStreakFreeze?: boolean }>> = {};
@@ -3264,7 +3310,17 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 {/* 잔디 새로고침 */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>🌱 학급 잔디 현황</CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle>🌱 학급 잔디 현황</CardTitle>
+                      <Button
+                        onClick={loadGrassFieldData}
+                        disabled={isLoadingGrassField}
+                        variant="outline"
+                        className="bg-green-50 hover:bg-green-100 text-green-700 border-green-300"
+                      >
+                        {isLoadingGrassField ? '로딩 중...' : '🌿 잔디밭'}
+                      </Button>
+                    </div>
                     <CardDescription>
                       {classes.find((c: ClassInfo) => c.id === selectedClass)?.name} - 평일 기준 쿠키 변화량
                     </CardDescription>
@@ -6634,6 +6690,13 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
         userType="teacher"
         userName={teacher?.name}
         userCode={user?.uid}
+      />
+
+      {/* 잔디밭 모달 */}
+      <GrassFieldModal
+        isOpen={showGrassFieldModal}
+        onClose={() => setShowGrassFieldModal(false)}
+        classesData={grassFieldData}
       />
     </div>
   );
