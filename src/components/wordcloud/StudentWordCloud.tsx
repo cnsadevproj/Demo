@@ -1,6 +1,8 @@
 // src/components/wordcloud/StudentWordCloud.tsx
 // 학생용 워드클라우드 컴포넌트 - SVG 스파이럴 레이아웃
-
+/*
+  12/10 todolist: 워드클라우드 이전 용현T 커밋기록 참고해서 예쁘게 보이도록 롤백.... 진짜 죄송합니다. 제 멍청한 클로드 녀석 때문입니다. 
+*/
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
