@@ -5117,16 +5117,26 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 <div className="p-4 rounded-xl bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-300 mb-4">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-bold text-red-800">⚔️ 쿠키배틀 설정</h3>
-                    {!cookieBattleGame && (
+                    <div className="flex items-center gap-2">
                       <Button
-                        onClick={createCookieBattleGame}
-                        disabled={isCreatingCookieBattle}
-                        className="bg-red-600 hover:bg-red-700"
+                        onClick={() => window.open('https://peach-session-2c6.notion.site/1662dd2f774580cfb76dc19b4ffec9ab', '_blank')}
+                        variant="outline"
                         size="sm"
+                        className="text-red-600 border-red-300 hover:bg-red-50"
                       >
-                        {isCreatingCookieBattle ? '팀 확인 중...' : '⚔️ 게임 생성'}
+                        📖 사용법
                       </Button>
-                    )}
+                      {!cookieBattleGame && (
+                        <Button
+                          onClick={createCookieBattleGame}
+                          disabled={isCreatingCookieBattle}
+                          className="bg-red-600 hover:bg-red-700"
+                          size="sm"
+                        >
+                          {isCreatingCookieBattle ? '팀 확인 중...' : '⚔️ 게임 생성'}
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   {/* 초기 자원 모드 선택 (게임 없을 때만) */}
