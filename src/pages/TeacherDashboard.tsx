@@ -860,6 +860,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [baseballEntryFee, setBaseballEntryFee] = useState(0); // 참가비
   const [isCreatingGame, setIsCreatingGame] = useState(false);
   const [showBaseballAnswer, setShowBaseballAnswer] = useState(false); // 정답 표시 토글
+  const [expandedGame, setExpandedGame] = useState<string | null>(null); // 펼쳐진 게임
+  const [showCookieBattleHelp, setShowCookieBattleHelp] = useState(false); // 쿠키배틀 도움말
+  const [cookieBattleHelpPage, setCookieBattleHelpPage] = useState(0); // 도움말 페이지
 
   // 소수결게임 상태
   interface MinorityGame {
@@ -2046,6 +2049,13 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     }
     setIsLoadingGrass(false);
   };
+
+  // 학급 선택 시 잔디 데이터 자동 로드
+  useEffect(() => {
+    if (selectedClass && user) {
+      loadGrassData();
+    }
+  }, [selectedClass, user]);
 
   // 잔디 데이터 초기화
   const handleResetGrass = async () => {
@@ -4455,21 +4465,168 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 <CardTitle>🎯 게임 활성화 관리</CardTitle>
                 <CardDescription>학생들에게 공개할 게임을 선택하세요. 비활성화된 게임은 학생 화면에서 숨겨집니다.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {/* 숫자야구 - 활성화됨! */}
-                <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-violet-50 border-2 border-purple-300">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-4">
-                      <span className="text-3xl">⚾</span>
-                      <div>
-                        <h3 className="font-bold text-purple-800">숫자야구</h3>
-                        <p className="text-xs text-purple-600">숫자를 맞춰라!</p>
-                        <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전 · 실시간</span>
+              <CardContent>
+              {/* 게임 버튼 그리드 */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {/* 숫자야구 버튼 */}
+                <button
+                  onClick={() => setExpandedGame(expandedGame === 'baseball' ? null : 'baseball')}
+                  className={`p-3 rounded-xl text-left transition-all h-20 ${
+                    expandedGame === 'baseball'
+                      ? 'bg-gradient-to-r from-purple-200 to-violet-200 border-2 border-purple-500 shadow-lg scale-[1.02]'
+                      : baseballGame
+                        ? 'bg-gradient-to-r from-purple-100 to-violet-100 border-2 border-purple-400'
+                        : 'bg-gradient-to-r from-purple-50 to-violet-50 border-2 border-purple-200 hover:border-purple-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">⚾</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <h3 className="font-bold text-purple-800 text-sm">숫자야구</h3>
+                        {baseballGame && (
+                          <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${
+                            baseballGame.status === 'playing' ? 'bg-green-500 text-white' : 'bg-amber-500 text-white'
+                          }`}>
+                            {baseballGame.status === 'playing' ? '진행중' : '대기'}
+                          </span>
+                        )}
                       </div>
+                      <p className="text-[10px] text-purple-600">개인전 · 실시간</p>
                     </div>
-                    <span className="px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold">활성화</span>
                   </div>
+                </button>
 
+                {/* 소수결 버튼 */}
+                <button
+                  onClick={() => setExpandedGame(expandedGame === 'minority' ? null : 'minority')}
+                  className={`p-3 rounded-xl text-left transition-all h-20 ${
+                    expandedGame === 'minority'
+                      ? 'bg-gradient-to-r from-teal-200 to-cyan-200 border-2 border-teal-500 shadow-lg scale-[1.02]'
+                      : minorityGame
+                        ? 'bg-gradient-to-r from-teal-100 to-cyan-100 border-2 border-teal-400'
+                        : 'bg-gradient-to-r from-teal-50 to-cyan-50 border-2 border-teal-200 hover:border-teal-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">⚖️</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <h3 className="font-bold text-teal-800 text-sm">소수결</h3>
+                        {minorityGame && (
+                          <span className="px-1 py-0.5 rounded text-[10px] font-bold bg-green-500 text-white">진행중</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-teal-600">단체전 · 실시간</p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* 총알피하기 버튼 */}
+                <button
+                  onClick={() => setExpandedGame(expandedGame === 'bulletDodge' ? null : 'bulletDodge')}
+                  className={`p-3 rounded-xl text-left transition-all h-20 ${
+                    expandedGame === 'bulletDodge'
+                      ? 'bg-gradient-to-r from-indigo-200 to-purple-200 border-2 border-indigo-500 shadow-lg scale-[1.02]'
+                      : bulletDodgeGame
+                        ? 'bg-gradient-to-r from-indigo-100 to-purple-100 border-2 border-indigo-400'
+                        : 'bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 hover:border-indigo-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">🚀</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <h3 className="font-bold text-indigo-800 text-sm">총알피하기</h3>
+                        {bulletDodgeGame && (
+                          <span className="px-1 py-0.5 rounded text-[10px] font-bold bg-green-500 text-white">진행중</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-indigo-600">개인전 · 점수</p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* 가위바위보 버튼 */}
+                <button
+                  onClick={() => setExpandedGame(expandedGame === 'rps' ? null : 'rps')}
+                  className={`p-3 rounded-xl text-left transition-all h-20 ${
+                    expandedGame === 'rps'
+                      ? 'bg-gradient-to-r from-green-200 to-emerald-200 border-2 border-green-500 shadow-lg scale-[1.02]'
+                      : rpsGame
+                        ? 'bg-gradient-to-r from-green-100 to-emerald-100 border-2 border-green-400'
+                        : 'bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 hover:border-green-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">✊</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <h3 className="font-bold text-green-800 text-sm">가위바위보</h3>
+                        {rpsGame && (
+                          <span className="px-1 py-0.5 rounded text-[10px] font-bold bg-green-500 text-white">진행중</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-green-600">서바이벌/캔디</p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* 쿠키배틀 버튼 */}
+                <button
+                  onClick={() => setExpandedGame(expandedGame === 'cookieBattle' ? null : 'cookieBattle')}
+                  className={`p-3 rounded-xl text-left transition-all h-20 ${
+                    expandedGame === 'cookieBattle'
+                      ? 'bg-gradient-to-r from-red-200 to-orange-200 border-2 border-red-500 shadow-lg scale-[1.02]'
+                      : cookieBattleGame
+                        ? 'bg-gradient-to-r from-red-100 to-orange-100 border-2 border-red-400'
+                        : 'bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-200 hover:border-red-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">⚔️</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <h3 className="font-bold text-red-800 text-sm">쿠키배틀</h3>
+                        {cookieBattleGame && (
+                          <span className="px-1 py-0.5 rounded text-[10px] font-bold bg-green-500 text-white">진행중</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-red-600">팀 대결</p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* 끝말잇기 버튼 */}
+                <button
+                  onClick={() => setExpandedGame(expandedGame === 'wordChain' ? null : 'wordChain')}
+                  className={`p-3 rounded-xl text-left transition-all h-20 ${
+                    expandedGame === 'wordChain'
+                      ? 'bg-gradient-to-r from-emerald-200 to-teal-200 border-2 border-emerald-500 shadow-lg scale-[1.02]'
+                      : wordChainGame
+                        ? 'bg-gradient-to-r from-emerald-100 to-teal-100 border-2 border-emerald-400'
+                        : 'bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-200 hover:border-emerald-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">🔤</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <h3 className="font-bold text-emerald-800 text-sm">끝말잇기</h3>
+                        {wordChainGame && (
+                          <span className="px-1 py-0.5 rounded text-[10px] font-bold bg-green-500 text-white">진행중</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-emerald-600">실시간 · 턴제</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {/* 숫자야구 상세 */}
+              {expandedGame === 'baseball' && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-violet-50 border-2 border-purple-300 mb-4">
+                  <h3 className="font-bold text-purple-800 mb-3">⚾ 숫자야구 설정</h3>
                   {!selectedClass ? (
                     <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-center text-sm">
                       ⚠️ 학급을 먼저 선택해주세요
@@ -4645,21 +4802,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     </div>
                   )}
                 </div>
+              )}
 
-                {/* 소수결게임 */}
-                <div className="p-4 rounded-xl bg-gradient-to-r from-teal-50 to-cyan-50 border-2 border-teal-300">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-4">
-                      <span className="text-3xl">⚖️</span>
-                      <div>
-                        <h3 className="font-bold text-teal-800">소수결게임</h3>
-                        <p className="text-xs text-teal-600">소수파가 살아남는다!</p>
-                        <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">단체전 · 실시간</span>
-                      </div>
-                    </div>
-                    <span className="px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold">활성화</span>
-                  </div>
-
+              {/* 소수결 상세 */}
+              {expandedGame === 'minority' && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-teal-50 to-cyan-50 border-2 border-teal-300 mb-4">
+                  <h3 className="font-bold text-teal-800 mb-3">⚖️ 소수결 설정</h3>
                   {!selectedClass ? (
                     <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-center text-sm">
                       ⚠️ 학급을 먼저 선택해주세요
@@ -4769,21 +4917,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     </div>
                   )}
                 </div>
+              )}
 
-                {/* 총알피하기 */}
-                <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-300">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-4">
-                      <span className="text-3xl">🚀</span>
-                      <div>
-                        <h3 className="font-bold text-indigo-800">총알피하기</h3>
-                        <p className="text-xs text-indigo-600">우주선을 조종해 총알을 피하라!</p>
-                        <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전 · 점수</span>
-                      </div>
-                    </div>
-                    <span className="px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold">활성화</span>
-                  </div>
-
+              {/* 총알피하기 상세 */}
+              {expandedGame === 'bulletDodge' && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-300 mb-4">
+                  <h3 className="font-bold text-indigo-800 mb-3">🚀 총알피하기 설정</h3>
                   {!selectedClass ? (
                     <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-center text-sm">
                       ⚠️ 학급을 먼저 선택해주세요
@@ -4860,21 +4999,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     </div>
                   )}
                 </div>
+              )}
 
-                {/* 가위바위보 */}
-                <div className="p-4 rounded-xl bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-300">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-4">
-                      <span className="text-3xl">✊✋✌️</span>
-                      <div>
-                        <h3 className="font-bold text-green-800">가위바위보</h3>
-                        <p className="text-xs text-green-600">선생님과 학생들의 가위바위보 대결!</p>
-                        <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전 · 서바이벌/캔디</span>
-                      </div>
-                    </div>
-                    <span className="px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold">활성화</span>
-                  </div>
-
+              {/* 가위바위보 상세 */}
+              {expandedGame === 'rps' && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 mb-4">
+                  <h3 className="font-bold text-green-800 mb-3">✊ 가위바위보 설정</h3>
                   {!selectedClass ? (
                     <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-center text-sm">
                       ⚠️ 학급을 먼저 선택해주세요
@@ -4982,27 +5112,33 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     </div>
                   )}
                 </div>
+              )}
 
-                {/* 쿠키 배틀 */}
-                <div className="p-4 rounded-xl bg-gradient-to-r from-red-50 to-orange-50 border border-red-200">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <span className="text-3xl">⚔️</span>
-                      <div>
-                        <h3 className="font-bold text-red-800">쿠키 배틀</h3>
-                        <p className="text-xs text-red-600">팀끼리 쿠키를 걸고 전략 대결!</p>
-                        <span className="inline-block mt-1 bg-blue-100 text-blue-600 px-2 py-0.5 rounded text-xs">팀 대결</span>
-                      </div>
-                    </div>
-                    {!cookieBattleGame && (
+              {/* 쿠키배틀 상세 */}
+              {expandedGame === 'cookieBattle' && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-300 mb-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-bold text-red-800">⚔️ 쿠키배틀 설정</h3>
+                    <div className="flex items-center gap-2">
                       <Button
-                        onClick={createCookieBattleGame}
-                        disabled={isCreatingCookieBattle}
-                        className="bg-red-600 hover:bg-red-700"
+                        onClick={() => { setShowCookieBattleHelp(true); setCookieBattleHelpPage(0); }}
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 border-red-300 hover:bg-red-50"
                       >
-                        {isCreatingCookieBattle ? '팀 확인 중...' : '⚔️ 게임 생성'}
+                        📖 사용법
                       </Button>
-                    )}
+                      {!cookieBattleGame && (
+                        <Button
+                          onClick={createCookieBattleGame}
+                          disabled={isCreatingCookieBattle}
+                          className="bg-red-600 hover:bg-red-700"
+                          size="sm"
+                        >
+                          {isCreatingCookieBattle ? '팀 확인 중...' : '⚔️ 게임 생성'}
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   {/* 초기 자원 모드 선택 (게임 없을 때만) */}
@@ -5101,53 +5237,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     </div>
                   )}
                 </div>
+              )}
 
-                {/* 스피드 퀴즈 */}
-                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200">
-                  <div className="flex items-center gap-4">
-                    <span className="text-3xl">⚡</span>
-                    <div>
-                      <h3 className="font-bold text-yellow-800">스피드 퀴즈</h3>
-                      <p className="text-xs text-yellow-600">빠르게 정답을 맞춰라!</p>
-                      <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400">준비중</span>
-                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
-                  </div>
-                </div>
-
-                {/* 홀짝 게임 */}
-                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
-                  <div className="flex items-center gap-4">
-                    <span className="text-3xl">🎲</span>
-                    <div>
-                      <h3 className="font-bold text-blue-800">홀짝 게임</h3>
-                      <p className="text-xs text-blue-600">운을 시험해보세요!</p>
-                      <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400">준비중</span>
-                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
-                  </div>
-                </div>
-
-                {/* 끝말잇기 */}
-                <div className="p-4 rounded-xl bg-gradient-to-r from-green-50 to-teal-50 border-2 border-green-300">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-4">
-                      <span className="text-3xl">🔤</span>
-                      <div>
-                        <h3 className="font-bold text-green-800">끝말잇기</h3>
-                        <p className="text-xs text-green-600">단어로 승부하라!</p>
-                        <span className="inline-block mt-1 bg-purple-100 text-purple-600 px-2 py-0.5 rounded text-xs">실시간 · 턴제</span>
-                      </div>
-                    </div>
-                    <span className="px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold">활성화</span>
-                  </div>
-
+              {/* 끝말잇기 상세 */}
+              {expandedGame === 'wordChain' && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-300 mb-4">
+                  <h3 className="font-bold text-emerald-800 mb-3">🔤 끝말잇기 설정</h3>
                   {!selectedClass ? (
                     <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-center text-sm">
                       ⚠️ 학급을 먼저 선택해주세요
@@ -5303,6 +5398,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     </div>
                   )}
                 </div>
+              )}
               </CardContent>
             </Card>
 
@@ -6330,26 +6426,26 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       <button
                         key={student.code}
                         onClick={() => {
-                          if (isInOtherTeam) return;
                           if (isMarkedForAdd) {
                             setMembersToAdd(prev => prev.filter(c => c !== student.code));
                           } else {
                             setMembersToAdd(prev => [...prev, student.code]);
                           }
                         }}
-                        disabled={isInOtherTeam}
                         className={`px-2 py-1 rounded text-xs flex items-center gap-1 transition-all ${
-                          isInOtherTeam
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            : isMarkedForAdd
-                            ? 'bg-green-500 text-white'
+                          isMarkedForAdd
+                            ? isInOtherTeam
+                              ? 'bg-orange-500 text-white'
+                              : 'bg-green-500 text-white'
+                            : isInOtherTeam
+                            ? 'bg-orange-100 border border-orange-300 hover:bg-orange-200 text-orange-700'
                             : 'bg-white border border-green-200 hover:bg-green-100'
                         }`}
-                        title={isInOtherTeam ? `${otherTeam?.flag} ${otherTeam?.teamName} 소속` : ''}
+                        title={isInOtherTeam ? `${otherTeam?.flag} ${otherTeam?.teamName}에서 이동` : ''}
                       >
                         <span>{getEmojiFromCode(student.profile.emojiCode) || '👤'}</span>
                         <span>{student.name}</span>
-                        {isInOtherTeam && <span className="text-[10px]">({otherTeam?.flag})</span>}
+                        {isInOtherTeam && <span className="text-[10px]">({otherTeam?.flag}→)</span>}
                       </button>
                     );
                   })}
@@ -6388,8 +6484,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       for (const code of membersToRemove) {
                         await removeTeamMember(user.uid, selectedClass, teamForMemberModal, code);
                       }
-                      // 멤버 추가
+                      // 멤버 추가 (다른 팀에 있는 경우 먼저 제거)
                       for (const code of membersToAdd) {
+                        const otherTeam = teams.find(t => t.teamId !== teamForMemberModal && t.members.includes(code));
+                        if (otherTeam) {
+                          await removeTeamMember(user.uid, selectedClass, otherTeam.teamId, code);
+                        }
                         await addTeamMember(user.uid, selectedClass, teamForMemberModal, code);
                       }
                       await loadTeams();
@@ -6708,6 +6808,210 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
         onClose={() => setShowGrassFieldModal(false)}
         classesData={grassFieldData}
       />
+
+      {/* 쿠키배틀 도움말 모달 */}
+      {showCookieBattleHelp && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-stone-800 rounded-2xl max-w-md w-full max-h-[85dvh] overflow-hidden border border-amber-600/30">
+            {/* 헤더 */}
+            <div className="p-4 border-b border-stone-700 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-amber-400">📖 쿠키배틀 게임 방법</h2>
+              <button
+                onClick={() => { setShowCookieBattleHelp(false); setCookieBattleHelpPage(0); }}
+                className="text-stone-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 페이지 인디케이터 */}
+            <div className="flex justify-center gap-2 py-3 bg-stone-900/50">
+              {[0, 1, 2, 3].map(i => (
+                <button
+                  key={i}
+                  onClick={() => setCookieBattleHelpPage(i)}
+                  className={`w-3 h-3 rounded-full transition-all ${
+                    cookieBattleHelpPage === i ? 'bg-amber-400 scale-125' : 'bg-stone-600 hover:bg-stone-500'
+                  }`}
+                />
+              ))}
+            </div>
+
+            {/* 컨텐츠 */}
+            <div className="p-6 overflow-y-auto max-h-[50dvh]">
+              {/* 페이지 1: 게임 소개 */}
+              {cookieBattleHelpPage === 0 && (
+                <div className="space-y-4 text-stone-300">
+                  <div className="text-center mb-6">
+                    <span className="text-5xl">🏰</span>
+                    <h3 className="text-2xl font-bold text-amber-400 mt-2">쿠키 배틀</h3>
+                    <p className="text-stone-400 mt-1">팀 대전 전략 게임</p>
+                  </div>
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-amber-400 mb-2">🎯 게임 목표</h3>
+                    <p className="text-sm">
+                      팀의 쿠키를 지키면서 다른 팀의 쿠키를 빼앗으세요!<br/>
+                      쿠키가 0이 되면 탈락, 마지막까지 살아남은 팀이 승리합니다.
+                    </p>
+                  </div>
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-amber-400 mb-2">👑 대표자 역할</h3>
+                    <p className="text-sm">
+                      각 팀의 대표자가 배팅과 공격 대상을 결정합니다.<br/>
+                      팀원은 대표자의 선택을 지켜볼 수 있습니다.
+                    </p>
+                  </div>
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-amber-400 mb-2">🔄 게임 흐름</h3>
+                    <div className="text-sm space-y-1">
+                      <p>1️⃣ <span className="text-blue-400">배팅 단계</span> - 공격/수비 쿠키 배분</p>
+                      <p>2️⃣ <span className="text-purple-400">대상 선택</span> - 공격할 팀 선택</p>
+                      <p>3️⃣ <span className="text-red-400">전투</span> - 자동 계산</p>
+                      <p>4️⃣ <span className="text-green-400">결과</span> - 승패 확인</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 페이지 2: 배팅 시스템 */}
+              {cookieBattleHelpPage === 1 && (
+                <div className="space-y-4 text-stone-300">
+                  <div className="text-center mb-4">
+                    <span className="text-4xl">💰</span>
+                    <h3 className="text-xl font-bold text-amber-400 mt-2">배팅 시스템</h3>
+                  </div>
+                  <div className="bg-red-900/30 rounded-xl p-4 border border-red-600/30">
+                    <h3 className="font-bold text-red-400 mb-2">⚔️ 공격 배팅</h3>
+                    <p className="text-sm">
+                      다른 팀을 공격할 때 사용합니다.<br/>
+                      <span className="text-amber-300">공격 &gt; 수비</span>일 때 공격이 성공합니다!
+                    </p>
+                  </div>
+                  <div className="bg-blue-900/30 rounded-xl p-4 border border-blue-600/30">
+                    <h3 className="font-bold text-blue-400 mb-2">🛡️ 수비 배팅</h3>
+                    <p className="text-sm">
+                      다른 팀의 공격을 방어할 때 사용합니다.<br/>
+                      <span className="text-amber-300">수비 ≥ 공격</span>일 때 방어가 성공합니다!
+                    </p>
+                  </div>
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-green-400 mb-2">💡 배팅 규칙</h3>
+                    <ul className="text-sm space-y-1">
+                      <li>• 공격 + 수비 합계 ≤ 보유 쿠키</li>
+                      <li>• 공격 0 = 수비에만 집중</li>
+                      <li>• 수비 0 = 공격에 올인 (위험!)</li>
+                      <li>• 배팅 후에는 변경 불가!</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {/* 페이지 3: 점수 계산 */}
+              {cookieBattleHelpPage === 2 && (
+                <div className="space-y-4 text-stone-300">
+                  <div className="text-center mb-4">
+                    <span className="text-4xl">📊</span>
+                    <h3 className="text-xl font-bold text-amber-400 mt-2">점수 계산</h3>
+                  </div>
+                  <div className="bg-red-900/30 rounded-xl p-4 border border-red-600/30">
+                    <h3 className="font-bold text-red-400 mb-2">⚔️ 공격 승리 (공격 &gt; 수비)</h3>
+                    <div className="text-sm space-y-1">
+                      <p><span className="text-red-300">공격팀:</span> +(공격-수비) 차이만큼 획득</p>
+                      <p><span className="text-blue-300">방어팀:</span> +50% 환불 - 차이만큼 손실</p>
+                    </div>
+                    <div className="mt-2 p-2 bg-black/30 rounded text-xs">
+                      예) 공격 30, 수비 20 → 공격팀 +10, 방어팀 -20
+                    </div>
+                  </div>
+                  <div className="bg-blue-900/30 rounded-xl p-4 border border-blue-600/30">
+                    <h3 className="font-bold text-blue-400 mb-2">🛡️ 방어 승리 (공격 &lt; 수비)</h3>
+                    <div className="text-sm space-y-1">
+                      <p><span className="text-red-300">공격팀:</span> -배팅 전액 손실</p>
+                      <p><span className="text-blue-300">방어팀:</span> +10 보너스!</p>
+                    </div>
+                    <div className="mt-2 p-2 bg-black/30 rounded text-xs">
+                      예) 공격 20, 수비 30 → 공격팀 -20, 방어팀 +10
+                    </div>
+                  </div>
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-stone-400 mb-2">⚖️ 동점 / 공격 안 받음</h3>
+                    <div className="text-sm space-y-1">
+                      <p>• 동점: 양팀 모두 배팅의 30% 손실</p>
+                      <p>• 공격 안 받음: 수비 배팅의 80% 환불</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 페이지 4: 전략 팁 */}
+              {cookieBattleHelpPage === 3 && (
+                <div className="space-y-4 text-stone-300">
+                  <div className="text-center mb-4">
+                    <span className="text-4xl">💡</span>
+                    <h3 className="text-xl font-bold text-amber-400 mt-2">전략 팁</h3>
+                  </div>
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-green-400 mb-2">✅ 좋은 전략</h3>
+                    <ul className="text-sm space-y-2">
+                      <li>• 상대 팀의 쿠키 수를 파악하세요</li>
+                      <li>• 수비를 확실히 해두면 공격 실패 시 보너스!</li>
+                      <li>• 공격 안 받으면 80% 환불받아요</li>
+                      <li>• 동점은 양팀 손해! 차이를 만드세요</li>
+                    </ul>
+                  </div>
+                  <div className="bg-red-900/30 rounded-xl p-4 border border-red-600/30">
+                    <h3 className="font-bold text-red-400 mb-2">❌ 주의사항</h3>
+                    <ul className="text-sm space-y-2">
+                      <li>• 수비 없이 올인 공격은 위험해요!</li>
+                      <li>• 동점 노리기보다 확실한 승패를!</li>
+                      <li>• 쿠키 0이 되면 바로 탈락!</li>
+                    </ul>
+                  </div>
+                  <div className="bg-amber-900/30 rounded-xl p-4 border border-amber-600/30">
+                    <h3 className="font-bold text-amber-400 mb-2">🏆 승리 조건</h3>
+                    <p className="text-sm">
+                      마지막까지 살아남은 팀이 승리!<br/>
+                      쿠키를 잘 지키면서 상대를 공격하세요!
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 하단 버튼 */}
+            <div className="p-4 border-t border-stone-700 flex gap-2">
+              <button
+                onClick={() => { setShowCookieBattleHelp(false); setCookieBattleHelpPage(0); }}
+                className="py-3 px-4 bg-stone-600 text-white font-bold rounded-xl hover:bg-stone-500 transition-colors"
+              >
+                닫기
+              </button>
+              <button
+                onClick={() => setCookieBattleHelpPage(Math.max(0, cookieBattleHelpPage - 1))}
+                disabled={cookieBattleHelpPage === 0}
+                className="flex-1 py-3 bg-stone-700 text-white font-bold rounded-xl hover:bg-stone-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                ← 이전
+              </button>
+              {cookieBattleHelpPage < 3 ? (
+                <button
+                  onClick={() => setCookieBattleHelpPage(cookieBattleHelpPage + 1)}
+                  className="flex-1 py-3 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-colors"
+                >
+                  다음 →
+                </button>
+              ) : (
+                <button
+                  onClick={() => { setShowCookieBattleHelp(false); setCookieBattleHelpPage(0); }}
+                  className="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-colors"
+                >
+                  ✓ 이해했어요!
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

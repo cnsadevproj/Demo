@@ -36,6 +36,10 @@
       "Bash(git branch:*)",
       "Bash(lsof:*)",
       "Bash(xargs:*)"
+      "Bash(python collect_standards.py:*)",
+      "Bash(python:*)",
+      "Bash(firebase:*)",
+      "Bash(gh pr create:*)"
     ],
     "deny": [],
     "ask": []
