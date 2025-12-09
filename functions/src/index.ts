@@ -139,7 +139,8 @@ async function refreshTeacherCookies(teacherId: string): Promise<{
         const dahandinData = await fetchStudentFromDahandin(apiKey, studentCode);
 
         if (dahandinData) {
-          const previousCookie = student.previousCookie || 0;
+          // previousCookie가 없으면 현재 저장된 cookie 값을 사용 (첫 새로고침 시 잘못된 증가분 방지)
+          const previousCookie = student.previousCookie ?? student.cookie ?? dahandinData.cookie;
           const lastSyncedCookie = student.lastSyncedCookie ?? student.cookie ?? 0;
           const currentJelly = student.jelly ?? student.cookie ?? 0;
           const cookieChange = dahandinData.cookie - previousCookie;

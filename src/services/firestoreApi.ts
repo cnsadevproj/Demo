@@ -276,6 +276,9 @@ export async function createStudent(
     ...student,
     teacherId,
     classId,
+    // previousCookie를 현재 쿠키값으로 설정하여 첫 새로고침 시 잘못된 증가분 방지
+    previousCookie: student.cookie || 0,
+    lastSyncedCookie: student.cookie || 0,
     lastUpdate: serverTimestamp()
   });
   
@@ -1355,12 +1358,16 @@ export async function refreshStudentCookies(
 
       // 첫 로드인지 확인:
       // 1. initialCookie가 없거나 0이면 첫 등록 후 첫 동기화
-      // 2. previousCookie가 0이면 이전 버전 데이터
+      // 2. previousCookie가 없거나 0이면 이전 버전 데이터
       const hasInitialCookie = student.initialCookie !== undefined && student.initialCookie > 0;
-      const isFirstLoad = !hasInitialCookie && student.previousCookie === 0;
+      const hasPreviousCookie = student.previousCookie !== undefined && student.previousCookie > 0;
+      const isFirstLoad = !hasInitialCookie && !hasPreviousCookie;
 
-      // 쿠키 변화량 계산 (previousCookie 기준)
-      const cookieChange = dahandinData.cookie - student.previousCookie;
+      // previousCookie가 없으면 현재 저장된 cookie 값을 사용 (첫 새로고침 시 잘못된 증가분 방지)
+      const effectivePreviousCookie = student.previousCookie ?? student.cookie ?? dahandinData.cookie;
+
+      // 쿠키 변화량 계산 (effectivePreviousCookie 기준)
+      const cookieChange = dahandinData.cookie - effectivePreviousCookie;
 
       // 캔디 마이그레이션: jelly가 없으면 현재 cookie 값으로 초기화
       const currentJelly = student.jelly ?? student.cookie ?? 0;
