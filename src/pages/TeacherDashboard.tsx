@@ -2137,14 +2137,15 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       for (const cls of visibleClasses) {
         const grassDataForClass = await getGrassData(user.uid, cls.id);
 
-        // 날짜별로 전체 잔디 수 집계
+        // 날짜별로 쿠키 증가량 합산
         const grassByDate: Record<string, number> = {};
+
         grassDataForClass.forEach(item => {
           if (!grassByDate[item.date]) {
             grassByDate[item.date] = 0;
           }
-          // 잔디 개수 (count) 기준으로 집계
-          grassByDate[item.date] += item.count || 1;
+          // 쿠키 증가량으로 집계
+          grassByDate[item.date] += item.cookieChange || 0;
         });
 
         classesGrassData.push({
@@ -3450,6 +3451,34 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                               );
                             })}
                           </tbody>
+                          <tfoot>
+                            {(() => {
+                              const grassByDate = getGrassByDate();
+                              let grandTotal = 0;
+                              const dateTotals = getLast14Days().map(date => {
+                                let dateSum = 0;
+                                students.forEach((student: Student) => {
+                                  const data = grassByDate[date]?.[student.code] || { change: 0 };
+                                  dateSum += data.change;
+                                });
+                                grandTotal += dateSum;
+                                return { date, total: dateSum };
+                              });
+                              return (
+                                <tr className="border-t-2 border-green-600 bg-green-50 font-bold">
+                                  <td className="py-2 px-2 sticky left-0 bg-green-50 text-green-700">총합</td>
+                                  {dateTotals.map(({ date, total }) => (
+                                    <td key={date} className="text-center py-2 px-1 text-green-700">
+                                      {total > 0 ? total : '-'}
+                                    </td>
+                                  ))}
+                                  <td className="text-right py-2 px-2 text-green-700 text-lg">
+                                    +{grandTotal}
+                                  </td>
+                                </tr>
+                              );
+                            })()}
+                          </tfoot>
                         </table>
                       </div>
                     )}

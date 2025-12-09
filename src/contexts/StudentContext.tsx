@@ -248,23 +248,29 @@ export function StudentProvider({ children }: { children: React.ReactNode }) {
         }));
         setClassGroups(localGroups);
         console.log('[StudentContext] Firestore에서 학급 그룹 로드:', localGroups.length);
-      } else if (classGroups.length > 0) {
-        // Firestore에 없지만 localStorage에 있으면 마이그레이션
-        console.log('[StudentContext] localStorage -> Firestore 마이그레이션 시작:', classGroups.length);
-        for (const group of classGroups) {
-          try {
-            await saveClassGroup(teacherId, group.id, group.name, group.classIds);
-            console.log('[StudentContext] 마이그레이션 완료:', group.name);
-          } catch (err) {
-            console.error('[StudentContext] 마이그레이션 실패:', group.name, err);
+      } else {
+        // Firestore에 없으면 localStorage에서 마이그레이션 시도
+        const savedGroups = localStorage.getItem(STORAGE_KEYS.CLASS_GROUPS);
+        if (savedGroups) {
+          const localGroups: ClassGroup[] = JSON.parse(savedGroups);
+          if (localGroups.length > 0) {
+            console.log('[StudentContext] localStorage -> Firestore 마이그레이션 시작:', localGroups.length);
+            for (const group of localGroups) {
+              try {
+                await saveClassGroup(teacherId, group.id, group.name, group.classIds);
+                console.log('[StudentContext] 마이그레이션 완료:', group.name);
+              } catch (err) {
+                console.error('[StudentContext] 마이그레이션 실패:', group.name, err);
+              }
+            }
+            console.log('[StudentContext] 마이그레이션 완료');
           }
         }
-        console.log('[StudentContext] 마이그레이션 완료');
       }
     } catch (error) {
       console.error('[StudentContext] Firestore 동기화 실패:', error);
     }
-  }, [classGroups]);
+  }, []);
 
   // 학급 그룹 추가
   const addClassGroup = useCallback((name: string, classIds: string[]): ClassGroup => {
