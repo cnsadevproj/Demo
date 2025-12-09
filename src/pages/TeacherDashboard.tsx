@@ -861,6 +861,8 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [isCreatingGame, setIsCreatingGame] = useState(false);
   const [showBaseballAnswer, setShowBaseballAnswer] = useState(false); // 정답 표시 토글
   const [expandedGame, setExpandedGame] = useState<string | null>(null); // 펼쳐진 게임
+  const [showCookieBattleHelp, setShowCookieBattleHelp] = useState(false); // 쿠키배틀 도움말
+  const [cookieBattleHelpPage, setCookieBattleHelpPage] = useState(0); // 도움말 페이지
 
   // 소수결게임 상태
   interface MinorityGame {
@@ -5119,7 +5121,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     <h3 className="font-bold text-red-800">⚔️ 쿠키배틀 설정</h3>
                     <div className="flex items-center gap-2">
                       <Button
-                        onClick={() => window.open('https://peach-session-2c6.notion.site/1662dd2f774580cfb76dc19b4ffec9ab', '_blank')}
+                        onClick={() => { setShowCookieBattleHelp(true); setCookieBattleHelpPage(0); }}
                         variant="outline"
                         size="sm"
                         className="text-red-600 border-red-300 hover:bg-red-50"
@@ -6782,6 +6784,210 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
         onClose={() => setShowGrassFieldModal(false)}
         classesData={grassFieldData}
       />
+
+      {/* 쿠키배틀 도움말 모달 */}
+      {showCookieBattleHelp && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-stone-800 rounded-2xl max-w-md w-full max-h-[85dvh] overflow-hidden border border-amber-600/30">
+            {/* 헤더 */}
+            <div className="p-4 border-b border-stone-700 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-amber-400">📖 쿠키배틀 게임 방법</h2>
+              <button
+                onClick={() => { setShowCookieBattleHelp(false); setCookieBattleHelpPage(0); }}
+                className="text-stone-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 페이지 인디케이터 */}
+            <div className="flex justify-center gap-2 py-3 bg-stone-900/50">
+              {[0, 1, 2, 3].map(i => (
+                <button
+                  key={i}
+                  onClick={() => setCookieBattleHelpPage(i)}
+                  className={`w-3 h-3 rounded-full transition-all ${
+                    cookieBattleHelpPage === i ? 'bg-amber-400 scale-125' : 'bg-stone-600 hover:bg-stone-500'
+                  }`}
+                />
+              ))}
+            </div>
+
+            {/* 컨텐츠 */}
+            <div className="p-6 overflow-y-auto max-h-[50dvh]">
+              {/* 페이지 1: 게임 소개 */}
+              {cookieBattleHelpPage === 0 && (
+                <div className="space-y-4 text-stone-300">
+                  <div className="text-center mb-6">
+                    <span className="text-5xl">🏰</span>
+                    <h3 className="text-2xl font-bold text-amber-400 mt-2">쿠키 배틀</h3>
+                    <p className="text-stone-400 mt-1">팀 대전 전략 게임</p>
+                  </div>
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-amber-400 mb-2">🎯 게임 목표</h3>
+                    <p className="text-sm">
+                      팀의 쿠키를 지키면서 다른 팀의 쿠키를 빼앗으세요!<br/>
+                      쿠키가 0이 되면 탈락, 마지막까지 살아남은 팀이 승리합니다.
+                    </p>
+                  </div>
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-amber-400 mb-2">👑 대표자 역할</h3>
+                    <p className="text-sm">
+                      각 팀의 대표자가 배팅과 공격 대상을 결정합니다.<br/>
+                      팀원은 대표자의 선택을 지켜볼 수 있습니다.
+                    </p>
+                  </div>
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-amber-400 mb-2">🔄 게임 흐름</h3>
+                    <div className="text-sm space-y-1">
+                      <p>1️⃣ <span className="text-blue-400">배팅 단계</span> - 공격/수비 쿠키 배분</p>
+                      <p>2️⃣ <span className="text-purple-400">대상 선택</span> - 공격할 팀 선택</p>
+                      <p>3️⃣ <span className="text-red-400">전투</span> - 자동 계산</p>
+                      <p>4️⃣ <span className="text-green-400">결과</span> - 승패 확인</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 페이지 2: 배팅 시스템 */}
+              {cookieBattleHelpPage === 1 && (
+                <div className="space-y-4 text-stone-300">
+                  <div className="text-center mb-4">
+                    <span className="text-4xl">💰</span>
+                    <h3 className="text-xl font-bold text-amber-400 mt-2">배팅 시스템</h3>
+                  </div>
+                  <div className="bg-red-900/30 rounded-xl p-4 border border-red-600/30">
+                    <h3 className="font-bold text-red-400 mb-2">⚔️ 공격 배팅</h3>
+                    <p className="text-sm">
+                      다른 팀을 공격할 때 사용합니다.<br/>
+                      <span className="text-amber-300">공격 &gt; 수비</span>일 때 공격이 성공합니다!
+                    </p>
+                  </div>
+                  <div className="bg-blue-900/30 rounded-xl p-4 border border-blue-600/30">
+                    <h3 className="font-bold text-blue-400 mb-2">🛡️ 수비 배팅</h3>
+                    <p className="text-sm">
+                      다른 팀의 공격을 방어할 때 사용합니다.<br/>
+                      <span className="text-amber-300">수비 ≥ 공격</span>일 때 방어가 성공합니다!
+                    </p>
+                  </div>
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-green-400 mb-2">💡 배팅 규칙</h3>
+                    <ul className="text-sm space-y-1">
+                      <li>• 공격 + 수비 합계 ≤ 보유 쿠키</li>
+                      <li>• 공격 0 = 수비에만 집중</li>
+                      <li>• 수비 0 = 공격에 올인 (위험!)</li>
+                      <li>• 배팅 후에는 변경 불가!</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {/* 페이지 3: 점수 계산 */}
+              {cookieBattleHelpPage === 2 && (
+                <div className="space-y-4 text-stone-300">
+                  <div className="text-center mb-4">
+                    <span className="text-4xl">📊</span>
+                    <h3 className="text-xl font-bold text-amber-400 mt-2">점수 계산</h3>
+                  </div>
+                  <div className="bg-red-900/30 rounded-xl p-4 border border-red-600/30">
+                    <h3 className="font-bold text-red-400 mb-2">⚔️ 공격 승리 (공격 &gt; 수비)</h3>
+                    <div className="text-sm space-y-1">
+                      <p><span className="text-red-300">공격팀:</span> +(공격-수비) 차이만큼 획득</p>
+                      <p><span className="text-blue-300">방어팀:</span> +50% 환불 - 차이만큼 손실</p>
+                    </div>
+                    <div className="mt-2 p-2 bg-black/30 rounded text-xs">
+                      예) 공격 30, 수비 20 → 공격팀 +10, 방어팀 -20
+                    </div>
+                  </div>
+                  <div className="bg-blue-900/30 rounded-xl p-4 border border-blue-600/30">
+                    <h3 className="font-bold text-blue-400 mb-2">🛡️ 방어 승리 (공격 &lt; 수비)</h3>
+                    <div className="text-sm space-y-1">
+                      <p><span className="text-red-300">공격팀:</span> -배팅 전액 손실</p>
+                      <p><span className="text-blue-300">방어팀:</span> +10 보너스!</p>
+                    </div>
+                    <div className="mt-2 p-2 bg-black/30 rounded text-xs">
+                      예) 공격 20, 수비 30 → 공격팀 -20, 방어팀 +10
+                    </div>
+                  </div>
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-stone-400 mb-2">⚖️ 동점 / 공격 안 받음</h3>
+                    <div className="text-sm space-y-1">
+                      <p>• 동점: 양팀 모두 배팅의 30% 손실</p>
+                      <p>• 공격 안 받음: 수비 배팅의 80% 환불</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 페이지 4: 전략 팁 */}
+              {cookieBattleHelpPage === 3 && (
+                <div className="space-y-4 text-stone-300">
+                  <div className="text-center mb-4">
+                    <span className="text-4xl">💡</span>
+                    <h3 className="text-xl font-bold text-amber-400 mt-2">전략 팁</h3>
+                  </div>
+                  <div className="bg-stone-700/50 rounded-xl p-4">
+                    <h3 className="font-bold text-green-400 mb-2">✅ 좋은 전략</h3>
+                    <ul className="text-sm space-y-2">
+                      <li>• 상대 팀의 쿠키 수를 파악하세요</li>
+                      <li>• 수비를 확실히 해두면 공격 실패 시 보너스!</li>
+                      <li>• 공격 안 받으면 80% 환불받아요</li>
+                      <li>• 동점은 양팀 손해! 차이를 만드세요</li>
+                    </ul>
+                  </div>
+                  <div className="bg-red-900/30 rounded-xl p-4 border border-red-600/30">
+                    <h3 className="font-bold text-red-400 mb-2">❌ 주의사항</h3>
+                    <ul className="text-sm space-y-2">
+                      <li>• 수비 없이 올인 공격은 위험해요!</li>
+                      <li>• 동점 노리기보다 확실한 승패를!</li>
+                      <li>• 쿠키 0이 되면 바로 탈락!</li>
+                    </ul>
+                  </div>
+                  <div className="bg-amber-900/30 rounded-xl p-4 border border-amber-600/30">
+                    <h3 className="font-bold text-amber-400 mb-2">🏆 승리 조건</h3>
+                    <p className="text-sm">
+                      마지막까지 살아남은 팀이 승리!<br/>
+                      쿠키를 잘 지키면서 상대를 공격하세요!
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 하단 버튼 */}
+            <div className="p-4 border-t border-stone-700 flex gap-2">
+              <button
+                onClick={() => { setShowCookieBattleHelp(false); setCookieBattleHelpPage(0); }}
+                className="py-3 px-4 bg-stone-600 text-white font-bold rounded-xl hover:bg-stone-500 transition-colors"
+              >
+                닫기
+              </button>
+              <button
+                onClick={() => setCookieBattleHelpPage(Math.max(0, cookieBattleHelpPage - 1))}
+                disabled={cookieBattleHelpPage === 0}
+                className="flex-1 py-3 bg-stone-700 text-white font-bold rounded-xl hover:bg-stone-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                ← 이전
+              </button>
+              {cookieBattleHelpPage < 3 ? (
+                <button
+                  onClick={() => setCookieBattleHelpPage(cookieBattleHelpPage + 1)}
+                  className="flex-1 py-3 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-colors"
+                >
+                  다음 →
+                </button>
+              ) : (
+                <button
+                  onClick={() => { setShowCookieBattleHelp(false); setCookieBattleHelpPage(0); }}
+                  className="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-colors"
+                >
+                  ✓ 이해했어요!
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

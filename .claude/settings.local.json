@@ -31,7 +31,10 @@
       "Bash(firebase hosting:releases:*)",
       "Bash(git merge:*)",
       "Bash(git log:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(python collect_standards.py:*)",
+      "Bash(python:*)",
+      "Bash(firebase:*)"
     ],
     "deny": [],
     "ask": []
