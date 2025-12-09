@@ -4462,7 +4462,8 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 <CardTitle>🎯 게임 활성화 관리</CardTitle>
                 <CardDescription>학생들에게 공개할 게임을 선택하세요. 비활성화된 게임은 학생 화면에서 숨겨집니다.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* 숫자야구 - 활성화됨! */}
                 <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-violet-50 border-2 border-purple-300">
                   <div className="flex items-center justify-between mb-3">
@@ -5109,38 +5110,6 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   )}
                 </div>
 
-                {/* 스피드 퀴즈 */}
-                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200">
-                  <div className="flex items-center gap-4">
-                    <span className="text-3xl">⚡</span>
-                    <div>
-                      <h3 className="font-bold text-yellow-800">스피드 퀴즈</h3>
-                      <p className="text-xs text-yellow-600">빠르게 정답을 맞춰라!</p>
-                      <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400">준비중</span>
-                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
-                  </div>
-                </div>
-
-                {/* 홀짝 게임 */}
-                <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
-                  <div className="flex items-center gap-4">
-                    <span className="text-3xl">🎲</span>
-                    <div>
-                      <h3 className="font-bold text-blue-800">홀짝 게임</h3>
-                      <p className="text-xs text-blue-600">운을 시험해보세요!</p>
-                      <span className="inline-block mt-1 bg-green-100 text-green-600 px-2 py-0.5 rounded text-xs">개인전</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400">준비중</span>
-                    <div className="w-12 h-6 bg-gray-200 rounded-full opacity-50 cursor-not-allowed" />
-                  </div>
-                </div>
-
                 {/* 끝말잇기 */}
                 <div className="p-4 rounded-xl bg-gradient-to-r from-green-50 to-teal-50 border-2 border-green-300">
                   <div className="flex items-center justify-between mb-3">
@@ -5310,6 +5279,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     </div>
                   )}
                 </div>
+              </div>
               </CardContent>
             </Card>
 
