@@ -32,6 +32,10 @@
       "Bash(git merge:*)",
       "Bash(git log:*)",
       "Bash(npm run dev:*)",
+      "Bash(node addGrass.js:*)",
+      "Bash(git branch:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs:*)"
       "Bash(python collect_standards.py:*)",
       "Bash(python:*)",
       "Bash(firebase:*)",

@@ -58,15 +58,15 @@ export function FeedbackModal({ isOpen, onClose, userType, userName, userCode }:
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-2xl shadow-xl max-w-md w-full my-auto flex flex-col max-h-[calc(100vh-2rem)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}
-        <div className="p-4 border-b flex items-center justify-between bg-gradient-to-r from-indigo-500 to-purple-500 rounded-t-2xl">
+        <div className="p-4 border-b flex items-center justify-between bg-gradient-to-r from-indigo-500 to-purple-500 rounded-t-2xl flex-shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-2xl">💬</span>
             <h2 className="text-lg font-bold text-white">To 개발자</h2>
@@ -80,13 +80,13 @@ export function FeedbackModal({ isOpen, onClose, userType, userName, userCode }:
         </div>
 
         {submitted ? (
-          <div className="p-8 text-center">
+          <div className="p-8 text-center overflow-y-auto flex-1 min-h-0">
             <div className="text-6xl mb-4">✅</div>
             <h3 className="text-xl font-bold text-gray-800 mb-2">제출 완료!</h3>
             <p className="text-gray-600">소중한 의견 감사합니다.</p>
           </div>
         ) : (
-          <div className="p-4">
+          <div className="p-4 overflow-y-auto flex-1 min-h-0">
             {/* 타입 토글 */}
             <div className="flex gap-2 mb-4">
               <button
