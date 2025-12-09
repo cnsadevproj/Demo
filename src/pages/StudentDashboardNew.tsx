@@ -287,8 +287,8 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
         entryFeePaid: 0 // 더 이상 참가비 없음
       });
 
-      // 새 탭으로 게임 열기
-      const gameUrl = `${window.location.origin}?game=baseball&gameId=${activeBaseballGame.id}&studentCode=${student.code}&studentName=${encodeURIComponent(currentStudent.name)}`;
+      // 새 탭으로 게임 열기 (모든 파라미터 인코딩)
+      const gameUrl = `${window.location.origin}?game=baseball&gameId=${encodeURIComponent(activeBaseballGame.id)}&studentCode=${encodeURIComponent(student.code)}&studentName=${encodeURIComponent(currentStudent.name)}`;
       window.open(gameUrl, '_blank');
 
       toast.success('게임에 참가했습니다! 새 창을 확인하세요.');

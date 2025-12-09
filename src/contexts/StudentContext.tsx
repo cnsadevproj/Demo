@@ -66,32 +66,40 @@ interface StudentContextType {
 const StudentContext = createContext<StudentContextType | null>(null);
 
 export function StudentProvider({ children }: { children: React.ReactNode }) {
+  // 안전한 JSON 파싱 헬퍼 함수
+  const safeJsonParse = <T,>(key: string, defaultValue: T): T => {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (error) {
+      console.error(`[StudentContext] localStorage 파싱 오류 (${key}):`, error);
+      // 손상된 데이터 제거
+      localStorage.removeItem(key);
+    }
+    return defaultValue;
+  };
+
   // 프로필 상태
   const [profiles, setProfiles] = useState<Map<string, StudentProfile>>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.PROFILES);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return new Map(Object.entries(parsed));
-    }
-    return new Map();
+    const parsed = safeJsonParse<Record<string, StudentProfile>>(STORAGE_KEYS.PROFILES, {});
+    return new Map(Object.entries(parsed));
   });
 
   // 소원 상태
   const [wishes, setWishes] = useState<Wish[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.WISHES);
-    return saved ? JSON.parse(saved) : [];
+    return safeJsonParse<Wish[]>(STORAGE_KEYS.WISHES, []);
   });
 
   // 출석 상태
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.ATTENDANCE);
-    return saved ? JSON.parse(saved) : [];
+    return safeJsonParse<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCE, []);
   });
 
   // 학급 그룹 상태
   const [classGroups, setClassGroups] = useState<ClassGroup[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.CLASS_GROUPS);
-    return saved ? JSON.parse(saved) : [];
+    return safeJsonParse<ClassGroup[]>(STORAGE_KEYS.CLASS_GROUPS, []);
   });
 
   // 로컬 스토리지 동기화

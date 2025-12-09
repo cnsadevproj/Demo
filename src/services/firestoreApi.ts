@@ -461,6 +461,8 @@ export async function checkTodayWish(
 }
 
 // 소원 추가 (하루 1개 제한)
+const MAX_WISH_LENGTH = 100; // 최대 소원 글자 수
+
 export async function addWish(
   teacherId: string,
   classId: string,
@@ -468,6 +470,15 @@ export async function addWish(
   studentName: string,
   content: string
 ): Promise<{ success: boolean; wishId?: string; error?: string }> {
+  // 입력 검증
+  if (!content || content.trim().length === 0) {
+    return { success: false, error: '소원 내용을 입력해주세요.' };
+  }
+
+  if (content.length > MAX_WISH_LENGTH) {
+    return { success: false, error: `소원은 ${MAX_WISH_LENGTH}자 이내로 작성해주세요.` };
+  }
+
   // 오늘 이미 소원을 작성했는지 확인
   const alreadyWrote = await checkTodayWish(teacherId, classId, studentCode);
   if (alreadyWrote) {
@@ -483,7 +494,7 @@ export async function addWish(
     classId,
     studentCode,
     studentName,
-    content,
+    content: content.trim().slice(0, MAX_WISH_LENGTH), // 안전하게 자르기
     createdAt: serverTimestamp(),
     likes: [],
     isGranted: false,
@@ -1055,9 +1066,11 @@ export async function saveProfile(
 
 // 한국 시간 기준 날짜 문자열 생성 (YYYY-MM-DD)
 function getKoreanDateString(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  // 한국 시간대(UTC+9)로 변환
+  const koreaTime = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+  const year = koreaTime.getFullYear();
+  const month = String(koreaTime.getMonth() + 1).padStart(2, '0');
+  const day = String(koreaTime.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
@@ -1258,13 +1271,17 @@ export async function fetchClassroomsFromDahandin(apiKey: string): Promise<Array
       headers: { 'X-API-Key': apiKey }
     }
   );
-  
+
+  if (!response.ok) {
+    throw new Error(`API 요청 실패: ${response.status} ${response.statusText}`);
+  }
+
   const data = await response.json();
-  
+
   if (data.result && data.data) {
     return data.data;
   }
-  
+
   throw new Error(data.message || '학급 목록을 가져올 수 없습니다.');
 }
 
@@ -1285,6 +1302,10 @@ export async function fetchStudentFromDahandin(
       headers: { 'X-API-Key': apiKey }
     }
   );
+
+  if (!response.ok) {
+    throw new Error(`API 요청 실패: ${response.status} ${response.statusText}`);
+  }
 
   const data = await response.json();
 
