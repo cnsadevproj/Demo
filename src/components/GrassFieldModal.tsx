@@ -1,18 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import * as echarts from 'echarts';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-
-// 잔디 이미지 (녹색 잔디)
-const grassDataURI = 'data:image/svg+xml;base64,' + btoa(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 40">
-  <path d="M15 40 Q10 30 8 20 Q6 10 15 0 Q24 10 22 20 Q20 30 15 40" fill="#22c55e"/>
-  <path d="M5 40 Q3 32 5 25 Q7 18 12 12" stroke="#16a34a" stroke-width="2" fill="none"/>
-  <path d="M25 40 Q27 32 25 25 Q23 18 18 12" stroke="#16a34a" stroke-width="2" fill="none"/>
-</svg>
-`);
 
 interface ClassGrassData {
   classId: string;
@@ -31,10 +21,6 @@ const GrassFieldModal: React.FC<GrassFieldModalProps> = ({
   onClose,
   classesData
 }) => {
-  const chartRef = useRef<HTMLDivElement>(null);
-  const chartInstance = useRef<echarts.ECharts | null>(null);
-  const animationRef = useRef<NodeJS.Timeout | null>(null);
-
   // 시작 날짜 (기본: 2주 전)
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
@@ -44,7 +30,8 @@ const GrassFieldModal: React.FC<GrassFieldModalProps> = ({
 
   const [currentDate, setCurrentDate] = useState(startDate);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [speed, setSpeed] = useState(800); // 애니메이션 속도 (ms)
+  const [speed, setSpeed] = useState(800);
+  const animationRef = useRef<NodeJS.Timeout | null>(null);
 
   // 어제 날짜 계산
   const getYesterday = () => {
@@ -54,19 +41,6 @@ const GrassFieldModal: React.FC<GrassFieldModalProps> = ({
   };
 
   const endDate = getYesterday();
-
-  // 날짜 범위 내의 모든 날짜 생성
-  const getDateRange = useCallback((start: string, end: string) => {
-    const dates: string[] = [];
-    const startD = new Date(start);
-    const endD = new Date(end);
-
-    while (startD <= endD) {
-      dates.push(startD.toISOString().split('T')[0]);
-      startD.setDate(startD.getDate() + 1);
-    }
-    return dates;
-  }, []);
 
   // 특정 날짜까지의 누적 잔디 수 계산
   const getCumulativeGrass = useCallback((classData: ClassGrassData, upToDate: string) => {
@@ -80,111 +54,6 @@ const GrassFieldModal: React.FC<GrassFieldModalProps> = ({
     }
     return total;
   }, [startDate]);
-
-  // 차트 초기화 및 업데이트
-  const updateChart = useCallback((displayDate: string) => {
-    if (!chartRef.current || classesData.length === 0) return;
-
-    if (!chartInstance.current) {
-      chartInstance.current = echarts.init(chartRef.current);
-    }
-
-    const lineCount = 8; // 잔디 줄 수
-
-    // 반별 데이터 생성
-    const seriesData = classesData.map((classData, idx) => {
-      const cumulativeGrass = getCumulativeGrass(classData, displayDate);
-      const grassPerLine = Math.ceil(cumulativeGrass / lineCount);
-
-      const data = [];
-      for (let i = 0; i < lineCount; i++) {
-        // 각 줄에 분배할 잔디 수 계산
-        const remainingGrass = Math.max(0, cumulativeGrass - (i * grassPerLine));
-        const lineGrass = Math.min(grassPerLine, remainingGrass);
-
-        const sign = idx % 2 === 0 ? 1 : -1;
-        const offset = idx * 15; // 반별 간격
-
-        data.push({
-          value: sign * lineGrass + (sign * offset),
-          symbolOffset: i % 2 ? ['50%', 0] : undefined
-        });
-      }
-      return data;
-    });
-
-    // 반 이름 카테고리
-    const categoryData = [];
-    for (let i = 0; i < lineCount; i++) {
-      categoryData.push(i + 'a');
-    }
-
-    // 색상 배열
-    const colors = ['#22c55e', '#16a34a', '#15803d', '#14532d', '#86efac', '#4ade80'];
-
-    const option: echarts.EChartsOption = {
-      backgroundColor: '#f0fdf4',
-      title: {
-        text: displayDate,
-        left: 'center',
-        top: 20,
-        textStyle: {
-          color: '#166534',
-          fontSize: 24,
-          fontWeight: 'bold'
-        }
-      },
-      tooltip: {
-        trigger: 'item',
-        formatter: (params: unknown) => {
-          const p = params as { seriesIndex: number };
-          const classData = classesData[p.seriesIndex];
-          const total = getCumulativeGrass(classData, displayDate);
-          return `${classData.className}: ${total}개 잔디`;
-        }
-      },
-      legend: {
-        data: classesData.map(c => c.className),
-        bottom: 10,
-        textStyle: { color: '#166534' }
-      },
-      xAxis: {
-        axisLine: { show: false },
-        axisLabel: { show: false },
-        axisTick: { show: false },
-        splitLine: { show: false },
-        min: -500,
-        max: 500
-      },
-      yAxis: {
-        data: categoryData,
-        show: false
-      },
-      grid: {
-        top: 80,
-        bottom: 60,
-        left: 50,
-        right: 50
-      },
-      series: classesData.map((classData, idx) => ({
-        name: classData.className,
-        type: 'pictorialBar',
-        symbol: 'image://' + grassDataURI,
-        symbolSize: [20, 35],
-        symbolRepeat: true,
-        symbolClip: true,
-        data: seriesData[idx],
-        animationEasing: 'elasticOut',
-        animationDuration: 500,
-        itemStyle: {
-          opacity: 0.9
-        },
-        z: idx
-      }))
-    };
-
-    chartInstance.current.setOption(option);
-  }, [classesData, getCumulativeGrass]);
 
   // 애니메이션 시작/정지
   const togglePlay = useCallback(() => {
@@ -211,11 +80,10 @@ const GrassFieldModal: React.FC<GrassFieldModalProps> = ({
 
         const dateStr = current.toISOString().split('T')[0];
         setCurrentDate(dateStr);
-        updateChart(dateStr);
         current.setDate(current.getDate() + 1);
       }, speed);
     }
-  }, [isPlaying, startDate, endDate, speed, updateChart]);
+  }, [isPlaying, startDate, endDate, speed]);
 
   // 처음으로 리셋
   const handleReset = useCallback(() => {
@@ -225,41 +93,12 @@ const GrassFieldModal: React.FC<GrassFieldModalProps> = ({
     }
     setIsPlaying(false);
     setCurrentDate(startDate);
-    updateChart(startDate);
-  }, [startDate, updateChart]);
-
-  // 모달이 열릴 때 차트 초기화
-  useEffect(() => {
-    if (isOpen && classesData.length > 0) {
-      setTimeout(() => {
-        updateChart(currentDate);
-      }, 100);
-    }
-
-    return () => {
-      if (animationRef.current) {
-        clearInterval(animationRef.current);
-      }
-    };
-  }, [isOpen, classesData]);
+  }, [startDate]);
 
   // 시작 날짜 변경 시
   useEffect(() => {
     setCurrentDate(startDate);
-    if (isOpen) {
-      updateChart(startDate);
-    }
   }, [startDate]);
-
-  // 창 크기 변경 시 차트 리사이즈
-  useEffect(() => {
-    const handleResize = () => {
-      chartInstance.current?.resize();
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   // 모달 닫힐 때 정리
   const handleClose = () => {
@@ -268,11 +107,24 @@ const GrassFieldModal: React.FC<GrassFieldModalProps> = ({
       animationRef.current = null;
     }
     setIsPlaying(false);
-    if (chartInstance.current) {
-      chartInstance.current.dispose();
-      chartInstance.current = null;
-    }
     onClose();
+  };
+
+  // cleanup
+  useEffect(() => {
+    return () => {
+      if (animationRef.current) {
+        clearInterval(animationRef.current);
+      }
+    };
+  }, []);
+
+  // 반별 현재 잔디 수 계산
+  const getCurrentTotals = () => {
+    return classesData.map(c => ({
+      className: c.className,
+      total: getCumulativeGrass(c, currentDate)
+    })).sort((a, b) => b.total - a.total);
   };
 
   // 반별 최종 합계 계산
@@ -283,13 +135,21 @@ const GrassFieldModal: React.FC<GrassFieldModalProps> = ({
     })).sort((a, b) => b.total - a.total);
   };
 
+  // 최대값 (프로그레스바 계산용)
+  const maxTotal = Math.max(...getCurrentTotals().map(t => t.total), 1);
+
+  if (!isOpen) return null;
+
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
             🌱 반별 잔디밭 비교
           </DialogTitle>
+          <DialogDescription>
+            시작 날짜부터 어제까지 반별 잔디 성장을 비교합니다.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -347,11 +207,35 @@ const GrassFieldModal: React.FC<GrassFieldModalProps> = ({
             </span>
           </div>
 
-          {/* 차트 영역 */}
-          <div
-            ref={chartRef}
-            className="w-full h-[400px] border rounded-lg bg-gradient-to-b from-green-50 to-green-100"
-          />
+          {/* 잔디밭 비교 (프로그레스바 형태) */}
+          <div className="space-y-3 p-4 bg-gradient-to-b from-green-50 to-green-100 rounded-lg min-h-[300px]">
+            <h3 className="font-semibold text-green-800 text-center mb-4">
+              📊 {currentDate} 기준 누적 잔디
+            </h3>
+            {getCurrentTotals().map((item, idx) => (
+              <div key={item.className} className="flex items-center gap-3">
+                <div className="w-20 text-sm font-medium text-right">
+                  {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`}
+                  {' '}{item.className}
+                </div>
+                <div className="flex-1 bg-gray-200 rounded-full h-8 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full transition-all duration-300 flex items-center justify-end pr-2"
+                    style={{ width: `${Math.max((item.total / maxTotal) * 100, 5)}%` }}
+                  >
+                    <span className="text-white text-sm font-bold drop-shadow">
+                      {item.total}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {classesData.length === 0 && (
+              <div className="text-center text-gray-500 py-8">
+                비교할 학급 데이터가 없습니다.
+              </div>
+            )}
+          </div>
 
           {/* 최종 순위 */}
           <div className="p-4 bg-green-50 rounded-lg">
@@ -368,7 +252,7 @@ const GrassFieldModal: React.FC<GrassFieldModalProps> = ({
                   }`}
                 >
                   <span className="font-medium">
-                    {idx === 0 ? '🥇' : idx === 1 ? '��' : idx === 2 ? '🥉' : `${idx + 1}.`}
+                    {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`}
                     {' '}{item.className}
                   </span>
                   <span className="ml-2 text-green-700 font-bold">{item.total}개</span>

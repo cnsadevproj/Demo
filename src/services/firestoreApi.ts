@@ -130,6 +130,7 @@ export interface Wish {
   grantedReward: number;  // deprecated - 더이상 사용하지 않음
   grantedMessage?: string; // 선정 시 교사 코멘트
   grantedAt?: Timestamp; // 선정된 시각 (24시간 후 자동 삭제용)
+  classId: string; // 소원이 속한 학급 ID
 }
 
 // 상점 아이템
@@ -537,13 +538,17 @@ export async function getWishes(
   teacherId: string,
   classId: string
 ): Promise<Wish[]> {
-  // 해당 클래스의 소원만 조회 (다른 클래스 소원 접근 차단)
   const wishesRef = collection(db, 'teachers', teacherId, 'wishes');
-  const q = query(
-    wishesRef,
-    where('classId', '==', classId)
-  );
-  const snapshot = await getDocs(q);
+
+  let snapshot;
+  if (classId) {
+    // 특정 클래스의 소원만 조회
+    const q = query(wishesRef, where('classId', '==', classId));
+    snapshot = await getDocs(q);
+  } else {
+    // classId가 빈 문자열이면 모든 소원 조회 (교사 대시보드용)
+    snapshot = await getDocs(wishesRef);
+  }
 
   // JavaScript에서 정렬 (Firestore 인덱스 없이 동작)
   const wishes = snapshot.docs.map(doc => doc.data()) as Wish[];

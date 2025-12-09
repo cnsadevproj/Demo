@@ -5,6 +5,13 @@ import {
   Wish,
   AttendanceRecord,
 } from '../types/student';
+import {
+  getClassGroups,
+  saveClassGroup,
+  deleteClassGroupFromFirestore,
+  getWishesByGroup,
+  ClassGroup as FirestoreClassGroup,
+} from '../services/firestoreApi';
 
 // 로컬 스토리지 키
 const STORAGE_KEYS = {
@@ -45,6 +52,9 @@ interface StudentContextType {
   updateClassGroup: (groupId: string, classIds: string[]) => void;
   deleteClassGroup: (groupId: string) => void;
   getGroupForClass: (classId: string) => ClassGroup | null;
+
+  // Firestore 동기화
+  syncFromFirestore: (teacherId: string) => Promise<void>;
 
   // 출석 관리
   attendance: AttendanceRecord[];
@@ -219,6 +229,43 @@ export function StudentProvider({ children }: { children: React.ReactNode }) {
     return getClassWishes(classId);
   }, [wishes, getGroupForClass, getClassWishes]);
 
+  // 현재 teacherId 저장 (Firestore 동기화용)
+  const [currentTeacherId, setCurrentTeacherId] = useState<string | null>(null);
+
+  // Firestore에서 학급 그룹 로드 (또는 localStorage -> Firestore 마이그레이션)
+  const syncFromFirestore = useCallback(async (teacherId: string) => {
+    try {
+      setCurrentTeacherId(teacherId);
+      const firestoreGroups = await getClassGroups(teacherId);
+
+      if (firestoreGroups.length > 0) {
+        // Firestore에 데이터가 있으면 로드
+        const localGroups: ClassGroup[] = firestoreGroups.map(g => ({
+          id: g.id,
+          name: g.name,
+          classIds: g.classIds,
+          createdAt: g.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        }));
+        setClassGroups(localGroups);
+        console.log('[StudentContext] Firestore에서 학급 그룹 로드:', localGroups.length);
+      } else if (classGroups.length > 0) {
+        // Firestore에 없지만 localStorage에 있으면 마이그레이션
+        console.log('[StudentContext] localStorage -> Firestore 마이그레이션 시작:', classGroups.length);
+        for (const group of classGroups) {
+          try {
+            await saveClassGroup(teacherId, group.id, group.name, group.classIds);
+            console.log('[StudentContext] 마이그레이션 완료:', group.name);
+          } catch (err) {
+            console.error('[StudentContext] 마이그레이션 실패:', group.name, err);
+          }
+        }
+        console.log('[StudentContext] 마이그레이션 완료');
+      }
+    } catch (error) {
+      console.error('[StudentContext] Firestore 동기화 실패:', error);
+    }
+  }, [classGroups]);
+
   // 학급 그룹 추가
   const addClassGroup = useCallback((name: string, classIds: string[]): ClassGroup => {
     const newGroup: ClassGroup = {
@@ -228,20 +275,44 @@ export function StudentProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
     };
     setClassGroups(prev => [...prev, newGroup]);
+
+    // Firestore에 저장
+    if (currentTeacherId) {
+      saveClassGroup(currentTeacherId, newGroup.id, name, classIds)
+        .catch(err => console.error('[StudentContext] 학급 그룹 저장 실패:', err));
+    }
+
     return newGroup;
-  }, []);
+  }, [currentTeacherId]);
 
   // 학급 그룹 수정
   const updateClassGroup = useCallback((groupId: string, classIds: string[]) => {
-    setClassGroups(prev => prev.map(group =>
-      group.id === groupId ? { ...group, classIds } : group
-    ));
-  }, []);
+    setClassGroups(prev => {
+      const updated = prev.map(group =>
+        group.id === groupId ? { ...group, classIds } : group
+      );
+      // Firestore에 저장
+      if (currentTeacherId) {
+        const group = updated.find(g => g.id === groupId);
+        if (group) {
+          saveClassGroup(currentTeacherId, groupId, group.name, classIds)
+            .catch(err => console.error('[StudentContext] 학급 그룹 수정 실패:', err));
+        }
+      }
+      return updated;
+    });
+  }, [currentTeacherId]);
 
   // 학급 그룹 삭제
   const deleteClassGroup = useCallback((groupId: string) => {
     setClassGroups(prev => prev.filter(group => group.id !== groupId));
-  }, []);
+
+    // Firestore에서 삭제
+    if (currentTeacherId) {
+      deleteClassGroupFromFirestore(currentTeacherId, groupId)
+        .catch(err => console.error('[StudentContext] 학급 그룹 삭제 실패:', err));
+    }
+  }, [currentTeacherId]);
 
   // 오늘 내 소원
   const getTodayWish = useCallback((classId: string, studentCode: string): Wish | null => {
@@ -335,6 +406,7 @@ export function StudentProvider({ children }: { children: React.ReactNode }) {
     updateClassGroup,
     deleteClassGroup,
     getGroupForClass,
+    syncFromFirestore,
     attendance,
     checkAttendance,
     isAttendedToday,

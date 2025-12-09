@@ -1422,8 +1422,8 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
             <div className="py-4 px-6">
               <div className="text-center">
                 <p className="text-amber-100 text-xs mb-1">다했니 쿠키</p>
-                <p className="text-3xl font-bold">{currentStudent.cookie} 🍪</p>
-                <p className="text-amber-100 text-xs mt-1">성찰로 획득</p>
+                <p className="text-3xl font-bold">{currentStudent.totalCookie ?? currentStudent.cookie}/{currentStudent.cookie} 🍪</p>
+                <p className="text-amber-100 text-xs mt-1">보유 / 총 획득</p>
               </div>
             </div>
           </div>
