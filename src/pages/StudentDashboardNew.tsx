@@ -3404,35 +3404,33 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
               </p>
             </div>
 
-            {/* 워드클라우드 */}
-            <Card
-              className="cursor-pointer hover:shadow-lg transition-all bg-gradient-to-r from-blue-50 to-cyan-50 border-2 border-blue-200"
-              onClick={() => setShowWordCloudModal(true)}
-            >
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-2xl flex items-center justify-center text-3xl shadow-lg">
-                      ☁️
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-blue-800 text-lg">워드클라우드</h3>
-                      <p className="text-sm text-blue-600">키워드를 입력하고 실시간 결과를 확인</p>
-                    </div>
-                  </div>
-                  <div className="px-4 py-2 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors">
-                    시작하기 →
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            {/* 도구 그리드 */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* 워드클라우드 */}
+              <button
+                onClick={() => {
+                  const wordCloudUrl = `${window.location.origin}?game=wordcloud-student&teacherId=${studentTeacherId}&classId=${student?.classId}&studentCode=${student?.code}&studentName=${encodeURIComponent(currentStudent?.name || student?.name || '')}`;
+                  window.open(wordCloudUrl, '_blank', 'width=1200,height=900');
+                }}
+                className="p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 transition-all hover:scale-[1.02] cursor-pointer"
+              >
+                <div className="text-4xl mb-2">☁️</div>
+                <h3 className="font-bold text-blue-800 text-sm">워드클라우드</h3>
+                <p className="text-xs text-blue-600 mt-1">키워드 입력</p>
+                <span className="inline-block mt-2 bg-blue-500 text-white px-2 py-0.5 rounded text-xs">참여 가능</span>
+              </button>
 
-            {/* 안내 문구 */}
-            <Card className="bg-gray-50 border-dashed">
-              <CardContent className="py-4 text-center text-gray-500 text-sm">
-                <p>🔜 더 많은 학습 도구가 곧 추가될 예정이에요!</p>
-              </CardContent>
-            </Card>
+              {/* 화이트보드 */}
+              <button
+                disabled
+                className="p-5 rounded-2xl bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 opacity-60 cursor-not-allowed transition-all"
+              >
+                <div className="text-4xl mb-2">✏️</div>
+                <h3 className="font-bold text-purple-800 text-sm">화이트보드</h3>
+                <p className="text-xs text-purple-600 mt-1">협업 그리기</p>
+                <span className="inline-block mt-2 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-xs">준비중</span>
+              </button>
+            </div>
           </div>
         )}
 

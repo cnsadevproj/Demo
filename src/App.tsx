@@ -25,6 +25,8 @@ import { CookieBattle } from './games/CookieBattle';
 import { CookieBattleTeacher } from './games/CookieBattleTeacher';
 import { WordChain } from './games/WordChain';
 import { WordChainTeacher } from './games/WordChainTeacher';
+import { TeacherWordCloud } from './components/wordcloud/TeacherWordCloud';
+import { StudentWordCloud } from './components/wordcloud/StudentWordCloud';
 
 // URL 경로 기반 라우팅
 function getRoutePath(): string {
@@ -75,6 +77,12 @@ function getRoutePath(): string {
   if (gameType === 'word-chain-teacher') {
     return 'game-word-chain-teacher';
   }
+  if (gameType === 'wordcloud-teacher') {
+    return 'game-wordcloud-teacher';
+  }
+  if (gameType === 'wordcloud-student') {
+    return 'game-wordcloud-student';
+  }
 
   return 'main';
 }
@@ -120,6 +128,20 @@ function AppContent() {
   }
   if (routePath === 'game-word-chain-teacher') {
     return <WordChainTeacher />;
+  }
+  if (routePath === 'game-wordcloud-teacher') {
+    const params = new URLSearchParams(window.location.search);
+    const teacherId = params.get('teacherId') || '';
+    const classId = params.get('classId') || '';
+    return <TeacherWordCloud teacherId={teacherId} classId={classId} />;
+  }
+  if (routePath === 'game-wordcloud-student') {
+    const params = new URLSearchParams(window.location.search);
+    const teacherId = params.get('teacherId') || '';
+    const classId = params.get('classId') || '';
+    const studentCode = params.get('studentCode') || '';
+    const studentName = decodeURIComponent(params.get('studentName') || '');
+    return <StudentWordCloud teacherId={teacherId} classId={classId} studentCode={studentCode} studentName={studentName} />;
   }
 
   // 로딩 중

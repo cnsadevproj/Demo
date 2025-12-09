@@ -194,13 +194,13 @@ const GrassFieldModal: React.FC<GrassFieldModalProps> = ({
       />
 
       {/* 모달 */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto">
         <div
-          className="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+          className="bg-white rounded-lg shadow-2xl w-full max-w-3xl my-auto flex flex-col max-h-[calc(100vh-2rem)]"
           onClick={(e) => e.stopPropagation()}
         >
           {/* 헤더 */}
-          <div className="flex items-center justify-between p-6 border-b">
+          <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
             <div>
               <h2 className="text-xl font-semibold flex items-center gap-2">
                 🌱 반별 잔디밭 비교
@@ -218,7 +218,7 @@ const GrassFieldModal: React.FC<GrassFieldModalProps> = ({
           </div>
 
           {/* 본문 */}
-          <div className="p-6 space-y-4">
+          <div className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
             {/* 날짜 설정 */}
             <div className="flex flex-wrap items-end gap-4 p-4 bg-green-50 rounded-lg">
               <div className="flex flex-col gap-1">
