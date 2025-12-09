@@ -6406,26 +6406,27 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       <button
                         key={student.code}
                         onClick={() => {
-                          if (isInOtherTeam) return;
                           if (isMarkedForAdd) {
                             setMembersToAdd(prev => prev.filter(c => c !== student.code));
                           } else {
+                            if (isInOtherTeam) {
+                              if (!confirm(`${student.name}은(는) ${otherTeam?.flag} ${otherTeam?.teamName}에 속해있습니다.\n이 팀으로 이동시키겠습니까?`)) return;
+                            }
                             setMembersToAdd(prev => [...prev, student.code]);
                           }
                         }}
-                        disabled={isInOtherTeam}
                         className={`px-2 py-1 rounded text-xs flex items-center gap-1 transition-all ${
-                          isInOtherTeam
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            : isMarkedForAdd
+                          isMarkedForAdd
                             ? 'bg-green-500 text-white'
+                            : isInOtherTeam
+                            ? 'bg-orange-100 border border-orange-300 hover:bg-orange-200 text-orange-700'
                             : 'bg-white border border-green-200 hover:bg-green-100'
                         }`}
-                        title={isInOtherTeam ? `${otherTeam?.flag} ${otherTeam?.teamName} 소속` : ''}
+                        title={isInOtherTeam ? `${otherTeam?.flag} ${otherTeam?.teamName} 소속 - 클릭하면 이동` : ''}
                       >
                         <span>{getEmojiFromCode(student.profile.emojiCode) || '👤'}</span>
                         <span>{student.name}</span>
-                        {isInOtherTeam && <span className="text-[10px]">({otherTeam?.flag})</span>}
+                        {isInOtherTeam && <span className="text-[10px]">({otherTeam?.flag}→)</span>}
                       </button>
                     );
                   })}
@@ -6464,8 +6465,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       for (const code of membersToRemove) {
                         await removeTeamMember(user.uid, selectedClass, teamForMemberModal, code);
                       }
-                      // 멤버 추가
+                      // 멤버 추가 (다른 팀에 있는 경우 먼저 제거)
                       for (const code of membersToAdd) {
+                        const otherTeam = teams.find(t => t.teamId !== teamForMemberModal && t.members.includes(code));
+                        if (otherTeam) {
+                          await removeTeamMember(user.uid, selectedClass, otherTeam.teamId, code);
+                        }
                         await addTeamMember(user.uid, selectedClass, teamForMemberModal, code);
                       }
                       await loadTeams();

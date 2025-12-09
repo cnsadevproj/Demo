@@ -34,7 +34,8 @@
       "Bash(npm run dev:*)",
       "Bash(python collect_standards.py:*)",
       "Bash(python:*)",
-      "Bash(firebase:*)"
+      "Bash(firebase:*)",
+      "Bash(gh pr create:*)"
     ],
     "deny": [],
     "ask": []
