@@ -4463,7 +4463,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 <CardDescription>학생들에게 공개할 게임을 선택하세요. 비활성화된 게임은 학생 화면에서 숨겨집니다.</CardDescription>
               </CardHeader>
               <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 {/* 숫자야구 - 활성화됨! */}
                 <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-violet-50 border-2 border-purple-300">
                   <div className="flex items-center justify-between mb-3">
