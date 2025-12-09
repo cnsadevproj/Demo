@@ -2047,6 +2047,13 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     setIsLoadingGrass(false);
   };
 
+  // 학급 선택 시 잔디 데이터 자동 로드
+  useEffect(() => {
+    if (selectedClass && user) {
+      loadGrassData();
+    }
+  }, [selectedClass, user]);
+
   // 잔디 데이터 초기화
   const handleResetGrass = async () => {
     if (!user || !selectedClass) return;
