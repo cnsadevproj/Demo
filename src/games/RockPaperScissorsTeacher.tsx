@@ -296,8 +296,12 @@ export function RockPaperScissorsTeacher() {
             // 승리 시 배팅금 * 배수 지급 (배팅 시 이미 차감됨)
             candyUpdates.push({ studentCode: playerDoc.id, change: candyWon });
           } else if (result === 'lose' && player.candyBet > 0) {
-            updateData.candyWon = 0;
-            // 패배 시 추가 차감 없음 (배팅 시 이미 차감됨)
+            // 패배 시 일부 환불 (1.5배 모드: 50% 손실, 1.2배 모드: 30% 손실)
+            const lossRate = gameData.gameMode === 'candy15' ? 0.5 : 0.3;
+            const actualLoss = Math.round(player.candyBet * lossRate);
+            const refund = player.candyBet - actualLoss;
+            updateData.candyWon = -actualLoss; // 음수로 손실 표시
+            candyUpdates.push({ studentCode: playerDoc.id, change: refund });
           } else if (result === 'draw' && player.candyBet > 0) {
             // 무승부 시 배팅금 반환
             updateData.candyWon = 0;
@@ -633,7 +637,7 @@ export function RockPaperScissorsTeacher() {
                         player.result === 'lose' ? 'bg-red-300 text-red-800' : 'bg-gray-200 text-gray-600'
                       }`}>
                         {player.result === 'win' ? `+${player.candyWon}` :
-                         player.result === 'lose' ? `-${player.candyBet}` : '±0'}
+                         player.result === 'lose' ? `${player.candyWon}` : '±0'}
                       </span>
                     )}
                   </div>

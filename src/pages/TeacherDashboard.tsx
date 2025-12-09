@@ -6409,20 +6409,19 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                           if (isMarkedForAdd) {
                             setMembersToAdd(prev => prev.filter(c => c !== student.code));
                           } else {
-                            if (isInOtherTeam) {
-                              if (!confirm(`${student.name}은(는) ${otherTeam?.flag} ${otherTeam?.teamName}에 속해있습니다.\n이 팀으로 이동시키겠습니까?`)) return;
-                            }
                             setMembersToAdd(prev => [...prev, student.code]);
                           }
                         }}
                         className={`px-2 py-1 rounded text-xs flex items-center gap-1 transition-all ${
                           isMarkedForAdd
-                            ? 'bg-green-500 text-white'
+                            ? isInOtherTeam
+                              ? 'bg-orange-500 text-white'
+                              : 'bg-green-500 text-white'
                             : isInOtherTeam
                             ? 'bg-orange-100 border border-orange-300 hover:bg-orange-200 text-orange-700'
                             : 'bg-white border border-green-200 hover:bg-green-100'
                         }`}
-                        title={isInOtherTeam ? `${otherTeam?.flag} ${otherTeam?.teamName} 소속 - 클릭하면 이동` : ''}
+                        title={isInOtherTeam ? `${otherTeam?.flag} ${otherTeam?.teamName}에서 이동` : ''}
                       >
                         <span>{getEmojiFromCode(student.profile.emojiCode) || '👤'}</span>
                         <span>{student.name}</span>
