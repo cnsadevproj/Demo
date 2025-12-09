@@ -576,6 +576,47 @@ export function CookieBattleTeacher() {
     }
   };
 
+  // 팀 탈락 처리
+  const eliminateTeam = async (teamId: string) => {
+    if (!gameId) return;
+
+    const team = teams.find(t => t.id === teamId);
+    if (!team) return;
+
+    if (!confirm(`정말 ${team.emoji} ${team.name}을(를) 탈락시키시겠습니까?`)) return;
+
+    try {
+      await updateDoc(doc(db, 'games', gameId, 'teams', teamId), {
+        isEliminated: true,
+        resources: 0,
+      });
+      setSelectedTeam(null);
+    } catch (error) {
+      console.error('Failed to eliminate team:', error);
+      alert('팀 탈락 처리에 실패했습니다.');
+    }
+  };
+
+  // 팀 탈락 복구
+  const reviveTeam = async (teamId: string, resources: number = 50) => {
+    if (!gameId) return;
+
+    const team = teams.find(t => t.id === teamId);
+    if (!team) return;
+
+    if (!confirm(`${team.emoji} ${team.name}을(를) 복구하시겠습니까? (${resources}🍪 지급)`)) return;
+
+    try {
+      await updateDoc(doc(db, 'games', gameId, 'teams', teamId), {
+        isEliminated: false,
+        resources: resources,
+      });
+    } catch (error) {
+      console.error('Failed to revive team:', error);
+      alert('팀 복구에 실패했습니다.');
+    }
+  };
+
   // 캔디 부여/차감
   const handleAddCandy = async (directAmount?: number) => {
     if (!gameData || !selectedStudent) return;
@@ -742,13 +783,13 @@ export function CookieBattleTeacher() {
                     {gameData.status === 'waiting' && !team.isEliminated && (
                       <div className="flex justify-center gap-1 mt-2">
                         <button
-                          onClick={() => adjustTeamResources(team.id, -10)}
+                          onClick={(e) => { e.stopPropagation(); adjustTeamResources(team.id, -10); }}
                           className="px-2 py-1 bg-red-600/50 text-red-200 rounded text-xs hover:bg-red-600"
                         >
                           -10
                         </button>
                         <button
-                          onClick={() => adjustTeamResources(team.id, 10)}
+                          onClick={(e) => { e.stopPropagation(); adjustTeamResources(team.id, 10); }}
                           className="px-2 py-1 bg-green-600/50 text-green-200 rounded text-xs hover:bg-green-600"
                         >
                           +10
@@ -1199,6 +1240,28 @@ export function CookieBattleTeacher() {
                       +10
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* 탈락/복구 버튼 */}
+              {gameData?.status === 'waiting' && (
+                <div className="mt-4 pt-4 border-t border-stone-700">
+                  <h4 className="text-stone-400 text-sm mb-2">팀 관리</h4>
+                  {selectedTeam.isEliminated ? (
+                    <button
+                      onClick={() => reviveTeam(selectedTeam.id, 50)}
+                      className="w-full py-2 bg-green-600/50 text-green-200 rounded-lg hover:bg-green-600 font-bold"
+                    >
+                      💚 팀 복구 (50🍪 지급)
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => eliminateTeam(selectedTeam.id)}
+                      className="w-full py-2 bg-red-600/50 text-red-200 rounded-lg hover:bg-red-600 font-bold"
+                    >
+                      💀 팀 탈락시키기
+                    </button>
+                  )}
                 </div>
               )}
 
