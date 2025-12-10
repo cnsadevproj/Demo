@@ -1210,6 +1210,57 @@ export function CookieBattleTeacher() {
                 })}
               </div>
 
+              {/* 배팅 정보 표시 (배팅/공격선택/결과 단계) */}
+              {gameData?.status !== 'waiting' && !selectedTeam.isEliminated && (
+                <div className="mt-4 pt-4 border-t border-stone-700">
+                  <h4 className="text-stone-400 text-sm mb-3">⚔️ 배팅 현황</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* 공격 배팅 */}
+                    <div className="bg-red-900/30 rounded-xl p-3 border border-red-600/30">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-lg">⚔️</span>
+                        <span className="text-red-400 font-bold text-sm">공격</span>
+                      </div>
+                      <p className="text-white font-bold text-xl">{selectedTeam.attackBet || 0}🍪</p>
+                      {selectedTeam.targetTeamId && (
+                        <p className="text-red-300 text-xs mt-1">
+                          → {teams.find(t => t.id === selectedTeam.targetTeamId)?.emoji} {teams.find(t => t.id === selectedTeam.targetTeamId)?.name}
+                        </p>
+                      )}
+                      {!selectedTeam.targetTeamId && selectedTeam.attackBet > 0 && (
+                        <p className="text-stone-500 text-xs mt-1">대상 미선택</p>
+                      )}
+                    </div>
+                    {/* 수비 배팅 */}
+                    <div className="bg-blue-900/30 rounded-xl p-3 border border-blue-600/30">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-lg">🛡️</span>
+                        <span className="text-blue-400 font-bold text-sm">수비</span>
+                      </div>
+                      <p className="text-white font-bold text-xl">{selectedTeam.defenseBet || 0}🍪</p>
+                    </div>
+                  </div>
+                  {/* 공격 받는 팀 표시 */}
+                  {(() => {
+                    const attackers = teams.filter(t => t.targetTeamId === selectedTeam.id && t.attackBet > 0);
+                    if (attackers.length === 0) return null;
+                    return (
+                      <div className="mt-3 p-2 bg-stone-900/50 rounded-lg">
+                        <p className="text-stone-400 text-xs mb-2">🎯 공격 받는 중</p>
+                        <div className="space-y-1">
+                          {attackers.map(attacker => (
+                            <div key={attacker.id} className="flex items-center justify-between text-sm">
+                              <span className="text-red-300">{attacker.emoji} {attacker.name}</span>
+                              <span className="text-red-400 font-bold">⚔️ {attacker.attackBet}🍪</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               {/* 대기 중일 때 재화 조정 */}
               {gameData?.status === 'waiting' && !selectedTeam.isEliminated && (
                 <div className="mt-4 pt-4 border-t border-stone-700">
@@ -1243,27 +1294,25 @@ export function CookieBattleTeacher() {
                 </div>
               )}
 
-              {/* 탈락/복구 버튼 */}
-              {gameData?.status === 'waiting' && (
-                <div className="mt-4 pt-4 border-t border-stone-700">
-                  <h4 className="text-stone-400 text-sm mb-2">팀 관리</h4>
-                  {selectedTeam.isEliminated ? (
-                    <button
-                      onClick={() => reviveTeam(selectedTeam.id, 50)}
-                      className="w-full py-2 bg-green-600/50 text-green-200 rounded-lg hover:bg-green-600 font-bold"
-                    >
-                      💚 팀 복구 (50🍪 지급)
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => eliminateTeam(selectedTeam.id)}
-                      className="w-full py-2 bg-red-600/50 text-red-200 rounded-lg hover:bg-red-600 font-bold"
-                    >
-                      💀 팀 탈락시키기
-                    </button>
-                  )}
-                </div>
-              )}
+              {/* 탈락/복구 버튼 - 모든 단계에서 가능 */}
+              <div className="mt-4 pt-4 border-t border-stone-700">
+                <h4 className="text-stone-400 text-sm mb-2">팀 관리</h4>
+                {selectedTeam.isEliminated ? (
+                  <button
+                    onClick={() => reviveTeam(selectedTeam.id, 50)}
+                    className="w-full py-2 bg-green-600/50 text-green-200 rounded-lg hover:bg-green-600 font-bold"
+                  >
+                    💚 팀 복구 (50🍪 지급)
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => eliminateTeam(selectedTeam.id)}
+                    className="w-full py-2 bg-red-600/50 text-red-200 rounded-lg hover:bg-red-600 font-bold"
+                  >
+                    💀 팀 탈락시키기
+                  </button>
+                )}
+              </div>
 
               {/* 팀별 배틀 로그 */}
               {battleLog.length > 0 && (

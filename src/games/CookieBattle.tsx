@@ -187,6 +187,11 @@ export function CookieBattle() {
       return;
     }
 
+    if (attack + defense > 200) {
+      alert('배팅 합계는 최대 200까지만 가능합니다!');
+      return;
+    }
+
     if (attack < 0 || defense < 0) {
       alert('배팅은 0 이상이어야 합니다!');
       return;
@@ -473,14 +478,17 @@ export function CookieBattle() {
 
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-stone-500">
-                      합계: {(parseInt(attackBetInput) || 0) + (parseInt(defenseBetInput) || 0)} / {myTeam.resources}
+                      합계: {(parseInt(attackBetInput) || 0) + (parseInt(defenseBetInput) || 0)} / {Math.min(myTeam.resources, 200)}
+                      <span className="text-stone-600 text-xs ml-1">(최대 200)</span>
                     </span>
                     <span className={`${
-                      (parseInt(attackBetInput) || 0) + (parseInt(defenseBetInput) || 0) > myTeam.resources
+                      (parseInt(attackBetInput) || 0) + (parseInt(defenseBetInput) || 0) > myTeam.resources ||
+                      (parseInt(attackBetInput) || 0) + (parseInt(defenseBetInput) || 0) > 200
                         ? 'text-red-400'
                         : 'text-green-400'
                     }`}>
-                      {(parseInt(attackBetInput) || 0) + (parseInt(defenseBetInput) || 0) <= myTeam.resources
+                      {(parseInt(attackBetInput) || 0) + (parseInt(defenseBetInput) || 0) <= myTeam.resources &&
+                       (parseInt(attackBetInput) || 0) + (parseInt(defenseBetInput) || 0) <= 200
                         ? '✅ 가능'
                         : '❌ 초과'}
                     </span>
@@ -490,7 +498,8 @@ export function CookieBattle() {
                     onClick={submitBetting}
                     disabled={
                       isSubmitting ||
-                      (parseInt(attackBetInput) || 0) + (parseInt(defenseBetInput) || 0) > myTeam.resources
+                      (parseInt(attackBetInput) || 0) + (parseInt(defenseBetInput) || 0) > myTeam.resources ||
+                      (parseInt(attackBetInput) || 0) + (parseInt(defenseBetInput) || 0) > 200
                     }
                     className="w-full py-3 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
