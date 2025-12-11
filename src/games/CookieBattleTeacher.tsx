@@ -750,7 +750,7 @@ export function CookieBattleTeacher() {
                   {/* 성 카드 */}
                   <div
                     onClick={() => setSelectedTeam(team)}
-                    className={`bg-gradient-to-b from-stone-700 to-stone-800 rounded-xl p-4 border-2 min-w-[140px] cursor-pointer hover:scale-105 transition-all ${
+                    className={`bg-gradient-to-b from-stone-700 to-stone-800 rounded-xl p-4 border-2 w-[130px] h-[130px] cursor-pointer hover:scale-105 transition-all flex flex-col justify-center ${
                     team.isEliminated
                       ? 'border-stone-600'
                       : team.targetTeamId
@@ -1007,7 +1007,7 @@ export function CookieBattleTeacher() {
           onClick={() => !selectedStudent && setShowSettlement(false)}
         >
           <div
-            className="bg-stone-800 rounded-2xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
+            className="bg-stone-800 rounded-2xl shadow-xl max-w-2xl w-full max-h-[70vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-stone-700 flex items-center justify-between">
@@ -1020,7 +1020,7 @@ export function CookieBattleTeacher() {
               </button>
             </div>
 
-            <div className="p-4 overflow-y-auto max-h-[60vh]">
+            <div className="p-4 overflow-y-auto max-h-[50vh]">
               {/* 팀별 학생 목록 */}
               {teams.map(team => (
                 <div key={team.id} className="mb-4">
@@ -1144,7 +1144,7 @@ export function CookieBattleTeacher() {
           onClick={() => setSelectedTeam(null)}
         >
           <div
-            className="bg-stone-800 rounded-2xl shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden"
+            className="bg-stone-800 rounded-2xl shadow-xl max-w-md w-full max-h-[70vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-stone-700 flex items-center justify-between">
@@ -1163,7 +1163,7 @@ export function CookieBattleTeacher() {
               </button>
             </div>
 
-            <div className="p-4 overflow-y-auto max-h-[60vh]">
+            <div className="p-4 overflow-y-auto max-h-[50vh]">
               {/* 팀원 목록 */}
               <h4 className="text-stone-400 text-sm mb-2">팀원</h4>
               <div className="space-y-2">
@@ -1349,7 +1349,7 @@ export function CookieBattleTeacher() {
           onClick={() => setShowBattleModal(false)}
         >
           <div
-            className="bg-stone-800 rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden"
+            className="bg-stone-800 rounded-2xl shadow-xl max-w-lg w-full max-h-[70vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-stone-700 flex items-center justify-between">
@@ -1362,7 +1362,7 @@ export function CookieBattleTeacher() {
               </button>
             </div>
 
-            <div className="p-4 overflow-y-auto max-h-[60vh]">
+            <div className="p-4 overflow-y-auto max-h-[50vh]">
               {allBattleResults[selectedBattleIndex].length === 0 ? (
                 <p className="text-center text-stone-400">이 라운드에는 전투가 없었습니다.</p>
               ) : (
@@ -1430,7 +1430,7 @@ export function CookieBattleTeacher() {
           onClick={() => setShowTeamBattleModal(false)}
         >
           <div
-            className="bg-stone-800 rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden"
+            className="bg-stone-800 rounded-2xl shadow-xl max-w-lg w-full max-h-[70vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-stone-700 flex items-center justify-between">
@@ -1445,7 +1445,7 @@ export function CookieBattleTeacher() {
               </button>
             </div>
 
-            <div className="p-4 overflow-y-auto max-h-[60vh]">
+            <div className="p-4 overflow-y-auto max-h-[50vh]">
               {(() => {
                 // 현재 라운드의 팀 관련 전투 필터링
                 const roundKey = `round_${gameData?.round}`;
