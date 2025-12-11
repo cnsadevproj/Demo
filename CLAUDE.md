@@ -131,7 +131,18 @@ Style constants in `src/types/student.ts`:
 ### Branch Policy
 - Main branch is protected → PR workflow required
 - Create feature branches from main: `feat/<feature-name>`, `fix/<bug-name>`
-- Always fetch and sync with main before starting work
+
+### Pre-Work Workflow (IMPORTANT)
+Before making any changes, Claude Code should:
+1. **Check current branch**: `git branch --show-current`
+2. **Find previous working branch**: `git branch -a --sort=-committerdate` (most recent first)
+3. **Checkout the previous branch** (or create new if needed)
+4. **Fetch and check main for new commits**: `git fetch origin && git log HEAD..origin/main --oneline`
+5. **If new commits exist on main**:
+   - Summarize what changed
+   - Sync current branch: `git merge origin/main`
+6. **Then proceed with modifications**
+7. **Commit and push to the working branch**
 
 ### Firebase Permissions (IMPORTANT)
 **Permission errors occur frequently.** When adding features, check `firestore.rules`:
