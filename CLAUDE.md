@@ -129,19 +129,9 @@ Style constants in `src/types/student.ts`:
 ## Development Guidelines
 
 ### Branch Policy
-- **Always work on `sdk.edit` branch** (or feature branches from it)
 - Main branch is protected → PR workflow required
-- Branch naming: `feat/<feature-name>`, `fix/<bug-name>`
-
-### Pre-Change Workflow
-Before making any changes:
-1. **Fetch latest**: `git fetch origin`
-2. **Check main for new commits**: `git log sdk.edit..origin/main --oneline`
-3. **If new commits exist**:
-   - Summarize what changed
-   - Sync sdk.edit: `git merge origin/main`
-4. **Then proceed with modifications**
-5. **Commit and push to sdk.edit**
+- Create feature branches from main: `feat/<feature-name>`, `fix/<bug-name>`
+- Always fetch and sync with main before starting work
 
 ### Firebase Permissions (IMPORTANT)
 **Permission errors occur frequently.** When adding features, check `firestore.rules`:
