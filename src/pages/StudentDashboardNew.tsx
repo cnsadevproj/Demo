@@ -39,7 +39,9 @@ import {
   getStudentCookieShopRequests,
   createItemSuggestion,
   getStudentItemSuggestions,
-  ItemSuggestion
+  ItemSuggestion,
+  getWordCloudSessions,
+  WordCloudSession
 } from '../services/firestoreApi';
 import { ProfilePhotoUpload } from '../components/ProfilePhotoUpload';
 import { StudentWordCloud } from '../components/wordcloud/StudentWordCloud';
@@ -90,6 +92,7 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
 
   // 워드클라우드 모달
   const [showWordCloudModal, setShowWordCloudModal] = useState(false);
+  const [hasActiveWordCloudSession, setHasActiveWordCloudSession] = useState(false);
 
   // 상점
   const [shopItems, setShopItems] = useState<ShopItem[]>([]);
@@ -618,6 +621,24 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
       loadShop(); // 상점 아이템도 초기 로드 (프로필에서 구매 물품 표시용)
     }
   }, [studentTeacherId, student]);
+
+  // 워드클라우드 세션 확인
+  useEffect(() => {
+    const checkWordCloudSession = async () => {
+      if (!studentTeacherId || !student?.classId) return;
+
+      try {
+        const sessions = await getWordCloudSessions(studentTeacherId, student.classId);
+        const hasActive = sessions.some(s => s.status === 'active');
+        setHasActiveWordCloudSession(hasActive);
+      } catch (error) {
+        console.error('Failed to check word cloud session:', error);
+        setHasActiveWordCloudSession(false);
+      }
+    };
+
+    checkWordCloudSession();
+  }, [studentTeacherId, student?.classId]);
 
   const loadData = async () => {
     if (!studentTeacherId || !student) return;
@@ -3409,15 +3430,27 @@ export function StudentDashboardNew({ onLogout }: StudentDashboardNewProps) {
               {/* 워드클라우드 */}
               <button
                 onClick={() => {
+                  if (!hasActiveWordCloudSession) return;
                   const wordCloudUrl = `${window.location.origin}?game=wordcloud-student&teacherId=${studentTeacherId}&classId=${student?.classId}&studentCode=${student?.code}&studentName=${encodeURIComponent(currentStudent?.name || student?.name || '')}`;
                   window.open(wordCloudUrl, '_blank', 'width=1200,height=900');
                 }}
-                className="p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 transition-all hover:scale-[1.02] cursor-pointer"
+                disabled={!hasActiveWordCloudSession}
+                className={`p-5 rounded-2xl border-2 transition-all ${
+                  hasActiveWordCloudSession
+                    ? 'bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200 hover:scale-[1.02] cursor-pointer'
+                    : 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed'
+                }`}
               >
                 <div className="text-4xl mb-2">☁️</div>
-                <h3 className="font-bold text-blue-800 text-sm">워드클라우드</h3>
-                <p className="text-xs text-blue-600 mt-1">키워드 입력</p>
-                <span className="inline-block mt-2 bg-blue-500 text-white px-2 py-0.5 rounded text-xs">참여 가능</span>
+                <h3 className={`font-bold text-sm ${hasActiveWordCloudSession ? 'text-blue-800' : 'text-gray-500'}`}>워드클라우드</h3>
+                <p className={`text-xs mt-1 ${hasActiveWordCloudSession ? 'text-blue-600' : 'text-gray-400'}`}>키워드 입력</p>
+                <span className={`inline-block mt-2 px-2 py-0.5 rounded text-xs ${
+                  hasActiveWordCloudSession
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-200 text-gray-500'
+                }`}>
+                  {hasActiveWordCloudSession ? '참여 가능' : '대기중'}
+                </span>
               </button>
 
               {/* 화이트보드 */}

@@ -300,10 +300,6 @@ export function StudentWordCloud({
         height: textHeight,
       });
 
-      // 랜덤 회전: 0도, -90도, +90도 중 하나 선택
-      const rotationOptions = [0, -90, 90];
-      const rotation = rotationOptions[Math.floor(Math.random() * rotationOptions.length)];
-
       return (
         <text
           key={index}
@@ -314,7 +310,6 @@ export function StudentWordCloud({
           fontWeight="bold"
           textAnchor="middle"
           dominantBaseline="middle"
-          transform={`rotate(${rotation}, ${position.x + textWidth / 2}, ${position.y + textHeight / 2})`}
           style={{
             transition: 'all 0.3s ease',
             cursor: 'default',
