@@ -120,66 +120,70 @@ async function refreshTeacherCookies(teacherId: string): Promise<{
     return { classesProcessed, studentsUpdated };
   }
 
-  // 모든 학급 가져오기
-  const classesSnap = await teacherRef.collection('classes').get();
+  // 모든 학생 가져오기 (학급별 루프 제거 - 학생의 실제 classId 사용)
+  const studentsSnap = await teacherRef.collection('students').get();
 
-  for (const classDoc of classesSnap.docs) {
-    const classId = classDoc.id;
-    classesProcessed++;
+  // 처리된 학급 ID 추적
+  const processedClassIds = new Set<string>();
 
-    // 학급의 모든 학생 가져오기
-    const studentsSnap = await teacherRef.collection('students').get();
+  for (const studentDoc of studentsSnap.docs) {
+    const student = studentDoc.data();
+    const studentCode = studentDoc.id;
+    const studentClassId = student.classId; // 학생의 실제 classId 사용
 
-    for (const studentDoc of studentsSnap.docs) {
-      const student = studentDoc.data();
-      const studentCode = studentDoc.id;
+    if (!studentClassId) {
+      console.log(`Student ${studentCode} has no classId, skipping`);
+      continue;
+    }
 
-      try {
-        // 다했니 API에서 최신 쿠키 정보 가져오기
-        const dahandinData = await fetchStudentFromDahandin(apiKey, studentCode);
+    processedClassIds.add(studentClassId);
 
-        if (dahandinData) {
-          // previousCookie가 없으면 현재 저장된 cookie 값을 사용 (첫 새로고침 시 잘못된 증가분 방지)
-          const previousCookie = student.previousCookie ?? student.cookie ?? dahandinData.cookie;
-          const lastSyncedCookie = student.lastSyncedCookie ?? student.cookie ?? 0;
-          const currentJelly = student.jelly ?? student.cookie ?? 0;
-          const cookieChange = dahandinData.cookie - previousCookie;
+    try {
+      // 다했니 API에서 최신 쿠키 정보 가져오기
+      const dahandinData = await fetchStudentFromDahandin(apiKey, studentCode);
 
-          // 캔디 동기화: 쿠키가 증가했을 때만 캔디도 증가
-          const cookieDiff = dahandinData.cookie - lastSyncedCookie;
-          let newJelly = currentJelly;
-          if (cookieDiff > 0) {
-            newJelly = currentJelly + cookieDiff;
-          }
+      if (dahandinData) {
+        // previousCookie가 없으면 현재 저장된 cookie 값을 사용 (첫 새로고침 시 잘못된 증가분 방지)
+        const previousCookie = student.previousCookie ?? student.cookie ?? dahandinData.cookie;
+        const lastSyncedCookie = student.lastSyncedCookie ?? student.cookie ?? 0;
+        const currentJelly = student.jelly ?? student.cookie ?? 0;
+        const cookieChange = dahandinData.cookie - previousCookie;
 
-          // 학생 정보 업데이트
-          await studentDoc.ref.update({
-            cookie: dahandinData.cookie,
-            usedCookie: dahandinData.usedCookie,
-            totalCookie: dahandinData.totalCookie,
-            chocoChips: dahandinData.chocoChips,
-            previousCookie: dahandinData.cookie,
-            lastSyncedCookie: dahandinData.cookie,
-            jelly: newJelly,
-            lastAutoRefresh: admin.firestore.FieldValue.serverTimestamp()
-          });
-
-          // 쿠키가 증가했으면 잔디에 기록
-          if (cookieChange > 0) {
-            await addGrassRecord(teacherId, classId, studentCode, cookieChange);
-          }
-
-          studentsUpdated++;
+        // 캔디 동기화: 쿠키가 증가했을 때만 캔디도 증가
+        const cookieDiff = dahandinData.cookie - lastSyncedCookie;
+        let newJelly = currentJelly;
+        if (cookieDiff > 0) {
+          newJelly = currentJelly + cookieDiff;
         }
 
-        // API Rate Limiting 방지를 위한 딜레이
-        await new Promise(resolve => setTimeout(resolve, 100));
-      } catch (error) {
-        console.error(`Failed to refresh student ${studentCode}:`, error);
+        // 학생 정보 업데이트
+        await studentDoc.ref.update({
+          cookie: dahandinData.cookie,
+          usedCookie: dahandinData.usedCookie,
+          totalCookie: dahandinData.totalCookie,
+          chocoChips: dahandinData.chocoChips,
+          previousCookie: dahandinData.cookie,
+          lastSyncedCookie: dahandinData.cookie,
+          jelly: newJelly,
+          lastAutoRefresh: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        // 쿠키가 증가했으면 잔디에 기록 (학생의 실제 classId 사용)
+        if (cookieChange > 0) {
+          await addGrassRecord(teacherId, studentClassId, studentCode, cookieChange);
+        }
+
+        studentsUpdated++;
       }
+
+      // API Rate Limiting 방지를 위한 딜레이
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } catch (error) {
+      console.error(`Failed to refresh student ${studentCode}:`, error);
     }
   }
 
+  classesProcessed = processedClassIds.size;
   return { classesProcessed, studentsUpdated };
 }
 
