@@ -90,16 +90,6 @@ export function TeacherWordCloud({ teacherId, classId }: TeacherWordCloudProps) 
     return () => unsubscribe();
   }, [selectedSession, teacherId, classId]);
 
-  // 전체화면 변경 감지
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
-
   const loadSessions = async () => {
     setLoading(true);
     try {
@@ -261,26 +251,15 @@ export function TeacherWordCloud({ teacherId, classId }: TeacherWordCloudProps) 
     return colors[index % colors.length];
   };
 
-  // 전체화면 토글
+  // 전체화면 토글 (팝업 창용 - CSS 기반)
   const toggleFullscreen = useCallback(() => {
-    if (!wordCloudRef.current) return;
-
-    if (!document.fullscreenElement) {
-      wordCloudRef.current.requestFullscreen()
-        .then(() => {
-          // 전체화면 진입 시 안내 토스트
-          toast.info('💡 전체화면 종료: ESC 키 또는 우측 상단 X 버튼', {
-            duration: 4000,
-          });
-        })
-        .catch((err) => {
-          console.error('Fullscreen error:', err);
-          toast.error('전체화면 전환에 실패했습니다.');
-        });
-    } else {
-      document.exitFullscreen();
+    setIsFullscreen(!isFullscreen);
+    if (!isFullscreen) {
+      toast.info('💡 전체화면 종료: 우측 상단 X 버튼 클릭', {
+        duration: 3000,
+      });
     }
-  }, []);
+  }, [isFullscreen]);
 
   // PNG로 저장
   const saveAsPNG = useCallback(() => {
@@ -412,10 +391,6 @@ export function TeacherWordCloud({ teacherId, classId }: TeacherWordCloudProps) 
         height: textHeight,
       });
 
-      // 랜덤 회전: 0도, -90도, +90도 중 하나 선택
-      const rotationOptions = [0, -90, 90];
-      const rotation = rotationOptions[Math.floor(Math.random() * rotationOptions.length)];
-
       return (
         <text
           key={index}
@@ -426,7 +401,6 @@ export function TeacherWordCloud({ teacherId, classId }: TeacherWordCloudProps) 
           fontWeight="bold"
           textAnchor="middle"
           dominantBaseline="middle"
-          transform={`rotate(${rotation}, ${position.x + textWidth / 2}, ${position.y + textHeight / 2})`}
           style={{
             transition: 'all 0.3s ease',
             cursor: 'default',
@@ -460,48 +434,38 @@ export function TeacherWordCloud({ teacherId, classId }: TeacherWordCloudProps) 
     );
   }
 
-  // 전체화면 모드 렌더링
+  // 전체화면 모드 렌더링 (팝업 창 전체를 덮음)
   if (isFullscreen) {
     return (
       <div
-        ref={wordCloudRef}
-        className={`w-full h-full relative ${darkMode ? 'bg-gray-900' : 'bg-white'}`}
+        className={`fixed inset-0 z-50 flex flex-col ${darkMode ? 'bg-gray-900' : 'bg-white'}`}
       >
-        {/* 우측 상단 고정 컨트롤 패널 */}
-        <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
-          {/* 다크모드 토글 */}
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className={`p-3 rounded-full shadow-lg hover:scale-110 transition-transform ${darkMode ? 'bg-gray-700 text-yellow-400' : 'bg-white text-gray-700 border border-gray-300'}`}
-            title="다크모드 전환"
-          >
-            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
-
-          {/* 전체화면 종료 버튼 */}
-          <button
-            onClick={toggleFullscreen}
-            className={`p-3 rounded-full shadow-lg hover:scale-110 transition-transform ${darkMode ? 'bg-red-600 text-white' : 'bg-red-500 text-white'}`}
-            title="전체화면 종료 (ESC)"
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
-
-        {/* 좌측 상단 세션 정보 (작고 투명하게) */}
-        <div className="absolute top-4 left-4 z-40">
-          <div className={`px-4 py-2 rounded-full ${darkMode ? 'bg-gray-800/80' : 'bg-white/80'} backdrop-blur-sm shadow-md`}>
-            <span className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>
-              {selectedSession?.title}
-            </span>
-            <span className={`ml-3 text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+        {/* 전체화면 헤더 */}
+        <div className={`flex items-center justify-between px-6 py-4 ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+          <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+            {selectedSession?.title}
+          </h2>
+          <div className="flex items-center gap-4">
+            <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
               {allResponses.length}명 참여
             </span>
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700 text-yellow-400' : 'bg-gray-200 text-gray-700'}`}
+            >
+              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={toggleFullscreen}
+              className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
 
-        {/* 워드클라우드 - 전체 화면 */}
-        <div ref={svgContainerRef} className="w-full h-full p-8">
+        {/* 워드클라우드 */}
+        <div ref={svgContainerRef} className="flex-1 p-8">
           {renderWordCloudSVG()}
         </div>
       </div>
@@ -619,7 +583,8 @@ export function TeacherWordCloud({ teacherId, classId }: TeacherWordCloudProps) 
         {selectedSession ? (
           <>
             {/* 워드클라우드 시각화 */}
-            <Card ref={wordCloudRef}>
+            <div ref={wordCloudRef}>
+            <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
@@ -719,17 +684,15 @@ export function TeacherWordCloud({ teacherId, classId }: TeacherWordCloudProps) 
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="flex justify-center">
-                  <div
-                    ref={svgContainerRef}
-                    className={`rounded-lg p-4 w-full ${darkMode ? 'bg-gray-900' : 'bg-gray-50'}`}
-                    style={{ maxWidth: '750px', aspectRatio: '3 / 2' }}
-                  >
-                    {renderWordCloudSVG()}
-                  </div>
+                <div
+                  ref={svgContainerRef}
+                  className={`rounded-lg p-4 min-h-[300px] ${darkMode ? 'bg-gray-900' : 'bg-gray-50'}`}
+                >
+                  {renderWordCloudSVG()}
                 </div>
               </CardContent>
             </Card>
+            </div>
 
             {/* 응답 목록 */}
             <Card>
