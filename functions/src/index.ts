@@ -109,7 +109,7 @@ async function addGrassRecord(
       records: {
         [studentCode]: { change: cookieChange, count: 1 }
       }
-    });
+    }, { merge: true });  // merge 옵션으로 기존 데이터 보존
   }
 }
 
@@ -206,7 +206,7 @@ async function refreshTeacherCookies(teacherId: string): Promise<{
 }
 
 // 6시간마다 실행되는 스케줄 함수
-// Cron: "0 *\/6 * * *" (매 6시간: 0시, 6시, 12시, 18시)
+// Cron: "0 */6 * * *" (매 6시간: 0시, 6시, 12시, 18시)
 export const scheduledCookieRefresh = functions
   .runWith({
     timeoutSeconds: 540, // 9분 (최대 허용 시간)

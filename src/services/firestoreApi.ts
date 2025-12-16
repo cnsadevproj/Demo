@@ -1127,7 +1127,7 @@ export async function addGrassRecord(
       records: {
         [studentCode]: { change: cookieChange, count: 1 }
       }
-    });
+    }, { merge: true });  // merge 옵션으로 기존 데이터 보존
   }
 }
 
@@ -1208,7 +1208,7 @@ export async function addGrassRecordForDate(
       records: {
         [studentCode]: { change: cookieChange, count: 1 }
       }
-    });
+    }, { merge: true });  // merge 옵션으로 기존 데이터 보존
   }
 }
 
@@ -2529,7 +2529,7 @@ export async function autoUseStreakFreezes(
               usedStreakFreeze: true
             }
           }
-        });
+        }, { merge: true });  // merge 옵션으로 기존 데이터 보존
       }
     }
 
