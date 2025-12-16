@@ -7,6 +7,11 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import * as nodemailer from 'nodemailer';
 
+// Type imports for explicit typing
+import { Request, Response } from 'firebase-functions/v1';
+import { EventContext } from 'firebase-functions';
+import { QueryDocumentSnapshot } from 'firebase-functions/v1/firestore';
+
 // Firebase Admin 초기화
 admin.initializeApp();
 const db = admin.firestore();
@@ -196,7 +201,7 @@ export const scheduledCookieRefresh = functions
   })
   .pubsub.schedule('0 */6 * * *')
   .timeZone('Asia/Seoul')
-  .onRun(async (context) => {
+  .onRun(async (_context: EventContext) => {
     console.log('Starting scheduled cookie refresh at', new Date().toISOString());
 
     const startTime = Date.now();
@@ -256,7 +261,7 @@ export const scheduledCookieRefresh = functions
  * HTTP 트리거 - 수동으로 쿠키 새로고침 실행 (테스트/디버깅용)
  * 사용법: https://<region>-<project-id>.cloudfunctions.net/manualCookieRefresh?teacherId=xxx
  */
-export const manualCookieRefresh = functions.https.onRequest(async (req, res) => {
+export const manualCookieRefresh = functions.https.onRequest(async (req: Request, res: Response) => {
   // CORS 헤더
   res.set('Access-Control-Allow-Origin', '*');
 
@@ -517,7 +522,7 @@ export const scheduledCookieShopEmail = functions
   })
   .pubsub.schedule('0 8 * * 4')
   .timeZone('Asia/Seoul')
-  .onRun(async (context) => {
+  .onRun(async (_context: EventContext) => {
     console.log('Starting scheduled cookie shop email at', new Date().toISOString());
 
     let totalTeachers = 0;
@@ -580,7 +585,7 @@ export const scheduledCookieShopEmail = functions
  * HTTP 트리거 - 수동으로 쿠키 상점 이메일 발송 (테스트용)
  * 사용법: https://<region>-<project-id>.cloudfunctions.net/manualCookieShopEmail?teacherId=xxx
  */
-export const manualCookieShopEmail = functions.https.onRequest(async (req, res) => {
+export const manualCookieShopEmail = functions.https.onRequest(async (req: Request, res: Response) => {
   res.set('Access-Control-Allow-Origin', '*');
 
   if (req.method === 'OPTIONS') {
@@ -649,7 +654,7 @@ const DEVELOPER_EMAIL = 'pantarei01@cnsa.hs.kr';
  */
 export const onFeedbackCreated = functions.firestore
   .document('feedback/{feedbackId}')
-  .onCreate(async (snap, context) => {
+  .onCreate(async (snap: QueryDocumentSnapshot, context: EventContext) => {
     const feedback = snap.data();
     const feedbackId = context.params.feedbackId;
 
