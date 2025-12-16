@@ -1,10 +1,11 @@
 // src/contexts/AuthContext.tsx
-// Firebase 기반 인증 컨텍스트
+// Firebase 기반 인증 컨텍스트 (Custom Token 인증 적용)
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signInWithCustomToken,
   createUserWithEmailAndPassword,
   signOut,
   updateEmail,
@@ -12,17 +13,28 @@ import {
   reauthenticateWithCredential,
   User
 } from 'firebase/auth';
-import { auth } from '../services/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { auth, functions } from '../services/firebase';
 import {
   getTeacher,
   createTeacher,
-  findStudentByCode,
+  getStudent,
   getClasses,
   updateTeacher,
   Teacher,
   Student,
   ClassInfo
 } from '../services/firestoreApi';
+
+// Cloud Function response type
+interface LoginStudentResponse {
+  success: boolean;
+  token?: string;
+  student?: Student;
+  teacherId?: string;
+  teacher?: Teacher;
+  message?: string;
+}
 
 // 사용자 역할
 export type UserRole = 'teacher' | 'student' | null;
@@ -90,54 +102,74 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [studentTeacherId, setStudentTeacherId] = useState<string | null>(null);
   const [studentTeacher, setStudentTeacher] = useState<Teacher | null>(null);
 
-  // Firebase Auth 상태 감지 (선생님)
+  // Firebase Auth 상태 감지 (선생님 + 학생)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // 선생님 로그인 상태
         setUser(firebaseUser);
-        
-        // Firestore에서 선생님 정보 가져오기
-        const teacherData = await getTeacher(firebaseUser.uid);
-        if (teacherData) {
-          setTeacher(teacherData);
-          setRole('teacher');
-          
-          // 학급 목록 가져오기
-          const classesData = await getClasses(firebaseUser.uid);
-          setClasses(classesData);
-          
-          // 저장된 선택 학급 복원
-          const savedClass = localStorage.getItem(STORAGE_KEYS.SELECTED_CLASS);
-          if (savedClass) {
-            setSelectedClass(savedClass);
-          }
-        }
-      } else {
-        // 로그아웃 상태 - 학생 로그인 확인
-        const savedRole = localStorage.getItem(STORAGE_KEYS.ROLE);
-        const savedStudentCode = localStorage.getItem(STORAGE_KEYS.STUDENT_CODE);
-        const savedTeacherId = localStorage.getItem(STORAGE_KEYS.STUDENT_TEACHER_ID);
-        
-        if (savedRole === 'student' && savedStudentCode && savedTeacherId) {
-          // 학생 세션 복원
-          const result = await findStudentByCode(savedStudentCode);
-          if (result) {
-            setStudent(result.student);
-            setStudentTeacherId(result.teacherId);
-            setStudentTeacher(result.teacher);
+
+        // Custom Token의 claims 확인하여 역할 구분
+        const tokenResult = await firebaseUser.getIdTokenResult();
+
+        if (tokenResult.claims.role === 'student') {
+          // 학생 Custom Token 로그인 상태
+          const studentCode = tokenResult.claims.studentCode as string;
+          const teacherId = tokenResult.claims.teacherId as string;
+
+          // 학생 정보 가져오기
+          const studentData = await getStudent(teacherId, studentCode);
+          if (studentData) {
+            setStudent(studentData);
+            setStudentTeacherId(teacherId);
+
+            // 교사 정보 가져오기
+            const teacherData = await getTeacher(teacherId);
+            setStudentTeacher(teacherData);
+
             setRole('student');
+
+            // 세션 저장
+            localStorage.setItem(STORAGE_KEYS.ROLE, 'student');
+            localStorage.setItem(STORAGE_KEYS.STUDENT_CODE, studentCode);
+            localStorage.setItem(STORAGE_KEYS.STUDENT_TEACHER_ID, teacherId);
           } else {
-            // 학생 정보 없음 - 로그아웃 처리
+            // 학생 정보 없음 - 로그아웃
+            await signOut(auth);
             clearStudentSession();
           }
         } else {
-          setUser(null);
-          setTeacher(null);
-          setRole(null);
+          // 선생님 로그인 상태
+          const teacherData = await getTeacher(firebaseUser.uid);
+          if (teacherData) {
+            setTeacher(teacherData);
+            setRole('teacher');
+
+            // 학급 목록 가져오기
+            const classesData = await getClasses(firebaseUser.uid);
+            setClasses(classesData);
+
+            // 저장된 선택 학급 복원
+            const savedClass = localStorage.getItem(STORAGE_KEYS.SELECTED_CLASS);
+            if (savedClass) {
+              setSelectedClass(savedClass);
+            }
+          }
         }
+      } else {
+        // 로그아웃 상태
+        setUser(null);
+        setTeacher(null);
+        setStudent(null);
+        setStudentTeacherId(null);
+        setStudentTeacher(null);
+        setRole(null);
+
+        // localStorage 정리
+        localStorage.removeItem(STORAGE_KEYS.ROLE);
+        localStorage.removeItem(STORAGE_KEYS.STUDENT_CODE);
+        localStorage.removeItem(STORAGE_KEYS.STUDENT_TEACHER_ID);
       }
-      
+
       setIsLoading(false);
     });
 
@@ -166,7 +198,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       // Firebase Auth 계정 생성
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      
+
       // Firestore에 선생님 정보 저장
       await createTeacher(
         userCredential.user.uid,
@@ -175,11 +207,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         schoolName,
         dahandinApiKey
       );
-      
+
       return { success: true, message: '회원가입이 완료되었습니다!' };
     } catch (error: any) {
       console.error('Registration error:', error);
-      
+
       let message = '회원가입에 실패했습니다.';
       if (error.code === 'auth/email-already-in-use') {
         message = '이미 사용 중인 이메일입니다.';
@@ -188,7 +220,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } else if (error.code === 'auth/invalid-email') {
         message = '유효하지 않은 이메일 형식입니다.';
       }
-      
+
       return { success: false, message };
     }
   };
@@ -204,7 +236,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return { success: true, message: '로그인 성공!' };
     } catch (error: any) {
       console.error('Login error:', error);
-      
+
       let message = '로그인에 실패했습니다.';
       if (error.code === 'auth/user-not-found') {
         message = '등록되지 않은 이메일입니다.';
@@ -215,53 +247,74 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } else if (error.code === 'auth/invalid-credential') {
         message = '이메일 또는 비밀번호가 올바르지 않습니다.';
       }
-      
+
       return { success: false, message };
     }
   };
 
-  // 학생 로그인
+  // 학생 로그인 (Cloud Function + Custom Token)
   const loginAsStudent = async (
     code: string
   ): Promise<{ success: boolean; message: string }> => {
     try {
-      const result = await findStudentByCode(code);
-      
-      if (!result) {
-        return { success: false, message: '학생 코드를 찾을 수 없습니다.' };
+      // Cloud Function 호출
+      const loginStudentFn = httpsCallable<{ code: string }, LoginStudentResponse>(
+        functions,
+        'loginStudent'
+      );
+
+      const result = await loginStudentFn({ code });
+      const data = result.data;
+
+      if (!data.success || !data.token) {
+        return {
+          success: false,
+          message: data.message || '학생 코드를 찾을 수 없습니다.'
+        };
       }
-      
-      setStudent(result.student);
-      setStudentTeacherId(result.teacherId);
-      setStudentTeacher(result.teacher);
-      setRole('student');
-      
-      // 세션 저장
-      localStorage.setItem(STORAGE_KEYS.ROLE, 'student');
-      localStorage.setItem(STORAGE_KEYS.STUDENT_CODE, code);
-      localStorage.setItem(STORAGE_KEYS.STUDENT_TEACHER_ID, result.teacherId);
-      
+
+      // Custom Token으로 Firebase Auth 로그인
+      await signInWithCustomToken(auth, data.token);
+
+      // 상태는 onAuthStateChanged에서 자동 설정됨
       return { success: true, message: '로그인 성공!' };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Student login error:', error);
-      return { success: false, message: '로그인에 실패했습니다.' };
+
+      let message = '로그인에 실패했습니다.';
+      if (error.code === 'functions/not-found') {
+        message = '학생 코드를 찾을 수 없습니다.';
+      } else if (error.code === 'functions/invalid-argument') {
+        message = '유효하지 않은 학생 코드입니다.';
+      }
+
+      return { success: false, message };
     }
   };
 
-  // 로그아웃
+  // 로그아웃 (선생님 + 학생 모두 Firebase Auth signOut)
   const logout = async () => {
-    if (role === 'teacher') {
+    try {
       await signOut(auth);
-      setUser(null);
-      setTeacher(null);
-      setClasses([]);
-      setSelectedClass(null);
-      localStorage.removeItem(STORAGE_KEYS.ROLE);
-      localStorage.removeItem(STORAGE_KEYS.SELECTED_CLASS);
-    } else {
-      clearStudentSession();
+    } catch (error) {
+      console.error('Logout error:', error);
     }
+
+    // 상태 정리
+    setUser(null);
+    setTeacher(null);
+    setClasses([]);
+    setSelectedClass(null);
+    setStudent(null);
+    setStudentTeacherId(null);
+    setStudentTeacher(null);
     setRole(null);
+
+    // localStorage 정리
+    localStorage.removeItem(STORAGE_KEYS.ROLE);
+    localStorage.removeItem(STORAGE_KEYS.SELECTED_CLASS);
+    localStorage.removeItem(STORAGE_KEYS.STUDENT_CODE);
+    localStorage.removeItem(STORAGE_KEYS.STUDENT_TEACHER_ID);
   };
 
   // 학급 선택

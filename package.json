@@ -30,7 +30,7 @@
             "@radix-ui/react-toggle-group": "^1.1.2",
             "@radix-ui/react-tooltip": "^1.1.8",
             "class-variance-authority": "^0.7.1",
-            "clsx": "*",
+            "clsx": "^2.1.1",
             "cmdk": "^1.1.1",
             "echarts": "^6.0.0",
             "echarts-for-react": "^3.0.5",
@@ -47,7 +47,7 @@
             "react-resizable-panels": "^2.1.7",
             "recharts": "^2.15.2",
             "sonner": "^2.0.3",
-            "tailwind-merge": "*",
+            "tailwind-merge": "^2.5.5",
             "vaul": "^1.1.2",
             "xlsx": "^0.18.5"
       },
