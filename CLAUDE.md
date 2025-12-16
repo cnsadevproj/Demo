@@ -1,13 +1,14 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code when working with this repository.
 
-## Project Overview
+## Overview
 
-"다했니?" is an educational gamification system combining team-based weekly missions with individual learning progress tracking (grass visualization).
+**Dahandin ("다했니?")** - Educational gamification system for student learning motivation.
 
-- **Teacher**: Class management, student cookie sync, mini-games, shop management
-- **Student**: Dashboard, grass tracking, shop purchases, profile customization, mini-games
+- **Core Concept**: Cookie "change amount" based games (not total balance) - ensures fairness
+- **Teacher**: Class management, cookie sync, team battles, shop management
+- **Student**: Dashboard, grass tracking, shop, profile customization, mini-games
 
 ## Commands
 
@@ -18,68 +19,69 @@ npm run build        # Production build (dist/)
 
 # Firebase deployment
 npx firebase deploy --only hosting           # Hosting only
-npx firebase deploy --only firestore:rules   # Firestore rules only
+npx firebase deploy --only firestore:rules   # Firestore rules
 npx firebase deploy                          # Full deploy
 ```
 
-## Architecture
+## Tech Stack
 
-### Tech Stack
 - React 18 + TypeScript + Vite
-- Tailwind CSS v4 (defined in index.css)
-- Radix UI primitives (`src/components/ui/`)
+- Tailwind CSS v4 (index.css)
+- Radix UI / shadcn/ui (`src/components/ui/`)
 - Firebase (Auth, Firestore, Storage)
-- Google Apps Script (Sheets sync)
+- External: Dahandin API (api.dahandin.com)
 
-### Directory Structure
+## Directory Structure
+
 ```
 src/
-├── App.tsx              # Routing (query parameter based)
-├── contexts/            # Global state management
+├── App.tsx              # Query parameter routing
+├── contexts/
 │   ├── AuthContext.tsx    # Auth (teacher/student)
+│   ├── GameContext.tsx    # Game/team state
 │   └── StudentContext.tsx # Student profile cache
 ├── services/
-│   ├── firebase.ts        # Firebase initialization
-│   └── firestoreApi.ts    # All Firestore CRUD functions
-├── pages/               # Main page components
-│   ├── TeacherDashboard.tsx  # Teacher dashboard (tab-based)
-│   └── StudentDashboardNew.tsx # Student dashboard (tab-based)
+│   ├── firebase.ts        # Firebase init
+│   └── firestoreApi.ts    # Firestore CRUD
+├── pages/               # Main pages (20+)
 ├── games/               # Mini-games (student/teacher pairs)
 ├── components/
-│   ├── ui/              # shadcn/ui style primitives
+│   ├── ui/              # shadcn/ui primitives
 │   └── wordcloud/       # Word cloud components
-├── types/               # Type and constant definitions
-│   ├── student.ts         # Profile styles (BORDER_STYLES, NAME_EFFECTS, etc.)
-│   ├── shop.ts            # Shop item definitions
-│   └── game.ts            # Game-related types
-└── utils/               # Utility functions
-apps-script/             # Google Sheets integration scripts
+├── types/
+│   ├── student.ts       # Profile styles (BORDER_STYLES, NAME_EFFECTS, etc.)
+│   ├── shop.ts          # Shop items
+│   └── game.ts          # Game types
+└── utils/               # Utilities
 ```
 
-### Firebase Structure
+## Firebase Structure
+
 ```
 teachers/{teacherId}/
-  ├── classes/{classId}
-  │   ├── grass/{date}          # Daily grass data
-  │   ├── teams/{teamId}        # Team data
+  ├── classes/{classId}/
+  │   ├── grass/{date}
+  │   ├── teams/{teamId}
   │   ├── cookieShopItems/{itemId}
   │   ├── cookieShopRequests/{requestId}
   │   ├── battles/{battleId}
   │   └── wordclouds/{sessionId}/responses/{studentCode}
-  ├── students/{studentCode}    # Student data (accessible by students)
-  ├── shop/{itemId}             # Shop items
-  ├── wishes/{wishId}           # Wish/guestbook data
-  ├── classGroups/{groupId}     # Class groups for wish sharing
-  └── itemSuggestions/{id}      # Student item suggestions
+  ├── students/{studentCode}
+  ├── shop/{itemId}
+  ├── wishes/{wishId}
+  ├── classGroups/{groupId}
+  └── itemSuggestions/{id}
+
 games/{gameId}/
   ├── players/{studentCode}
   ├── teams/{teamId}
   ├── studentInfo/{studentCode}
-  └── history/{docId}           # Word chain history
+  └── history/{docId}
 ```
 
-### Routing
-Query parameter routing in `App.tsx`:
+## Routing
+
+Query parameter based routing in `App.tsx`:
 - `/` → Login or Dashboard
 - `/?game=<type>` → Game (with gameId, studentCode, etc.)
 
@@ -89,138 +91,153 @@ Game types: `baseball`, `minority`, `bullet-dodge`, `rps`, `cookie-battle`, `wor
 
 ### Game Structure
 Each game has paired components:
-- `GameName.tsx` - Student version (opens in new window)
+- `GameName.tsx` - Student version
 - `GameNameTeacher.tsx` - Teacher control panel
 
-Game URL example:
-```
-/?game=cookie-battle&gameId=xxx&studentCode=xxx&studentName=xxx
-/?game=cookie-battle-teacher&gameId=xxx
-```
-
-### Real-time Sync Pattern
-Games use Firestore `onSnapshot` for real-time updates:
+### Real-time Sync
 ```typescript
 const unsubscribe = onSnapshot(
   doc(db, 'games', gameId),
-  (snapshot) => { /* handle update */ }
+  (snapshot) => { /* handle */ }
 );
 return () => unsubscribe();
 ```
 
 ### Currency System
-- **cookie**: External currency (synced from 다했니 API via Google Sheets)
-- **jelly**: Internal currency for games/shop purchases
-- **previousCookie**: Stored for grass calculation (cookie difference tracking)
+| Currency | Description |
+|----------|-------------|
+| `cookie` | External currency from Dahandin API |
+| `jelly` | Internal currency for games/shop |
+| `previousCookie` | For grass calculation (change tracking) |
 
 ### Profile System
 Style constants in `src/types/student.ts`:
-- `BORDER_STYLES`: Border styles (none, solid, gradient-*, neon-*, pulse, sparkle)
-- `NAME_EFFECTS`: Name effects (gradient-*, glow-*, shadow)
-- `TITLE_COLORS`: Title background colors (10 options)
-- `BACKGROUND_PATTERNS`: Card backgrounds (dots, stripes, waves, etc.)
-- `ANIMATION_EFFECTS`: Animations (pulse, spin, bounce, shake, etc.)
-- `PROFILE_EMOJIS`: Emoji options for profiles
+- `BORDER_STYLES`, `NAME_EFFECTS`, `TITLE_COLORS`
+- `BACKGROUND_PATTERNS`, `ANIMATION_EFFECTS`, `PROFILE_EMOJIS`
 
 ### Auth Flow
-- **Teacher**: Firebase Auth (email/password) → Firestore teacher document
-- **Student**: Code-based login → finds student via `findStudentByCode()` → stores in localStorage
+- **Teacher**: Firebase Auth (email/password) → Firestore document
+- **Student**: Code-based login → `findStudentByCode()` → localStorage
 
-## Development Guidelines
+## Cookie Battle Game
 
-### Branch Policy
-- Main branch is protected → PR workflow required
-- Create feature branches from main: `feat/<feature-name>`, `fix/<bug-name>`
+### Core Concept
+```
+Team Resource = Σ(member cookie changes)
+Cookie Change = Current Cookie - Previous Cookie
+```
+Fairness: Low-cookie students can win by effort (change-based, not balance-based)
 
-### Pre-Work Workflow (IMPORTANT)
-Before making any changes, Claude Code should:
-1. **Check current branch**: `git branch --show-current`
-2. **Find previous working branch**: `git branch -a --sort=-committerdate` (most recent first)
-3. **Checkout the previous branch** (or create new if needed)
-4. **Fetch and check main for new commits**: `git fetch origin && git log HEAD..origin/main --oneline`
-5. **If new commits exist on main**:
-   - Summarize what changed
-   - Sync current branch: `git merge origin/main`
-6. **Then proceed with modifications**
-7. **Commit and push to the working branch**
+### Battle Mechanics
+```
+Win Rate = Attack / (Attack + Defense) × 100
+Limit: 10% min ~ 90% max
+```
 
-### Firebase Permissions (IMPORTANT)
-**Permission errors occur frequently.** When adding features, check `firestore.rules`:
+### Loss Modes
+| Mode | Winner Gets | Loser Loses |
+|------|-------------|-------------|
+| Default | 30% of opponent bet | Full bet |
+| Zero-sum | Full opponent bet | Full bet |
+| Soft | 20% of opponent bet | 50% of bet |
 
-1. **Student-accessible paths** (allow write: true):
-   - `teachers/{teacherId}/students/{studentCode}`
-   - `teachers/{teacherId}/wishes/{wishId}`
-   - `teachers/{teacherId}/cookieShopRequests/{requestId}`
-   - `games/{gameId}/**` (most sub-collections)
+### Defense Penalty
+Unattacked team's defense cookies → 50% penalty
 
-2. **Teacher-only paths** (request.auth.uid == teacherId):
-   - `teachers/{teacherId}/classes/{classId}`
-   - `teachers/{teacherId}/shop/{itemId}`
-   - `teachers/{teacherId}/classGroups/{groupId}`
+## Firebase Permissions
 
-3. **Common permission issues**:
-   - Student trying to read other students' data
-   - Student writing to game data without proper rules
-   - Missing `request.auth != null` check
+**Student-writable paths:**
+- `teachers/{teacherId}/students/{studentCode}`
+- `teachers/{teacherId}/wishes/{wishId}`
+- `teachers/{teacherId}/cookieShopRequests/{requestId}`
+- `games/{gameId}/**`
 
-4. **Before deploying new features**: `npx firebase deploy --only firestore:rules`
+**Teacher-only paths:**
+- `teachers/{teacherId}/classes/{classId}`
+- `teachers/{teacherId}/shop/{itemId}`
+- `teachers/{teacherId}/classGroups/{groupId}`
 
-### Shared Components (Update ALL usages when modifying)
+## Shared Components
 
 | Component | Used In |
 |-----------|---------|
-| `StudentProfileCard` | StudentDashboardNew, StudentGrass, DemoStudent, ProfilePreview |
-| `GrassCalendar` | StudentGrass, StudentDashboard, DemoStudent, TeacherDashboard |
-| `ReflectionGrass` | Grass-related pages, reflection king feature |
+| `StudentProfileCard` | StudentDashboardNew, StudentGrass, DemoStudent |
+| `GrassCalendar` | StudentGrass, StudentDashboard, TeacherDashboard |
 | `ProfilePhotoUpload` | StudentDashboardNew, profile settings |
-| `FeedbackModal` | TeacherDashboard, StudentDashboardNew |
 
-### UI Patterns (From Git History)
+## UI Patterns
 
 | Pattern | Solution |
 |---------|----------|
 | Modal overflow | `max-h-[70vh]` + `overflow-y-auto` |
-| Team buttons (Teacher) | Fixed `130×130px` or `w-32 h-32` |
-| Team buttons (Student) | Fixed `100×100px` or `w-24 h-24` |
-| Grass date filtering | `dayOfWeek >= 1 && dayOfWeek <= 5` (weekdays only) |
-| Future date prevention | `date <= today` check |
+| Team buttons (Teacher) | `w-32 h-32` (130×130px) |
+| Team buttons (Student) | `w-24 h-24` (100×100px) |
+| Grass date filtering | `dayOfWeek >= 1 && dayOfWeek <= 5` |
+| Future date prevention | `date <= today` |
 
-### Style Rules
-- Maintain Korean UI text
-- Use Tailwind classes (check `index.css` for custom utilities)
-- Custom animations defined in `src/types/student.ts`
-
-### Game Development Checklist
-- [ ] Develop teacher/student versions together
-- [ ] Use Firestore real-time subscriptions (`onSnapshot`)
-- [ ] Store game state in `games/{gameId}` document
-- [ ] Handle player join/leave gracefully
-- [ ] Test with multiple simultaneous players
-
-## Common Issues & Solutions
+## Common Issues
 
 | Issue | Solution |
 |-------|----------|
-| Permission denied (student) | Check `firestore.rules` for student access path |
-| Permission denied (teacher) | Verify `teacherId` matches in Firestore query |
-| Modal overflow on mobile | Use `max-h-[70vh]` with `overflow-y-auto` |
-| Style not applying | Check if CSS class exists in type definitions |
-| Game not syncing | Verify `onSnapshot` listener setup and cleanup |
-| Grass showing weekends | Add `dayOfWeek >= 1 && dayOfWeek <= 5` filter |
-| Future dates in grass | Add `date <= today` validation |
-| Profile styles not rendering | Verify style constant exists in `types/student.ts` |
+| Permission denied (student) | Check `firestore.rules` |
+| Modal overflow on mobile | Use `max-h-[70vh]` + `overflow-y-auto` |
+| Style not applying | Check type definitions in `types/student.ts` |
+| Game not syncing | Verify `onSnapshot` listener |
+| Grass showing weekends | Add weekday filter |
+
+## Development
+
+### Branch Policy
+- Main branch protected → PR workflow
+- Feature branches: `feat/<name>`, `fix/<name>`
+
+### Style Rules
+- Korean UI text
+- Tailwind classes (check `index.css`)
+- Custom animations in `src/types/student.ts`
+
+### Game Dev Checklist
+- [ ] Develop teacher/student versions together
+- [ ] Use Firestore `onSnapshot`
+- [ ] Store state in `games/{gameId}`
+- [ ] Handle player join/leave
+- [ ] Test with multiple players
 
 ## Deployment
 
 - Firebase project: `dahatni-dbe19`
 - Hosting: https://dahatni-dbe19.web.app
-- Always build before deploy: `npm run build && npx firebase deploy --only hosting`
+- Build first: `npm run build && npx firebase deploy --only hosting`
 
-## Testing Checklist
+## Testing
 
-Before committing:
-- [ ] Teacher dashboard functionality
-- [ ] Student dashboard functionality
-- [ ] Game flow (both teacher and student)
+- [ ] Teacher dashboard
+- [ ] Student dashboard
+- [ ] Game flow (both roles)
 - [ ] Mobile responsiveness
-- [ ] Firebase permissions (test as both roles)
+- [ ] Firebase permissions
+
+## MCP Servers
+
+Active MCP servers for this project:
+
+| MCP | Tools | Purpose |
+|-----|-------|---------|
+| **firebase** | 60+ | Firestore, Auth, Functions, Storage, Hosting, Crashlytics |
+| **supabase** | 20 | Database operations (if needed) |
+| **playwright** | 22 | Browser automation, E2E testing |
+| **context7** | 2 | Library documentation lookup |
+| **memory** | 9 | Knowledge graph, persistent memory |
+| **fetch** | 1 | Web page fetching |
+
+### Firebase MCP Tools
+- `firebase_list_projects`, `firebase_get_project` - Project management
+- Firestore: Query, CRUD operations
+- Auth: User management
+- Cloud Functions: Log retrieval
+- Storage: Download URLs
+- Hosting: Deployment status
+
+### Configuration Location
+- Global: `~/.claude/settings.json`
+- Project: `.claude/settings.local.json`
