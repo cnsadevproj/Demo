@@ -756,3 +756,98 @@ export const onFeedbackCreated = functions.firestore
       return { success: false, error: String(error) };
     }
   });
+
+// ============================================================
+// 학생 로그인 인증 (Custom Token 발급)
+// ============================================================
+
+/**
+ * 학생 로그인 함수
+ * 학생 코드를 검증하고 Custom Token을 발급합니다.
+ * 학생은 기존과 동일하게 코드만 입력하면 됩니다.
+ */
+export const loginStudent = functions
+  .region('asia-northeast3')
+  .https.onCall(async (data: { code: string }) => {
+    const { code } = data;
+
+    // 입력 검증
+    if (!code || typeof code !== 'string' || code.trim().length === 0) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        '학생 코드가 필요합니다.'
+      );
+    }
+
+    const trimmedCode = code.trim();
+
+    try {
+      // collectionGroup 쿼리로 모든 teachers의 students에서 검색
+      const studentsQuery = await db
+        .collectionGroup('students')
+        .where('code', '==', trimmedCode)
+        .limit(1)
+        .get();
+
+      if (studentsQuery.empty) {
+        throw new functions.https.HttpsError(
+          'not-found',
+          '학생 코드를 찾을 수 없습니다.'
+        );
+      }
+
+      const studentDoc = studentsQuery.docs[0];
+      const studentData = studentDoc.data();
+
+      // 경로에서 teacherId 추출: teachers/{teacherId}/students/{code}
+      const pathParts = studentDoc.ref.path.split('/');
+      const teacherId = pathParts[1];
+
+      // 교사 정보 가져오기
+      const teacherDoc = await db.collection('teachers').doc(teacherId).get();
+
+      if (!teacherDoc.exists) {
+        throw new functions.https.HttpsError(
+          'not-found',
+          '교사 정보를 찾을 수 없습니다.'
+        );
+      }
+
+      const teacherData = teacherDoc.data();
+
+      // Custom Token 생성 (studentCode를 claims에 포함)
+      const customToken = await admin.auth().createCustomToken(trimmedCode, {
+        studentCode: trimmedCode,
+        teacherId: teacherId,
+        classId: studentData?.classId || '',
+        role: 'student'
+      });
+
+      console.log(`Student login successful: ${trimmedCode} (teacher: ${teacherId})`);
+
+      // 민감 정보 제외한 교사 정보
+      const safeTeacherData = {
+        uid: teacherData?.uid,
+        name: teacherData?.name,
+        schoolName: teacherData?.schoolName
+      };
+
+      return {
+        token: customToken,
+        student: studentData,
+        teacherId: teacherId,
+        teacher: safeTeacherData
+      };
+    } catch (error: unknown) {
+      // 이미 HttpsError인 경우 그대로 throw
+      if (error instanceof functions.https.HttpsError) {
+        throw error;
+      }
+
+      console.error('Student login error:', error);
+      throw new functions.https.HttpsError(
+        'internal',
+        '로그인 처리 중 오류가 발생했습니다.'
+      );
+    }
+  });
