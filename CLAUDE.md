@@ -187,9 +187,26 @@ Unattacked team's defense cookies → 50% penalty
 
 ## Development
 
-### Branch Policy
-- Main branch protected → PR workflow
-- Feature branches: `feat/<name>`, `fix/<name>`
+### Branch Policy & Workflow
+
+**IMPORTANT: The `main` branch is protected.** All changes must go through Pull Requests.
+
+**Development Workflow:**
+1. Make changes on the `sdk.edit` branch (or create feature branches from it)
+2. Before starting work, **always sync `sdk.edit` with `main`**:
+   ```bash
+   git checkout sdk.edit
+   git pull origin main
+   ```
+3. If `main` is ahead of `sdk.edit`, sync first and summarize the changes from main
+4. Create a PR from `sdk.edit` (or feature branch) to `main`
+5. After PR merge, GitHub Actions automatically deploys to Firebase
+
+**Branch Naming:**
+- Development: `sdk.edit`
+- Features: `feat/<name>`
+- Fixes: `fix/<name>`
+- Other developers: `<name>/feature` (e.g., `soojeong/feature`)
 
 ### Style Rules
 - Korean UI text
@@ -203,11 +220,41 @@ Unattacked team's defense cookies → 50% penalty
 - [ ] Handle player join/leave
 - [ ] Test with multiple players
 
+## CI/CD Pipeline
+
+GitHub Actions automatically deploys to Firebase when PRs are merged to `main`.
+
+**Workflow:** `.github/workflows/firebase-deploy.yml`
+
+**Pipeline Steps:**
+1. Checkout repository
+2. Setup Node.js 20
+3. Install dependencies (`npm ci`)
+4. Build frontend (`npm run build`)
+5. Deploy to Firebase Hosting
+6. Install Cloud Functions dependencies (`cd functions && npm ci`)
+7. Build Cloud Functions (`cd functions && npm run build`)
+8. Deploy Cloud Functions
+
+**Required GitHub Secrets:**
+| Secret | Description |
+|--------|-------------|
+| `FIREBASE_SERVICE_ACCOUNT` | Firebase service account JSON for Hosting |
+| `FIREBASE_TOKEN` | Firebase CLI token for Functions deployment |
+
+**Manual Deployment:**
+```bash
+npm run build
+npx firebase deploy --only hosting
+cd functions && npm ci && npm run build
+npx firebase deploy --only functions
+```
+
 ## Deployment
 
 - Firebase project: `dahatni-dbe19`
 - Hosting: https://dahatni-dbe19.web.app
-- Build first: `npm run build && npx firebase deploy --only hosting`
+- GitHub repo: https://github.com/cnsadevproj/Demo
 
 ## Testing
 
