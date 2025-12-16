@@ -216,3 +216,28 @@ Unattacked team's defense cookies → 50% penalty
 - [ ] Game flow (both roles)
 - [ ] Mobile responsiveness
 - [ ] Firebase permissions
+
+## MCP Servers
+
+Active MCP servers for this project:
+
+| MCP | Tools | Purpose |
+|-----|-------|---------|
+| **firebase** | 60+ | Firestore, Auth, Functions, Storage, Hosting, Crashlytics |
+| **supabase** | 20 | Database operations (if needed) |
+| **playwright** | 22 | Browser automation, E2E testing |
+| **context7** | 2 | Library documentation lookup |
+| **memory** | 9 | Knowledge graph, persistent memory |
+| **fetch** | 1 | Web page fetching |
+
+### Firebase MCP Tools
+- `firebase_list_projects`, `firebase_get_project` - Project management
+- Firestore: Query, CRUD operations
+- Auth: User management
+- Cloud Functions: Log retrieval
+- Storage: Download URLs
+- Hosting: Deployment status
+
+### Configuration Location
+- Global: `~/.claude/settings.json`
+- Project: `.claude/settings.local.json`
