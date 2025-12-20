@@ -1,4 +1,6 @@
 import { Step } from 'react-joyride';
+import { Student, Team, Wish } from '../services/firestoreApi';
+import { Timestamp } from 'firebase/firestore';
 
 // Extended step type with tab navigation and action info
 export interface TutorialStep extends Step {
@@ -8,6 +10,255 @@ export interface TutorialStep extends Step {
     preAction?: 'click-candy-shop' | 'click-cookie-shop' | 'click-team-manage' | 'click-team-status'; // Action to perform BEFORE showing this step
   };
 }
+
+// 튜토리얼용 더미 잔디 데이터 생성 함수
+function generateTutorialGrassData(): Array<{ date: string; studentCode: string; cookieChange: number; count: number }> {
+  const grassData: Array<{ date: string; studentCode: string; cookieChange: number; count: number }> = [];
+  const today = new Date();
+
+  // 과거 10일간의 평일만 찾기
+  const weekdays: string[] = [];
+  let checkDate = new Date(today);
+  while (weekdays.length < 10) {
+    const dayOfWeek = checkDate.getDay();
+    if (dayOfWeek >= 1 && dayOfWeek <= 5) { // 월~금
+      const dateStr = checkDate.toISOString().split('T')[0];
+      weekdays.push(dateStr);
+    }
+    checkDate.setDate(checkDate.getDate() - 1);
+  }
+
+  // 학생별 잔디 패턴 - 대부분 1개, 20% 정도 2개 (최대 2개)
+  // [cookieChange, count] 형태로 직접 지정 - cookieChange도 1~4 범위로 작게
+  const patterns: Record<string, Array<[number, number]>> = {
+    'DEMO001': [[2, 1], [3, 2], [1, 1], [0, 0], [2, 1], [1, 1], [4, 2], [1, 1], [2, 1], [1, 1]], // 홍길동
+    'DEMO002': [[2, 1], [0, 0], [3, 2], [0, 0], [1, 1], [0, 0], [2, 1], [0, 0], [1, 1], [0, 0]],  // 김철수 - 격일
+    'DEMO003': [[3, 2], [2, 1], [1, 1], [2, 1], [3, 1], [2, 2], [1, 1], [4, 1], [2, 2], [3, 1]], // 이영희
+    'DEMO004': [[1, 1], [0, 0], [0, 0], [2, 2], [0, 0], [0, 0], [1, 1], [0, 0], [0, 0], [1, 1]], // 박민준 - 가끔
+    'DEMO005': [[2, 1], [1, 2], [2, 1], [1, 1], [2, 1], [1, 1], [3, 1], [2, 2], [1, 1], [2, 1]], // 정수아
+  };
+
+  Object.entries(patterns).forEach(([studentCode, dayData]) => {
+    weekdays.forEach((date, index) => {
+      const [cookieChange, count] = dayData[index];
+      if (count > 0) {
+        grassData.push({
+          date,
+          studentCode,
+          cookieChange,
+          count,
+        });
+      }
+    });
+  });
+
+  return grassData;
+}
+
+// 튜토리얼용 더미 잔디 데이터
+export const TUTORIAL_DUMMY_GRASS = generateTutorialGrassData();
+
+// 튜토리얼용 더미 학생 데이터 (학생이 없을 때 표시) - 다양한 프로필 꾸미기 적용
+export const TUTORIAL_DUMMY_STUDENTS: Student[] = [
+  {
+    code: 'DEMO001',
+    number: 1,
+    name: '홍길동',
+    classId: 'demo-class',
+    teacherId: 'demo-teacher',
+    cookie: 150,
+    jelly: 45,
+    lastSyncedCookie: 150,
+    usedCookie: 30,
+    totalCookie: 180,
+    chocoChips: 0,
+    previousCookie: 140,
+    initialCookie: 100,
+    profile: {
+      emojiCode: '😎',
+      title: '열공중',
+      titleColorCode: '4', // 파랑
+      nameEffectCode: 'glow-blue',
+      backgroundCode: 'waves',
+      buttonBorderCode: 'neon-blue',
+      buttonFillCode: 'gradient-ocean',
+      animationCode: 'float',
+    },
+    ownedItems: ['glow-blue', 'waves', 'neon-blue', 'gradient-ocean', 'float'],
+  },
+  {
+    code: 'DEMO002',
+    number: 2,
+    name: '김철수',
+    classId: 'demo-class',
+    teacherId: 'demo-teacher',
+    cookie: 120,
+    jelly: 30,
+    lastSyncedCookie: 120,
+    usedCookie: 20,
+    totalCookie: 140,
+    chocoChips: 0,
+    previousCookie: 110,
+    initialCookie: 80,
+    profile: {
+      emojiCode: '🚀',
+      title: '도전자',
+      titleColorCode: '0', // 빨강
+      nameEffectCode: 'gradient-fire',
+      backgroundCode: 'stars',
+      buttonBorderCode: 'gradient-fire',
+      buttonFillCode: 'gradient-fire',
+      animationCode: 'pulse',
+    },
+    ownedItems: ['gradient-fire', 'stars', 'pulse'],
+  },
+  {
+    code: 'DEMO003',
+    number: 3,
+    name: '이영희',
+    classId: 'demo-class',
+    teacherId: 'demo-teacher',
+    cookie: 200,
+    jelly: 60,
+    lastSyncedCookie: 200,
+    usedCookie: 50,
+    totalCookie: 250,
+    chocoChips: 0,
+    previousCookie: 180,
+    initialCookie: 120,
+    profile: {
+      emojiCode: '👑',
+      title: '스타',
+      titleColorCode: '8', // 골드
+      nameEffectCode: 'gradient-rainbow',
+      backgroundCode: 'gradient-vivid',
+      buttonBorderCode: 'gradient-rainbow',
+      buttonFillCode: 'gradient-gold',
+      animationCode: 'sparkle',
+    },
+    ownedItems: ['gradient-rainbow', 'gradient-vivid', 'gradient-gold', 'sparkle'],
+  },
+  {
+    code: 'DEMO004',
+    number: 4,
+    name: '박민준',
+    classId: 'demo-class',
+    teacherId: 'demo-teacher',
+    cookie: 95,
+    jelly: 15,
+    lastSyncedCookie: 95,
+    usedCookie: 10,
+    totalCookie: 105,
+    chocoChips: 0,
+    previousCookie: 85,
+    initialCookie: 60,
+    profile: {
+      emojiCode: '🎮',
+      title: '게이머',
+      titleColorCode: '5', // 보라
+      nameEffectCode: 'glow-pink',
+      backgroundCode: 'dots',
+      buttonBorderCode: 'neon-pink',
+      buttonFillCode: 'none',
+      animationCode: 'bounce',
+    },
+    ownedItems: ['glow-pink', 'dots', 'neon-pink', 'bounce'],
+  },
+  {
+    code: 'DEMO005',
+    number: 5,
+    name: '정수아',
+    classId: 'demo-class',
+    teacherId: 'demo-teacher',
+    cookie: 175,
+    jelly: 55,
+    lastSyncedCookie: 175,
+    usedCookie: 40,
+    totalCookie: 215,
+    chocoChips: 0,
+    previousCookie: 160,
+    initialCookie: 90,
+    profile: {
+      emojiCode: '🌸',
+      title: '노력왕',
+      titleColorCode: '6', // 핑크
+      nameEffectCode: 'glow-gold',
+      backgroundCode: 'hearts',
+      buttonBorderCode: 'sparkle',
+      buttonFillCode: 'gradient-aurora',
+      animationCode: 'wave',
+    },
+    ownedItems: ['glow-gold', 'hearts', 'sparkle', 'gradient-aurora', 'wave'],
+  },
+];
+
+// 튜토리얼용 더미 팀 데이터
+export const TUTORIAL_DUMMY_TEAMS: Team[] = [
+  {
+    teamId: 'demo-team-1',
+    teamName: '🔥 불꽃팀',
+    flag: '🔥',
+    members: ['DEMO001', 'DEMO002'],
+    teamCookie: 270,
+  },
+  {
+    teamId: 'demo-team-2',
+    teamName: '⭐ 스타팀',
+    flag: '⭐',
+    members: ['DEMO003', 'DEMO004', 'DEMO005'],
+    teamCookie: 470,
+  },
+];
+
+// 튜토리얼용 더미 소원 데이터
+export const TUTORIAL_DUMMY_WISHES: Wish[] = [
+  {
+    id: 'demo-wish-1',
+    studentCode: 'DEMO003',
+    studentName: '이영희',
+    content: '다음 주 금요일에 영화 보러 가고 싶어요! 🎬',
+    createdAt: Timestamp.fromDate(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)), // 2일 전
+    likes: ['DEMO001', 'DEMO002', 'DEMO004', 'DEMO005'],
+    isGranted: true,
+    grantedReward: 0,
+    grantedMessage: '영화관 티켓 2장 준비했어요! 친구랑 같이 가세요~ 🍿',
+    grantedAt: Timestamp.fromDate(new Date(Date.now() - 1 * 24 * 60 * 60 * 1000)), // 1일 전
+    classId: 'demo-class',
+  },
+  {
+    id: 'demo-wish-2',
+    studentCode: 'DEMO001',
+    studentName: '홍길동',
+    content: '교실에서 간식 파티 하고 싶어요! 🍰🍫',
+    createdAt: Timestamp.fromDate(new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)), // 3일 전
+    likes: ['DEMO002', 'DEMO003'],
+    isGranted: false,
+    grantedReward: 0,
+    classId: 'demo-class',
+  },
+  {
+    id: 'demo-wish-3',
+    studentCode: 'DEMO005',
+    studentName: '정수아',
+    content: '자리 바꾸기 해주세요! 창가 자리로요~ 🪟',
+    createdAt: Timestamp.fromDate(new Date(Date.now() - 1 * 24 * 60 * 60 * 1000)), // 1일 전
+    likes: ['DEMO001'],
+    isGranted: false,
+    grantedReward: 0,
+    classId: 'demo-class',
+  },
+  {
+    id: 'demo-wish-4',
+    studentCode: 'DEMO002',
+    studentName: '김철수',
+    content: '체육 시간에 축구하고 싶어요! ⚽',
+    createdAt: Timestamp.fromDate(new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)), // 4일 전
+    likes: ['DEMO001', 'DEMO004', 'DEMO005'],
+    isGranted: false,
+    grantedReward: 0,
+    classId: 'demo-class',
+  },
+];
 
 export const teacherTutorialSteps: TutorialStep[] = [
   // ============ WELCOME ============
@@ -96,10 +347,11 @@ export const teacherTutorialSteps: TutorialStep[] = [
   },
   {
     target: '[data-tutorial="student-list"]',
-    placement: 'center',
+    placement: 'top',
     title: '📋 학생 목록 테이블',
     content: '학생별로 번호, 이름, 뱃지, 쿠키, 캔디가 표시돼요. 학생 이름을 클릭하면 프로필과 상세 활동 내역을 보고, 🍭 캔디를 개별 지급할 수 있어요!',
     disableBeacon: true,
+    scrollToFirstStep: true,
     data: { tab: 'students' },
   },
 
@@ -114,10 +366,11 @@ export const teacherTutorialSteps: TutorialStep[] = [
   },
   {
     target: '[data-tutorial="grass-overview"]',
-    placement: 'center',
+    placement: 'top',
     title: '📊 잔디 현황 보기',
     content: '모든 학생의 최근 10일간 쿠키 증가량을 한눈에 확인할 수 있어요. 평일 기준으로 집계되며, 어떤 학생이 열심히 활동하는지 바로 알 수 있어요!',
     disableBeacon: true,
+    scrollToFirstStep: true,
     data: { tab: 'grass' },
   },
   {
@@ -182,9 +435,17 @@ export const teacherTutorialSteps: TutorialStep[] = [
   },
   {
     target: '[data-tutorial="team-swap-area"]',
-    placement: 'center',
-    title: '🔄 학생 교환 & 이동',
-    content: '학생 이름을 클릭하면 선택되고, 다른 팀의 학생을 클릭하면 두 학생이 맞교환돼요! 각 팀의 [+] 버튼을 누르면 팀에 없는 학생을 추가하거나 팀 이름을 수정할 수 있어요.',
+    placement: 'top',
+    title: '🔄 학생 맞교환',
+    content: '흰색 버튼으로 표시된 학생 이름을 클릭하면 선택되고, 다른 팀의 학생을 클릭하면 두 학생이 맞교환돼요!',
+    disableBeacon: true,
+    data: { tab: 'teams' },
+  },
+  {
+    target: '[data-tutorial="team-add-button"]',
+    placement: 'top',
+    title: '➕ 멤버 추가 & 팀 수정',
+    content: '각 팀의 초록색 [+] 버튼을 누르면 팀에 없는 학생을 추가하거나, 팀 이름과 아이콘을 수정할 수 있어요!',
     disableBeacon: true,
     data: { tab: 'teams' },
   },
@@ -192,9 +453,9 @@ export const teacherTutorialSteps: TutorialStep[] = [
     target: '[data-tutorial="team-status-tab"]',
     placement: 'bottom',
     title: '📊 팀 현황',
-    content: '각 팀의 총 쿠키, 캔디, 멤버 수를 한눈에 비교할 수 있어요. 팀 대항전 점수판으로 활용하세요! 팀 현황을 확인해볼게요!',
+    content: '팀 현황 탭을 클릭하면 각 팀의 총 쿠키, 멤버 수, 최근 쿠키 획득량을 상세하게 비교할 수 있어요. 팀 대항전 점수판으로 활용하세요!',
     disableBeacon: true,
-    data: { tab: 'teams', preAction: 'click-team-status' },
+    data: { tab: 'teams' },
   },
 
   // ============ TAB: GAME CENTER ============
@@ -212,7 +473,15 @@ export const teacherTutorialSteps: TutorialStep[] = [
     target: '[data-tab="wishes"]',
     placement: 'bottom',
     title: '⭐ 소원 탭',
-    content: '학생들이 작성한 소원(방명록)을 확인해요! 묶은 학급끼리 소원이 공유되며, 선생님이 메시지와 함께 소원을 선정하면 학생에게 알림이 가고 카드 스타일이 바뀌어요! ✨',
+    content: '학생들이 작성한 소원(방명록)을 확인해요! 묶은 학급끼리 소원이 공유되며, 선생님이 메시지와 함께 소원을 선정하면 학생에게 알림이 가요!',
+    disableBeacon: true,
+    data: { tab: 'wishes' },
+  },
+  {
+    target: '[data-tutorial="wishes-container"]',
+    placement: 'top',
+    title: '💫 소원 목록',
+    content: '학생들의 소원이 카드 형태로 표시돼요. 무지개 테두리가 있는 카드는 이미 선정된 소원이에요! ✨ 선정 버튼을 누르면 메시지를 남기고 학생에게 알림을 보낼 수 있어요.',
     disableBeacon: true,
     data: { tab: 'wishes' },
   },
