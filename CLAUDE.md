@@ -214,6 +214,7 @@ Before making any changes, Claude Code should:
 
 - Firebase project: `dahatni-dbe19`
 - Hosting: https://dahatni-dbe19.web.app
+- GitHub repo: https://github.com/cnsadevproj/DaJanDi
 - Always build before deploy: `npm run build && npx firebase deploy --only hosting`
 
 ## Testing Checklist
