@@ -7,6 +7,11 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import * as nodemailer from 'nodemailer';
 
+// Type imports for explicit typing
+import { Request, Response } from 'firebase-functions/v1';
+import { EventContext } from 'firebase-functions';
+import { QueryDocumentSnapshot } from 'firebase-functions/v1/firestore';
+
 // Firebase Admin 초기화
 admin.initializeApp();
 const db = admin.firestore();
@@ -46,25 +51,38 @@ async function fetchStudentFromDahandin(
   }
 }
 
-// 잔디 기록 추가 (주말은 금요일로 반영)
+// 한국 시간 기준 요일 반환 (0=일, 1=월, ..., 6=토)
+function getKoreanDayOfWeek(date: Date): number {
+  const koreaTime = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+  return koreaTime.getDay();
+}
+
+// 잔디 기록 추가 (주말은 금요일로 반영, 한국 시간 기준)
 async function addGrassRecord(
   teacherId: string,
   classId: string,
   studentCode: string,
   cookieChange: number
 ): Promise<void> {
-  const today = new Date();
-  const dayOfWeek = today.getDay(); // 0=일, 1=월, ..., 5=금, 6=토
+  const now = new Date();
+  const dayOfWeek = getKoreanDayOfWeek(now); // 한국 시간 기준 요일
+
+  // 한국 시간 기준으로 날짜 계산
+  const koreaTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
 
   // 주말이면 금요일로 조정
-  let targetDate = new Date(today);
+  let targetDate = new Date(koreaTime);
   if (dayOfWeek === 0) { // 일요일 -> 금요일 (-2일)
     targetDate.setDate(targetDate.getDate() - 2);
   } else if (dayOfWeek === 6) { // 토요일 -> 금요일 (-1일)
     targetDate.setDate(targetDate.getDate() - 1);
   }
 
-  const dateStr = targetDate.toISOString().split('T')[0];
+  // 한국 시간 기준 날짜 문자열 생성
+  const year = targetDate.getFullYear();
+  const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+  const day = String(targetDate.getDate()).padStart(2, '0');
+  const dateStr = `${year}-${month}-${day}`;
   const grassRef = db
     .collection('teachers')
     .doc(teacherId)
@@ -87,11 +105,11 @@ async function addGrassRecord(
     });
   } else {
     await grassRef.set({
-      date: today,
+      date: targetDate,  // 한국 시간 기준 날짜
       records: {
         [studentCode]: { change: cookieChange, count: 1 }
       }
-    });
+    }, { merge: true });  // merge 옵션으로 기존 데이터 보존
   }
 }
 
@@ -188,7 +206,7 @@ async function refreshTeacherCookies(teacherId: string): Promise<{
 }
 
 // 6시간마다 실행되는 스케줄 함수
-// Cron: "0 *\/6 * * *" (매 6시간: 0시, 6시, 12시, 18시)
+// Cron: "0 */6 * * *" (매 6시간: 0시, 6시, 12시, 18시)
 export const scheduledCookieRefresh = functions
   .runWith({
     timeoutSeconds: 540, // 9분 (최대 허용 시간)
@@ -196,7 +214,7 @@ export const scheduledCookieRefresh = functions
   })
   .pubsub.schedule('0 */6 * * *')
   .timeZone('Asia/Seoul')
-  .onRun(async (context) => {
+  .onRun(async (_context: EventContext) => {
     console.log('Starting scheduled cookie refresh at', new Date().toISOString());
 
     const startTime = Date.now();
@@ -256,7 +274,7 @@ export const scheduledCookieRefresh = functions
  * HTTP 트리거 - 수동으로 쿠키 새로고침 실행 (테스트/디버깅용)
  * 사용법: https://<region>-<project-id>.cloudfunctions.net/manualCookieRefresh?teacherId=xxx
  */
-export const manualCookieRefresh = functions.https.onRequest(async (req, res) => {
+export const manualCookieRefresh = functions.https.onRequest(async (req: Request, res: Response) => {
   // CORS 헤더
   res.set('Access-Control-Allow-Origin', '*');
 
@@ -517,7 +535,7 @@ export const scheduledCookieShopEmail = functions
   })
   .pubsub.schedule('0 8 * * 4')
   .timeZone('Asia/Seoul')
-  .onRun(async (context) => {
+  .onRun(async (_context: EventContext) => {
     console.log('Starting scheduled cookie shop email at', new Date().toISOString());
 
     let totalTeachers = 0;
@@ -580,7 +598,7 @@ export const scheduledCookieShopEmail = functions
  * HTTP 트리거 - 수동으로 쿠키 상점 이메일 발송 (테스트용)
  * 사용법: https://<region>-<project-id>.cloudfunctions.net/manualCookieShopEmail?teacherId=xxx
  */
-export const manualCookieShopEmail = functions.https.onRequest(async (req, res) => {
+export const manualCookieShopEmail = functions.https.onRequest(async (req: Request, res: Response) => {
   res.set('Access-Control-Allow-Origin', '*');
 
   if (req.method === 'OPTIONS') {
@@ -649,7 +667,7 @@ const DEVELOPER_EMAIL = 'pantarei01@cnsa.hs.kr';
  */
 export const onFeedbackCreated = functions.firestore
   .document('feedback/{feedbackId}')
-  .onCreate(async (snap, context) => {
+  .onCreate(async (snap: QueryDocumentSnapshot, context: EventContext) => {
     const feedback = snap.data();
     const feedbackId = context.params.feedbackId;
 
@@ -749,5 +767,100 @@ export const onFeedbackCreated = functions.firestore
       });
 
       return { success: false, error: String(error) };
+    }
+  });
+
+// ============================================================
+// 학생 로그인 인증 (Custom Token 발급)
+// ============================================================
+
+/**
+ * 학생 로그인 함수
+ * 학생 코드를 검증하고 Custom Token을 발급합니다.
+ * 학생은 기존과 동일하게 코드만 입력하면 됩니다.
+ */
+export const loginStudent = functions
+  .region('asia-northeast3')
+  .https.onCall(async (data: { code: string }) => {
+    const { code } = data;
+
+    // 입력 검증
+    if (!code || typeof code !== 'string' || code.trim().length === 0) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        '학생 코드가 필요합니다.'
+      );
+    }
+
+    const trimmedCode = code.trim();
+
+    try {
+      // collectionGroup 쿼리로 모든 teachers의 students에서 검색
+      const studentsQuery = await db
+        .collectionGroup('students')
+        .where('code', '==', trimmedCode)
+        .limit(1)
+        .get();
+
+      if (studentsQuery.empty) {
+        throw new functions.https.HttpsError(
+          'not-found',
+          '학생 코드를 찾을 수 없습니다.'
+        );
+      }
+
+      const studentDoc = studentsQuery.docs[0];
+      const studentData = studentDoc.data();
+
+      // 경로에서 teacherId 추출: teachers/{teacherId}/students/{code}
+      const pathParts = studentDoc.ref.path.split('/');
+      const teacherId = pathParts[1];
+
+      // 교사 정보 가져오기
+      const teacherDoc = await db.collection('teachers').doc(teacherId).get();
+
+      if (!teacherDoc.exists) {
+        throw new functions.https.HttpsError(
+          'not-found',
+          '교사 정보를 찾을 수 없습니다.'
+        );
+      }
+
+      const teacherData = teacherDoc.data();
+
+      // Custom Token 생성 (studentCode를 claims에 포함)
+      const customToken = await admin.auth().createCustomToken(trimmedCode, {
+        studentCode: trimmedCode,
+        teacherId: teacherId,
+        classId: studentData?.classId || '',
+        role: 'student'
+      });
+
+      console.log(`Student login successful: ${trimmedCode} (teacher: ${teacherId})`);
+
+      // 민감 정보 제외한 교사 정보
+      const safeTeacherData = {
+        uid: teacherData?.uid,
+        name: teacherData?.name,
+        schoolName: teacherData?.schoolName
+      };
+
+      return {
+        token: customToken,
+        student: studentData,
+        teacherId: teacherId,
+        teacher: safeTeacherData
+      };
+    } catch (error: unknown) {
+      // 이미 HttpsError인 경우 그대로 throw
+      if (error instanceof functions.https.HttpsError) {
+        throw error;
+      }
+
+      console.error('Student login error:', error);
+      throw new functions.https.HttpsError(
+        'internal',
+        '로그인 처리 중 오류가 발생했습니다.'
+      );
     }
   });

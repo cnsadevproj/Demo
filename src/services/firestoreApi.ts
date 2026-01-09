@@ -244,11 +244,25 @@ export async function getClasses(teacherId: string): Promise<ClassInfo[]> {
   const classesRef = collection(db, 'teachers', teacherId, 'classes');
   const q = query(classesRef, where('active', '==', true));
   const snapshot = await getDocs(q);
-  
-  return snapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  })) as ClassInfo[];
+
+  // 각 학급의 실제 학생 수를 계산
+  const classes = await Promise.all(snapshot.docs.map(async (classDoc) => {
+    const classData = classDoc.data();
+
+    // 해당 학급의 학생 수 직접 조회
+    const studentsRef = collection(db, 'teachers', teacherId, 'students');
+    const studentsQuery = query(studentsRef, where('classId', '==', classDoc.id));
+    const studentsSnapshot = await getDocs(studentsQuery);
+    const actualStudentCount = studentsSnapshot.size;
+
+    return {
+      id: classDoc.id,
+      ...classData,
+      studentCount: actualStudentCount // 실제 학생 수로 덮어쓰기
+    } as ClassInfo;
+  }));
+
+  return classes;
 }
 
 // 학급 정보 수정
@@ -1113,7 +1127,7 @@ export async function addGrassRecord(
       records: {
         [studentCode]: { change: cookieChange, count: 1 }
       }
-    });
+    }, { merge: true });  // merge 옵션으로 기존 데이터 보존
   }
 }
 
@@ -1194,7 +1208,7 @@ export async function addGrassRecordForDate(
       records: {
         [studentCode]: { change: cookieChange, count: 1 }
       }
-    });
+    }, { merge: true });  // merge 옵션으로 기존 데이터 보존
   }
 }
 
@@ -2515,7 +2529,7 @@ export async function autoUseStreakFreezes(
               usedStreakFreeze: true
             }
           }
-        });
+        }, { merge: true });  // merge 옵션으로 기존 데이터 보존
       }
     }
 

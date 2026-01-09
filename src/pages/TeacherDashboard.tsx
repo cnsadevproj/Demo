@@ -81,6 +81,101 @@ import { TEAM_FLAGS, generateRandomTeamNameWithEmoji } from '../types/game';
 import { ALL_SHOP_ITEMS } from '../types/shop';
 import { TeacherWordCloud } from '../components/wordcloud/TeacherWordCloud';
 import GrassFieldModal from '../components/GrassFieldModal';
+import Joyride, { CallBackProps, STATUS, ACTIONS, EVENTS, TooltipRenderProps } from 'react-joyride';
+import { teacherTutorialSteps, TutorialStep, TUTORIAL_DUMMY_STUDENTS, TUTORIAL_DUMMY_TEAMS, TUTORIAL_DUMMY_GRASS, TUTORIAL_DUMMY_WISHES } from '../config/tutorialSteps';
+import { useTutorial } from '../hooks/useTutorial';
+
+// Helper function to get tab-specific step info
+function getTabStepInfo(stepIndex: number): { currentInTab: number; totalInTab: number; tabName: string } {
+  const currentStep = teacherTutorialSteps[stepIndex] as TutorialStep;
+  const currentTab = currentStep?.data?.tab || 'classes';
+
+  // Get all steps for current tab
+  const tabSteps = teacherTutorialSteps
+    .map((step, idx) => ({ step: step as TutorialStep, idx }))
+    .filter(({ step }) => step.data?.tab === currentTab);
+
+  const currentInTab = tabSteps.findIndex(({ idx }) => idx === stepIndex) + 1;
+  const totalInTab = tabSteps.length;
+
+  return { currentInTab, totalInTab, tabName: currentTab };
+}
+
+// Custom tooltip component for tab-specific step counter
+function CustomTooltip({
+  continuous,
+  index,
+  step,
+  backProps,
+  closeProps,
+  primaryProps,
+  skipProps,
+  tooltipProps,
+}: TooltipRenderProps) {
+  const { currentInTab, totalInTab } = getTabStepInfo(index);
+
+  return (
+    <div {...tooltipProps} className="relative bg-white rounded-lg shadow-xl max-w-md p-4 border border-gray-200">
+      {/* Close button */}
+      <button
+        {...closeProps}
+        style={{
+          position: 'absolute',
+          top: '8px',
+          right: '8px',
+          background: 'none',
+          border: 'none',
+          fontSize: '20px',
+          color: '#666',
+          cursor: 'pointer',
+          padding: '4px 8px',
+          lineHeight: 1,
+        }}
+      >
+        ✕
+      </button>
+
+      {/* Title */}
+      {step.title && (
+        <h3 className="text-lg font-bold text-gray-800 mb-2 pr-6">{step.title}</h3>
+      )}
+
+      {/* Content */}
+      <div className="text-gray-600 text-sm mb-4">{step.content}</div>
+
+      {/* Footer with buttons and progress */}
+      <div className="flex items-center justify-between">
+        <button {...skipProps} className="text-gray-400 hover:text-gray-600 text-sm">
+          건너뛰기
+        </button>
+
+        <div className="flex items-center gap-2">
+          {index > 0 && (
+            <button
+              {...backProps}
+              className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800"
+            >
+              이전
+            </button>
+          )}
+
+          <span className="text-xs text-gray-400">
+            {currentInTab} / {totalInTab}
+          </span>
+
+          {continuous && (
+            <button
+              {...primaryProps}
+              className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600"
+            >
+              {index === teacherTutorialSteps.length - 1 ? '완료' : '다음'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface TeacherDashboardProps {
   onLogout: () => void;
@@ -91,6 +186,181 @@ interface TeacherDashboardProps {
 export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const { user, teacher, classes, selectedClass, selectClass, refreshClasses, updateTeacherEmail } = useAuth();
   const { classGroups, addClassGroup, updateClassGroup, deleteClassGroup, getGroupForClass, syncFromFirestore } = useStudent();
+  const { runTutorial, stepIndex, setStepIndex, startTutorial, neverShowAgain } = useTutorial();
+  const [showHelpMenu, setShowHelpMenu] = useState(false);
+
+  // Get first step index for a specific tab
+  const getFirstStepIndexForTab = (tabName: string): number => {
+    return teacherTutorialSteps.findIndex(step => {
+      const tutorialStep = step as TutorialStep;
+      return tutorialStep.data?.tab === tabName;
+    });
+  };
+
+  // Tutorial tab state
+  const [activeTab, setActiveTab] = useState('classes');
+
+  // Joyride callback handler with tab navigation and actions
+  const handleJoyrideCallback = (data: CallBackProps) => {
+    const { status, action, index, type, step } = data;
+
+    // Handle tutorial completion
+    if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
+      neverShowAgain();
+      return;
+    }
+
+    // Handle X button click (close)
+    if (action === ACTIONS.CLOSE) {
+      neverShowAgain();
+      return;
+    }
+
+    // Handle tab navigation for NEXT action
+    if (type === EVENTS.STEP_AFTER && action === ACTIONS.NEXT) {
+      // Update step index for controlled mode
+      setStepIndex(index + 1);
+
+      const nextStep = teacherTutorialSteps[index + 1] as TutorialStep | undefined;
+      if (nextStep?.data?.tab) {
+        setActiveTab(nextStep.data.tab);
+      }
+
+      // Execute action after step completes
+      const currentStep = step as TutorialStep;
+      if (currentStep?.data?.action) {
+        setTimeout(() => {
+          if (currentStep.data?.action === 'import-classes') {
+            const importBtn = document.querySelector('[data-tutorial="import-classes"]') as HTMLButtonElement;
+            if (importBtn && !importBtn.disabled) {
+              importBtn.click();
+            }
+          } else if (currentStep.data?.action === 'select-first-class') {
+            if (classes.length > 0 && !selectedClass) {
+              selectClass(classes[0].id);
+            }
+          } else if (currentStep.data?.action === 'register-default-items') {
+            const registerBtn = document.querySelector('[data-tutorial="register-default-items"]') as HTMLButtonElement;
+            if (registerBtn && !registerBtn.disabled) {
+              registerBtn.click();
+            }
+          } else if (currentStep.data?.action === 'click-cookie-shop') {
+            const cookieShopTab = document.querySelector('[data-tutorial="cookie-shop-tab"]') as HTMLButtonElement;
+            if (cookieShopTab) {
+              cookieShopTab.click();
+            }
+          } else if (currentStep.data?.action === 'click-team-status') {
+            const teamStatusTab = document.querySelector('[data-tutorial="team-status-tab"]') as HTMLButtonElement;
+            if (teamStatusTab) {
+              teamStatusTab.click();
+            }
+          } else if (currentStep.data?.action === 'click-team-manage') {
+            const teamManageTab = document.querySelector('[data-tutorial="team-manage-tab"]') as HTMLButtonElement;
+            if (teamManageTab) {
+              teamManageTab.click();
+            }
+          }
+        }, 300);
+      }
+    }
+
+    // Handle tab navigation for PREV action
+    if (type === EVENTS.STEP_AFTER && action === ACTIONS.PREV) {
+      // Update step index for controlled mode
+      setStepIndex(index - 1);
+
+      const prevStep = teacherTutorialSteps[index - 1] as TutorialStep | undefined;
+      if (prevStep?.data?.tab) {
+        setActiveTab(prevStep.data.tab);
+      }
+    }
+
+    // Handle step before - navigate to correct tab and execute preAction
+    if (type === EVENTS.STEP_BEFORE) {
+      const currentStep = step as TutorialStep;
+      if (currentStep?.data?.tab) {
+        setActiveTab(currentStep.data.tab);
+      }
+
+      // Execute preAction before showing step (for sub-tab clicks)
+      if (currentStep?.data?.preAction) {
+        setTimeout(() => {
+          if (currentStep.data?.preAction === 'click-candy-shop') {
+            const candyShopTab = document.querySelector('[data-tutorial="candy-shop-tab"]') as HTMLButtonElement;
+            if (candyShopTab) {
+              candyShopTab.click();
+            }
+          } else if (currentStep.data?.preAction === 'click-cookie-shop') {
+            const cookieShopTab = document.querySelector('[data-tutorial="cookie-shop-tab"]') as HTMLButtonElement;
+            if (cookieShopTab) {
+              cookieShopTab.click();
+            }
+          } else if (currentStep.data?.preAction === 'click-team-manage') {
+            const teamManageTab = document.querySelector('[data-tutorial="team-manage-tab"]') as HTMLButtonElement;
+            if (teamManageTab) {
+              teamManageTab.click();
+            }
+          } else if (currentStep.data?.preAction === 'click-team-status') {
+            const teamStatusTab = document.querySelector('[data-tutorial="team-status-tab"]') as HTMLButtonElement;
+            if (teamStatusTab) {
+              teamStatusTab.click();
+            }
+          }
+        }, 100);
+      }
+    }
+
+    // Handle target not found - try to navigate to correct tab
+    if (type === EVENTS.TARGET_NOT_FOUND) {
+      const currentStep = step as TutorialStep;
+      if (currentStep?.data?.tab) {
+        setActiveTab(currentStep.data.tab);
+      }
+    }
+  };
+
+  // Close help menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (showHelpMenu && !(e.target as HTMLElement).closest('.relative')) {
+        setShowHelpMenu(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showHelpMenu]);
+
+  // Tutorial keyboard navigation (arrow keys)
+  useEffect(() => {
+    if (!runTutorial) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (stepIndex < teacherTutorialSteps.length - 1) {
+          const nextStep = teacherTutorialSteps[stepIndex + 1] as TutorialStep;
+          if (nextStep?.data?.tab) {
+            setActiveTab(nextStep.data.tab);
+          }
+          setStepIndex(stepIndex + 1);
+        }
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (stepIndex > 0) {
+          const prevStep = teacherTutorialSteps[stepIndex - 1] as TutorialStep;
+          if (prevStep?.data?.tab) {
+            setActiveTab(prevStep.data.tab);
+          }
+          setStepIndex(stepIndex - 1);
+        }
+      } else if (e.key === 'Escape') {
+        neverShowAgain();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [runTutorial, stepIndex, neverShowAgain]);
 
   // Firestore에서 학급 그룹 동기화
   useEffect(() => {
@@ -99,11 +369,36 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     }
   }, [user?.uid, syncFromFirestore]);
 
+  // Tab change data loading (for tutorial navigation)
+  useEffect(() => {
+    if (!user || !selectedClass) return;
+
+    // Load data when tab changes
+    switch (activeTab) {
+      case 'grass':
+        loadGrassData();
+        break;
+      case 'shop':
+        loadShopItems();
+        break;
+      case 'teams':
+        loadTeams();
+        break;
+      case 'wishes':
+        loadWishes();
+        break;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
   // 상태
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+
+  // 튜토리얼 모드일 때 학생이 없으면 더미 데이터 표시
+  const displayStudents = runTutorial && students.length === 0 ? TUTORIAL_DUMMY_STUDENTS : students;
   
   // 새 학급 추가
   const [newClassName, setNewClassName] = useState('');
@@ -802,6 +1097,12 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [newTeamFlag, setNewTeamFlag] = useState(TEAM_FLAGS[0]);
   const [selectedTeamForMember, setSelectedTeamForMember] = useState<string | null>(null);
   const [showTeamMemberModal, setShowTeamMemberModal] = useState(false);
+
+  // 튜토리얼 모드일 때 팀이 없으면 더미 데이터 표시
+  const displayTeams = runTutorial && teams.length === 0 ? TUTORIAL_DUMMY_TEAMS : teams;
+  // 튜토리얼 모드일 때 더미 학생을 표시하면 더미 잔디 데이터도 표시
+  const showingDummyStudents = runTutorial && students.length === 0;
+  const displayGrassData = showingDummyStudents ? TUTORIAL_DUMMY_GRASS : grassData;
   const [teamForMemberModal, setTeamForMemberModal] = useState<string | null>(null);
   const [membersToAdd, setMembersToAdd] = useState<string[]>([]);
   const [membersToRemove, setMembersToRemove] = useState<string[]>([]);
@@ -827,6 +1128,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [wishPage, setWishPage] = useState(1);
   const [wishGroupFilter, setWishGroupFilter] = useState<string | null>(null); // null = 전체 보기, string = 그룹 ID
   const WISHES_PER_PAGE = 20;
+
+  // 튜토리얼 모드일 때 항상 더미 데이터 표시 (원래 데이터가 있어도)
+  const displayWishes = runTutorial ? TUTORIAL_DUMMY_WISHES : wishes;
 
   // 팀 현황 상태
   const [teamStatusData, setTeamStatusData] = useState<Map<string, Array<{ date: string; cookieChange: number; count: number }>>>(new Map());
@@ -2174,10 +2478,10 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     setIsLoadingGrassField(false);
   };
 
-  // 잔디 데이터를 날짜별로 그룹화
+  // 잔디 데이터를 날짜별로 그룹화 (튜토리얼 모드면 더미 데이터 사용)
   const getGrassByDate = () => {
     const grouped: Record<string, Record<string, { change: number; count: number; usedStreakFreeze?: boolean }>> = {};
-    grassData.forEach((item: { date: string; studentCode: string; cookieChange: number; count: number; usedStreakFreeze?: boolean }) => {
+    displayGrassData.forEach((item: { date: string; studentCode: string; cookieChange: number; count: number; usedStreakFreeze?: boolean }) => {
       if (!grouped[item.date]) {
         grouped[item.date] = {};
       }
@@ -2738,7 +3042,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             <div className="flex items-center gap-4">
               <span className="text-2xl">🍪</span>
               <div>
-                <h1 className="text-xl font-bold text-gray-800">다했니? 선생님</h1>
+                <h1 className="text-xl font-bold text-gray-800">DaJanDi 선생님</h1>
                 <p className="text-sm text-gray-500">{teacher?.schoolName} - {teacher?.name}</p>
               </div>
             </div>
@@ -2753,6 +3057,53 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 <span className={isSyncing ? 'animate-spin' : ''}>🔄</span>
                 <span>{isSyncing ? '동기화 중...' : '전체 동기화'}</span>
               </Button>
+              <div className="relative">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowHelpMenu(!showHelpMenu)}
+                  className="flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                >
+                  <span>❓</span>
+                  <span>도움말</span>
+                  <span className="text-xs">▼</span>
+                </Button>
+                {showHelpMenu && (
+                  <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border z-50">
+                    <button
+                      onClick={() => {
+                        setActiveTab('classes'); // Reset to first tab
+                        startTutorial(0);
+                        setShowHelpMenu(false);
+                      }}
+                      className="w-full px-4 py-2 text-left hover:bg-blue-50 rounded-t-lg flex items-center gap-2"
+                    >
+                      <span>📚</span>
+                      <span>전체 도움말</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        const tabStepIndex = getFirstStepIndexForTab(activeTab);
+                        if (tabStepIndex >= 0) {
+                          // Navigate to the tab first (in case we're not there)
+                          const targetStep = teacherTutorialSteps[tabStepIndex] as TutorialStep;
+                          if (targetStep?.data?.tab) {
+                            setActiveTab(targetStep.data.tab);
+                          }
+                          startTutorial(tabStepIndex);
+                        } else {
+                          setActiveTab('classes');
+                          startTutorial(0);
+                        }
+                        setShowHelpMenu(false);
+                      }}
+                      className="w-full px-4 py-2 text-left hover:bg-blue-50 rounded-b-lg flex items-center gap-2 border-t"
+                    >
+                      <span>📍</span>
+                      <span>현재 탭 도움말</span>
+                    </button>
+                  </div>
+                )}
+              </div>
               <Button variant="outline" onClick={onLogout} className="flex items-center gap-1">
                 <span>🚪</span>
                 <span>로그아웃</span>
@@ -2766,7 +3117,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               <select
                 value={selectedClass || ''}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => selectClass(e.target.value || null)}
-                className="flex-1 px-4 py-2 text-lg font-bold border-2 border-blue-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="class-selector flex-1 px-4 py-2 text-lg font-bold border-2 border-blue-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">-- 학급을 선택하세요 --</option>
                 {classes.filter(c => !hiddenClasses.includes(c.id)).map((cls: ClassInfo) => (
@@ -2782,18 +3133,18 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
       {/* 메인 콘텐츠 */}
       <main className="max-w-4xl mx-auto px-4 py-6">
-        <Tabs defaultValue="classes" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="w-full flex justify-evenly gap-2">
-            <TabsTrigger value="classes">📚 학급</TabsTrigger>
-            <TabsTrigger value="students">👨‍🎓 학생</TabsTrigger>
-            <TabsTrigger value="grass" onClick={loadGrassData}>🌱 잔디</TabsTrigger>
-            <TabsTrigger value="shop" onClick={loadShopItems}>🏪 상점</TabsTrigger>
-            <TabsTrigger value="teams" onClick={() => { loadTeams(); if (teamTabMode === 'status') loadTeamStatus(); }}>👥 팀</TabsTrigger>
-            <TabsTrigger value="gameCenter">🎮 게임센터</TabsTrigger>
-            <TabsTrigger value="wishes" onClick={loadWishes}>⭐ 소원</TabsTrigger>
-            <TabsTrigger value="features">🔧 기능</TabsTrigger>
-            <TabsTrigger value="profiles">👤 프로필</TabsTrigger>
-            <TabsTrigger value="settings">⚙️ 설정</TabsTrigger>
+            <TabsTrigger value="classes" data-tab="classes">📚 학급</TabsTrigger>
+            <TabsTrigger value="students" data-tab="students">👨‍🎓 학생</TabsTrigger>
+            <TabsTrigger value="grass" data-tab="grass" onClick={loadGrassData}>🌱 잔디</TabsTrigger>
+            <TabsTrigger value="shop" data-tab="shop" onClick={loadShopItems}>🏪 상점</TabsTrigger>
+            <TabsTrigger value="teams" data-tab="teams" onClick={() => { loadTeams(); if (teamTabMode === 'status') loadTeamStatus(); }}>👥 팀</TabsTrigger>
+            <TabsTrigger value="gameCenter" data-tab="gameCenter">🎮 게임센터</TabsTrigger>
+            <TabsTrigger value="wishes" data-tab="wishes" onClick={loadWishes}>⭐ 소원</TabsTrigger>
+            <TabsTrigger value="features" data-tab="features">🔧 기능</TabsTrigger>
+            <TabsTrigger value="profiles" data-tab="profiles">👤 프로필</TabsTrigger>
+            <TabsTrigger value="settings" data-tab="settings">⚙️ 설정</TabsTrigger>
           </TabsList>
 
           {/* 학급 관리 탭 */}
@@ -2807,10 +3158,11 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Button 
-                  onClick={handleImportClassrooms} 
+                <Button
+                  onClick={handleImportClassrooms}
                   disabled={isImporting}
                   className="bg-blue-500 hover:bg-blue-600"
+                  data-tutorial="import-classes"
                 >
                   {isImporting ? '가져오는 중...' : '🔄 학급 가져오기'}
                 </Button>
@@ -2833,6 +3185,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       <Button
                         variant={hideMode ? "default" : "outline"}
                         size="sm"
+                        data-tutorial="hide-classes"
                         onClick={() => {
                           if (hideMode && selectedForHide.length > 0) {
                             handleApplyHide();
@@ -2865,6 +3218,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       <Button
                         variant={groupMode ? "default" : "outline"}
                         size="sm"
+                        data-tutorial="group-classes"
                         onClick={() => {
                           if (groupMode && selectedForGroup.length >= 2) {
                             setShowGroupModal(true);
@@ -3066,6 +3420,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         onClick={handleRefreshCookies}
                         disabled={isRefreshing}
                         className="bg-amber-500 hover:bg-amber-600"
+                        data-tutorial="refresh-cookies"
                       >
                         {isRefreshing ? '새로고침 중...' : '🔄 쿠키 새로고침'}
                       </Button>
@@ -3076,6 +3431,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                           setBulkCookieAmount('');
                         }}
                         className={showBulkCookieMode ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}
+                        data-tutorial="bulk-candy"
                       >
                         {showBulkCookieMode ? '✕ 취소' : '🎁 전체 지급'}
                       </Button>
@@ -3112,31 +3468,32 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                 </Card>
 
                 {/* 학생 목록 */}
-                <Card>
+                <Card data-tutorial="student-list">
                   <CardHeader>
                     <CardTitle>
                       👨‍🎓 학생 목록 - {classes.find(c => c.id === selectedClass)?.name}
                     </CardTitle>
                     <CardDescription>
-                      {students.length}명의 학생 · 클릭하여 상세 정보 보기
+                      {displayStudents.length}명의 학생 · 클릭하여 상세 정보 보기
+                      {runTutorial && students.length === 0 && <span className="ml-2 text-amber-500">(튜토리얼 예시)</span>}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     {isLoadingStudents ? (
                       <p className="text-center py-8 text-gray-500">로딩 중...</p>
-                    ) : students.length === 0 ? (
+                    ) : displayStudents.length === 0 ? (
                       <p className="text-center py-8 text-gray-500">
                         등록된 학생이 없습니다.
                       </p>
                     ) : (
-                      <div className="overflow-x-auto">
+                      <div className="overflow-x-auto bg-white rounded-lg p-2">
                         <table className="w-full text-sm">
                           <thead>
-                            <tr className="border-b">
+                            <tr className="border-b bg-gray-50">
                               {showBulkCookieMode && (
                                 <th className="text-center py-2 px-2 w-10">
                                   <Checkbox
-                                    checked={selectedForCookie.length === students.length && students.length > 0}
+                                    checked={selectedForCookie.length === displayStudents.length && displayStudents.length > 0}
                                     onCheckedChange={(checked) => handleSelectAllForCookie(!!checked)}
                                   />
                                 </th>
@@ -3149,7 +3506,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                             </tr>
                           </thead>
                           <tbody>
-                            {students.map((student) => (
+                            {displayStudents.map((student) => (
                               <tr
                                 key={student.code}
                                 className={`border-b hover:bg-amber-50 cursor-pointer transition-colors ${
@@ -3235,7 +3592,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {/* XLSX 일괄 추가 */}
-                    <div>
+                    <div data-tutorial="student-code-upload">
                       <h4 className="text-sm font-medium mb-2">📁 학생코드 파일 업로드</h4>
                       <p className="text-sm text-gray-500 mb-3">
                         다했니 &gt; 학생 관리 &gt; 학생코드 다운로드를 한 파일을 올려주세요!
@@ -3326,7 +3683,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
             ) : (
               <>
                 {/* 잔디 새로고침 */}
-                <Card>
+                <Card data-tutorial="grass-overview">
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <CardTitle>🌱 학급 잔디 현황</CardTitle>
@@ -3346,7 +3703,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   <CardContent>
                     <div className="flex flex-wrap items-center gap-2 mb-4">
                       {/* 네비게이션 버튼 */}
-                      <div className="flex items-center gap-1 mr-2">
+                      <div className="flex items-center gap-1 mr-2" data-tutorial="grass-navigation">
                         <Button
                           onClick={() => setGrassOffset(grassOffset + 10)}
                           variant="outline"
@@ -3409,16 +3766,16 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
                     {isLoadingGrass ? (
                       <p className="text-center py-8 text-gray-500">로딩 중...</p>
-                    ) : students.length === 0 ? (
+                    ) : displayStudents.length === 0 ? (
                       <p className="text-center py-8 text-gray-500">
                         등록된 학생이 없습니다.
                       </p>
                     ) : (
-                      <div className="overflow-x-auto">
+                      <div className="overflow-x-auto bg-white rounded-lg p-2">
                         <table className="w-full text-sm">
                           <thead>
-                            <tr className="border-b">
-                              <th className="text-left py-2 px-2 sticky left-0 bg-white">학생</th>
+                            <tr className="border-b bg-gray-50">
+                              <th className="text-left py-2 px-2 sticky left-0 bg-gray-50">학생</th>
                               {getLast14Days().map(date => (
                                 <th key={date} className="text-center py-2 px-1 text-xs">
                                   {date.slice(5)}
@@ -3428,7 +3785,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                             </tr>
                           </thead>
                           <tbody>
-                            {students.map((student: Student) => {
+                            {displayStudents.map((student: Student) => {
                               const grassByDate = getGrassByDate();
                               let totalChange = 0;
                               return (
@@ -3526,7 +3883,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           {/* 상점 탭 */}
           <TabsContent value="shop" className="space-y-6">
             {/* 상점 모드 토글 */}
-            <div className="flex gap-2 p-1 bg-gray-100 rounded-lg w-fit">
+            <div className="flex gap-2 p-1 bg-gray-100 rounded-lg w-fit" data-tutorial="shop-mode-toggle">
               <button
                 onClick={() => setShopMode('candy')}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
@@ -3534,6 +3891,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     ? 'bg-white text-pink-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
+                data-tutorial="candy-shop-tab"
               >
                 🍭 캔디 상점 (프로필)
               </button>
@@ -3551,6 +3909,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     ? 'bg-white text-amber-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
+                data-tutorial="cookie-shop-tab"
               >
                 🍪 쿠키 상점 (실물 교환)
                 {pendingRequestsCount > 0 && (
@@ -3626,6 +3985,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         onClick={handleRegisterDefaultItems}
                         disabled={isRegisteringDefaults}
                         className="bg-amber-500 hover:bg-amber-600"
+                        data-tutorial="register-default-items"
                       >
                         {isRegisteringDefaults ? '등록 중...' : '🛒 기본 상품 등록'}
                       </Button>
@@ -3970,7 +4330,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           {/* 팀 탭 */}
           <TabsContent value="teams" className="space-y-6">
             {/* 팀 모드 토글 */}
-            <div className="flex gap-2 p-1 bg-gray-100 rounded-lg w-fit">
+            <div className="flex gap-2 p-1 bg-gray-100 rounded-lg w-fit" data-tutorial="team-mode-toggle">
               <button
                 onClick={() => setTeamTabMode('manage')}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
@@ -3978,6 +4338,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     ? 'bg-white text-blue-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
+                data-tutorial="team-manage-tab"
               >
                 👥 팀 관리
               </button>
@@ -3993,6 +4354,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     ? 'bg-white text-green-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
+                data-tutorial="team-status-tab"
               >
                 📊 팀 현황
               </button>
@@ -4072,7 +4434,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       <div className="p-3 bg-blue-100 rounded-lg border border-blue-300 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="text-blue-700 text-sm">
-                            🔄 <strong>{students.find(s => s.code === swapStudent1.code)?.name}</strong>을(를) 선택했습니다.
+                            🔄 <strong>{displayStudents.find(s => s.code === swapStudent1.code)?.name}</strong>을(를) 선택했습니다.
                             다른 팀의 학생을 클릭하면 교환됩니다.
                           </span>
                         </div>
@@ -4174,19 +4536,22 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   <Card>
                     <CardContent className="py-8 text-center text-gray-500">로딩 중...</CardContent>
                   </Card>
-                ) : teams.length === 0 ? (
+                ) : displayTeams.length === 0 ? (
                   <Card>
                     <CardContent className="py-8 text-center text-gray-500">생성된 팀이 없습니다.</CardContent>
                   </Card>
                 ) : (
-                  <Card>
+                  <Card data-tutorial="team-swap-area">
                     <CardHeader>
                       <CardTitle>📋 팀 현황</CardTitle>
-                      <CardDescription>총 {teams.length}개 팀 · 클릭하여 학생 교환</CardDescription>
+                      <CardDescription>
+                        총 {displayTeams.length}개 팀 · 클릭하여 학생 교환
+                        {runTutorial && teams.length === 0 && <span className="ml-2 text-amber-500">(튜토리얼 예시)</span>}
+                      </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                        {teams.map((team) => (
+                        {displayTeams.map((team) => (
                           <div
                             key={team.teamId}
                             className="p-3 rounded-xl border-2 border-gray-200 bg-gradient-to-br from-white to-gray-50 hover:border-blue-300 transition-all"
@@ -4226,7 +4591,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                             {/* 멤버 목록 */}
                             <div className="flex flex-wrap gap-1">
                               {team.members.map((code) => {
-                                const student = students.find(s => s.code === code);
+                                const student = displayStudents.find(s => s.code === code);
                                 const isSelected = swapStudent1?.code === code;
                                 return (
                                   <span
@@ -4235,7 +4600,9 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                                     className={`px-1.5 py-0.5 rounded text-xs cursor-pointer transition-all ${
                                       isSelected
                                         ? 'bg-blue-500 text-white'
-                                        : 'bg-gray-100 hover:bg-blue-100'
+                                        : runTutorial
+                                          ? 'bg-white border border-blue-300 shadow-sm hover:bg-blue-50'
+                                          : 'bg-gray-100 hover:bg-blue-100'
                                     }`}
                                   >
                                     {student?.name || code}
@@ -4244,13 +4611,18 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                               })}
                               {/* 멤버 추가/관리 버튼 */}
                               <button
+                                data-tutorial="team-add-button"
                                 onClick={() => {
                                   setTeamForMemberModal(team.teamId);
                                   setEditingTeamName(team.teamName);
                                   setEditingTeamFlag(team.flag);
                                   setShowTeamMemberModal(true);
                                 }}
-                                className="px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-600 hover:bg-green-200"
+                                className={`px-1.5 py-0.5 rounded text-xs ${
+                                  runTutorial
+                                    ? 'bg-white border border-green-400 text-green-600 shadow-sm hover:bg-green-50'
+                                    : 'bg-green-100 text-green-600 hover:bg-green-200'
+                                }`}
                               >
                                 +
                               </button>
@@ -4270,16 +4642,16 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   📊 팀 현황을 불러오는 중...
                 </CardContent>
               </Card>
-            ) : teams.length === 0 ? (
+            ) : displayTeams.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center text-gray-500">
                   생성된 팀이 없습니다. 팀 관리에서 팀을 먼저 만들어주세요.
                 </CardContent>
               </Card>
             ) : (
-              <>
+              <div data-tutorial="team-status-content" className="space-y-4">
                 {/* 팀별 현황 */}
-                {teams.map((team) => {
+                {displayTeams.map((team) => {
                   // 팀 결성일 (없으면 아주 오래 전 날짜로 설정)
                   const teamCreatedAtForTotal = team.createdAt?.toDate?.() || new Date(0);
                   const teamCreatedDateStrForTotal = getKoreanDateString(teamCreatedAtForTotal);
@@ -4298,7 +4670,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
                   // 팀원들의 쿠키 합계 계산
                   const teamTotalCookie = team.members.reduce((sum, code) => {
-                    const student = students.find(s => s.code === code);
+                    const student = displayStudents.find(s => s.code === code);
                     return sum + (student?.cookie ?? 0);
                   }, 0);
 
@@ -4330,7 +4702,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         {/* 팀원별 현황 */}
                         <div className="space-y-4">
                           {team.members.map((code) => {
-                            const student = students.find(s => s.code === code);
+                            const student = displayStudents.find(s => s.code === code);
                             const memberGrass = teamStatusData.get(code) || [];
 
                             // 팀 결성일 (없으면 아주 오래 전 날짜로 설정)
@@ -4435,7 +4807,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     </Card>
                   );
                 })}
-              </>
+              </div>
             )
             )}
           </TabsContent>
@@ -4726,7 +5098,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         ) : (
                           <div className="max-h-40 overflow-y-auto space-y-1">
                             {baseballPlayers.map((player, index) => {
-                              const playerStudent = students.find(s => s.code === player.code);
+                              const playerStudent = displayStudents.find(s => s.code === player.code);
                               return (
                                 <div
                                   key={player.code}
@@ -5468,17 +5840,17 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
                   {isLoadingWishes ? (
                     <p className="text-center py-8 text-gray-500">로딩 중...</p>
-                  ) : wishes.length === 0 ? (
+                  ) : displayWishes.length === 0 ? (
                     <p className="text-center py-8 text-gray-500">등록된 소원이 없습니다.</p>
                   ) : (
                     <>
-                      <div className="space-y-3">
+                      <div className="space-y-3" data-tutorial="wishes-container">
                         {(() => {
                           // 그룹 필터 적용
                           const selectedGroup = wishGroupFilter ? classGroups.find(g => g.id === wishGroupFilter) : null;
                           const filteredWishes = selectedGroup
-                            ? wishes.filter(w => selectedGroup.classIds.includes(w.classId))
-                            : wishes;
+                            ? displayWishes.filter(w => selectedGroup.classIds.includes(w.classId))
+                            : displayWishes;
 
                           if (filteredWishes.length === 0) {
                             return (
@@ -5558,8 +5930,8 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                       {(() => {
                         const selectedGroup = wishGroupFilter ? classGroups.find(g => g.id === wishGroupFilter) : null;
                         const filteredCount = selectedGroup
-                          ? wishes.filter(w => selectedGroup.classIds.includes(w.classId)).length
-                          : wishes.length;
+                          ? displayWishes.filter(w => selectedGroup.classIds.includes(w.classId)).length
+                          : displayWishes.length;
                         const totalPages = Math.ceil(filteredCount / WISHES_PER_PAGE);
                         if (filteredCount <= WISHES_PER_PAGE) return null;
                         return (
@@ -5668,11 +6040,11 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               <CardContent>
                 {!selectedClass ? (
                   <p className="text-center text-gray-500 py-8">학급을 먼저 선택해주세요</p>
-                ) : students.length === 0 ? (
+                ) : displayStudents.length === 0 ? (
                   <p className="text-center text-gray-500 py-8">학생이 없습니다</p>
                 ) : (
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-                    {students.map((student) => (
+                    {displayStudents.map((student) => (
                       <button
                         key={student.code}
                         onClick={() => handleSelectProfileStudent(student)}
@@ -6322,6 +6694,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           }}
         >
           <div
+            data-tutorial="team-member-modal"
             className="bg-white shadow-2xl border-2 border-green-300 overflow-hidden flex flex-col"
             style={{ width: '380px', maxWidth: '95vw', maxHeight: '70vh', borderRadius: '16px' }}
             onClick={(e) => e.stopPropagation()}
@@ -6380,7 +6753,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     <p className="text-xs font-medium text-red-600 mb-2">🗑️ 현재 팀원 (클릭하여 제거)</p>
                     <div className="flex flex-wrap gap-1">
                       {currentMembers.map(code => {
-                        const student = students.find(s => s.code === code);
+                        const student = displayStudents.find(s => s.code === code);
                         const isMarkedForRemove = membersToRemove.includes(code);
                         return (
                           <button
@@ -6412,10 +6785,10 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               <div className="p-2 bg-green-50 rounded-lg">
                 <p className="text-xs font-medium text-green-600 mb-2">➕ 학생 선택 (클릭하여 추가)</p>
                 <div className="flex flex-wrap gap-1 max-h-[200px] overflow-y-auto">
-                  {students.map((student) => {
-                    const currentTeam = teams.find(t => t.teamId === teamForMemberModal);
+                  {displayStudents.map((student) => {
+                    const currentTeam = displayTeams.find(t => t.teamId === teamForMemberModal);
                     const isInCurrentTeam = currentTeam?.members.includes(student.code);
-                    const otherTeam = teams.find(t => t.teamId !== teamForMemberModal && t.members.includes(student.code));
+                    const otherTeam = displayTeams.find(t => t.teamId !== teamForMemberModal && t.members.includes(student.code));
                     const isInOtherTeam = !!otherTeam;
                     const isMarkedForAdd = membersToAdd.includes(student.code);
 
@@ -7012,6 +7385,32 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           </div>
         </div>
       )}
+
+      {/* Tutorial Joyride */}
+      <Joyride
+        steps={teacherTutorialSteps}
+        run={runTutorial}
+        stepIndex={stepIndex}
+        continuous
+        showSkipButton
+        disableOverlayClose
+        spotlightClicks
+        disableScrollParentFix
+        callback={handleJoyrideCallback}
+        tooltipComponent={CustomTooltip}
+        floaterProps={{
+          disableAnimation: true,
+        }}
+        styles={{
+          options: {
+            primaryColor: '#3b82f6',
+            zIndex: 10000,
+          },
+          overlay: {
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          },
+        }}
+      />
     </div>
   );
 }
